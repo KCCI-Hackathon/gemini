@@ -1,0 +1,36 @@
+{
+  "id": "20260714005400113258",
+  "name": "K-뉴딜 아카데미",
+  "applicationSubject": "individual",
+  "statusConditions": {
+    "requires": ["unemployed"],
+    "excludes": ["in_training", "employed", "business_registered"],
+    "definitionClear": true,
+    "quotes": [
+      { "text": "취업 중이거나 사업자등록 중인 사람", "source": "api" },
+      { "text": "국가 또는 지방자치단체가 실시하거나 비용을 지원하는 직업능력개발훈련을 수강하고 있는 사람", "source": "api" },
+      { "text": "취업여부는 참여 신청일 현재 고용보험 피보험자격 기준으로 확인", "source": "official", "url": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?systId=SI00000512&systClId=SC00000391" }
+    ]
+  },
+  "referenceDate": { "status": "참여 신청일 현재. 프로그램 개시일 전까지 참여 제한 사유가 해소되면 참여 가능(증빙 필요)", "residence": null },
+  "lookback": null,
+  "tenure": null,
+  "age": {
+    "min": 15, "max": 34, "referenceRule": "apply_date", "referenceDate": null,
+    "quote": { "text": "연령은 참여 신청일 현재를 기준으로 산정, 군필자의 경우 의무복무 기간만큼 연령 상한을 높여 적용(최대 만 39세)", "source": "official", "url": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?systId=SI00000512&systClId=SC00000391" }
+  },
+  "regionScope": { "sigunguLabels": null, "quote": null },
+  "incomeQuote": null,
+  "restrictionQuotes": [],
+  "confirmedRelations": [],
+  "apply": { "start": "2026-07-07", "end": "2026-12-31", "endTime": null, "type": "period" },
+  "sources": [{ "url": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?systId=SI00000512&systClId=SC00000391", "checkedAt": "2026-11-16" }],
+  "verificationStatus": "human_verified",
+  "guidance": [
+    { "transition": "none", "checkOrder": ["교육과정을 수료할 때까지 기다리기(수강 중에는 참여 제한)", "고용24에서 구직등록", "개별 아카데미 모집 페이지 확인"], "rationale": "국비 직업훈련 수강 중인 사람은 참여가 제한되고, 구직등록을 하지 않은 사람도 제한된다." },
+    { "transition": "complete_training", "checkOrder": ["고용24에서 구직등록", "모집 중인 아카데미 고르기(연 최대 2회)", "12월 31일 이전 신청"], "rationale": "제한 문구는 '수강하고 있는 사람'이라 수료 후에는 걸리지 않는다. 다만 수료자를 허용한다는 문장은 따로 없다." },
+    { "transition": "get_employed", "checkOrder": ["주 30시간 미만 단시간 근로인지 확인", "프로그램 개시일 전에 퇴사 예정인지 확인"], "rationale": "취업 여부는 신청일 현재 고용보험 기준이고, 주 30시간 미만 근로자는 증빙하면 참여할 수 있다." },
+    { "transition": "register_business", "checkOrder": ["실제 사업을 영위하지 않음을 증명할 수 있는지 확인"], "rationale": "사업자등록을 했어도 실제 사업을 하지 않음을 객관적으로 증명하면 참여할 수 있다." }
+  ],
+  "notes": ""
+}

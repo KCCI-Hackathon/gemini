@@ -1,0 +1,42 @@
+{
+  "id": "20260406005400212442",
+  "name": "드림For 청년통장(인천)",
+  "applicationSubject": "individual",
+  "statusConditions": {
+    "requires": ["employed"],
+    "excludes": [],
+    "definitionClear": true,
+    "quotes": [
+      { "text": "2025. 1. 1. 부터 신청일 현재 동일기업에 정상(휴직자 제외) 근무자, 4대보험 가입자", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418" }
+    ]
+  },
+  "referenceDate": { "status": "신청일 현재 동일기업 재직(2025. 1. 1.부터)", "residence": null },
+  "lookback": null,
+  "tenure": {
+    "since": "2025-01-01",
+    "quote": { "text": "2025. 1. 1. 부터 신청일 현재 동일기업에 정상(휴직자 제외) 근무자, 4대보험 가입자", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418" }
+  },
+  "age": {
+    "min": 18, "max": 39, "referenceRule": "fixed_date", "referenceDate": "2026-01-01",
+    "quote": { "text": "18세~39세 이하 재직 청년(생애1회) * 2026. 1. 1. 기준(1986. 1. 2. ~ 2008. 1. 1. 출생자)", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418" }
+  },
+  "regionScope": { "sigunguLabels": null, "quote": null },
+  "incomeQuote": { "text": "연소득 4,000만원 이하 ~ 2,190만원 이상인 자", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418" },
+  "restrictionQuotes": [
+    { "text": "유사자산형성사업 참여 중이거나 참여이력이 있는자 지원불가", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418" }
+  ],
+  "confirmedRelations": [
+    { "otherId": "20260406005400212410", "otherName": "인천 재직청년 복지포인트", "type": "no_concurrent", "quote": { "text": "드림For청년통장 사업과 중복 참여 불가", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=439" } }
+  ],
+  "apply": { "start": "2026-05-04", "end": "2026-05-15", "endTime": "18:00", "type": "period" },
+  "sources": [
+    { "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418", "checkedAt": "2026-11-16" },
+    { "url": "https://youth.incheon.go.kr/bbs/bbsMsgDetail.do?bcd=notice&msg_seq=464", "checkedAt": "2026-11-16" }
+  ],
+  "verificationStatus": "human_verified",
+  "guidance": [
+    { "transition": "none", "checkOrder": ["재직자 대상이라 미취업 상태에서는 신청 대상이 아님"], "rationale": "원문 대상이 재직 청년이다." },
+    { "transition": "get_employed", "checkOrder": ["다음 공고의 재직 기준일 확인(2026년 공고는 2025. 1. 1.부터 동일기업 재직)", "주 35시간 이상, 4대보험 가입 여부", "연 근로소득 2,190만~4,000만 원 범위", "인천 재직청년 복지포인트와 동시 참여 불가"], "rationale": "취업 직후에는 근속 기간 조건 때문에 바로 신청할 수 없다. 2026년 모집은 5월 15일에 끝났다." }
+  ],
+  "notes": "2026년 모집 종료. 다음 공고의 재직 기준일은 예측하지 않는다."
+}
