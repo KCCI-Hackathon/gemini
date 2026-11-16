@@ -1,0 +1,95 @@
+import { toKstDate } from "@/lib/date";
+import { judgeAll, REASON, type Axes, type EventType, type Profile } from "@/lib/judge";
+
+export type Transition = "complete_training" | "get_employed" | "register_business";
+
+export type Change =
+  | "recheck"
+  | "recheck_code_only"
+  | "reference_date_needed"
+  | "eligible_if_conditions"
+  | "recheck_after_period"
+  | "unchanged";
+
+/** 설계 5장 ④ "전이 결과의 표현" 표의 화면 문구 */
+export const CHANGE_LABEL: Record<Change, string> = {
+  recheck: "자격 재검토",
+  recheck_code_only: "자격 재검토(코드 기준, 본문 미확인)",
+  reference_date_needed: "자격 판단 기준일 확인 필요",
+  eligible_if_conditions: "조건 충족 시 신청 가능",
+  recheck_after_period: "수료일 기준 6개월 경과 후 재검토",
+  unchanged: "변화 없음",
+};
+
+const EVENT_OF: Record<Transition, EventType> = {
+  complete_training: "training_completion",
+  get_employed: "employment",
+  register_business: "business_registration",
+};
+
+/** "오늘 이 사건이 일어났다고 가정"한 새 프로필. 입력은 바꾸지 않는다 */
+export function applyTransition(profile: Profile, t: Transition, now: Date): Profile {
+  const next = structuredClone(profile);
+  const type = EVENT_OF[t];
+  // 같은 종류의 예정 이벤트는 가정 이벤트로 대체(중복 방지)
+  next.events = next.events.filter((e) => !(e.type === type && e.status !== "completed"));
+  next.events.push({ type, date: toKstDate(now), status: "simulated" });
+  return next;
+}
+
+const ORDER = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 } as const;
+
+function classify(before: Axes, after: Axes, verified: boolean): Change {
+  const newReasons = after.personal.reasons.filter((r) => !before.personal.reasons.includes(r));
+  const sameValue = before.personal.value === after.personal.value;
+  if (sameValue && newReasons.length === 0 && before.time.value === after.time.value) return "unchanged";
+  // 원래부터 다른 이유로 비해당이던 정책은 상태가 바뀌어도 사용자가 할 일이 없다
+  if (before.personal.value === "ineligible" && after.personal.value === "ineligible" && before.time.note === after.time.note) return "unchanged";
+  if (newReasons.includes(REASON.referenceDate)) return "reference_date_needed";
+  if (after.time.value === "unmet" && after.time.note?.includes("경과") && before.time.note !== after.time.note) return "recheck_after_period";
+  if (!verified && newReasons.includes(REASON.codeStatus)) return "recheck_code_only";
+  const improved = ORDER[after.personal.value] < ORDER[before.personal.value];
+  if (improved) return "eligible_if_conditions";
+  return "recheck";
+}
+
+export type TransitionResult = {
+  policyId: string;
+  name: string;
+  verified: boolean;
+  jobCodes: string[];
+  before: Axes;
+  after: Axes;
+  change: Change;
+};
+
+export function simulateTransition(profile: Profile, t: Transition, now: Date): TransitionResult[] {
+  const beforeAll = judgeAll(profile, now);
+  const afterAll = judgeAll(applyTransition(profile, t, now), now, { softenCodeStatus: true });
+  const afterById = new Map(afterAll.map((r) => [r.policy.id, r]));
+  const out: TransitionResult[] = [];
+  for (const b of beforeAll) {
+    if (b.layer === "history") continue;
+    const a = afterById.get(b.policy.id);
+    if (!a) continue;
+    out.push({
+      policyId: b.policy.id,
+      name: b.policy.name,
+      verified: b.verified,
+      jobCodes: b.policy.jobCodes,
+      before: b.axes,
+      after: a.axes,
+      change: classify(b.axes, a.axes, b.verified),
+    });
+  }
+  return out;
+}
+
+/** 상태가 바뀌면 에이전트가 확인하러 갈 정책(설계 5장 ④). 최대 5개 */
+export function needsVerification(results: TransitionResult[], verifiedCache: Set<string>): string[] {
+  return results
+    .filter((r) => (r.change === "recheck_code_only" || r.change === "reference_date_needed") && !verifiedCache.has(r.policyId))
+    .sort((a, b) => Number(a.verified) - Number(b.verified))
+    .slice(0, 5)
+    .map((r) => r.policyId);
+}
