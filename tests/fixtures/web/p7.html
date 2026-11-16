@@ -1,0 +1,286 @@
+
+
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<sec:csrfMetaTags/>
+		
+
+
+
+
+
+
+<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover" />
+<title>청년도전지원사업</title>
+<meta name="_csrf_parameter" content="_csrf" /><meta name="_csrf_header" content="X-CSRF-TOKEN" /><meta name="_csrf" content="a371acf6-e3f8-4951-ac65-9907aca094c0" />
+<link type="text/css" rel="stylesheet" href="/css/youngChallenge/default.css" />
+<link type="text/css" rel="stylesheet" href="/css/youngChallenge/contents.css" />
+
+<script type="text/javascript" src="/js/keis.import.min.js" charset="utf-8"></script>
+<script type="text/javascript" src="/js/worknet.common.js" charset="utf-8"></script>
+<script type="text/javascript" src="/js/worknet.checkForm.js" charset="utf-8"></script>
+<script type="text/javascript" src="/js/worknet.popup.js" charset="utf-8"></script>
+<script type="text/javascript" src="/js/worknet.indivMemberSrv.js" charset="utf-8"></script>
+<script type="text/javascript" src="/js/worknet.member.js" charset="utf-8"></script>
+<script type="text/javascript" src="/js/makePCookie.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/common_1.12.js" charset="utf-8"></script>
+
+<script type="text/javascript">
+	$(document).ready(function() {
+	    //에러처리 메세지 있을경우
+	    var msg = '';
+	    if(msg != null && msg != ''){
+	        alert(msg);
+	    }   
+	});
+	
+	//워크넷 회원정보 재동의 안내화면 호출
+	
+	
+	
+	
+	
+</script>
+
+<!-- WiseCollector 공통스크립트적용. 2024.02.20. ojs80. -->
+<!-- Nethru Tag Manager -->
+<script>(function(f,d,k,h){var b;var a=m()+"ver="+c(d);g();function e(){var o=document.getElementsByTagName(f)[0];var n=document.createElement(f);n.async=true;n.charset="utf-8";n.src=a;o.parentNode.insertBefore(n,o)}function m(){return window.location.protocol=="https:"?"https://tag.work.go.kr/static/00002/install.js?":"http://tag.work.go.kr/static/00002/install.js?"}function c(n){var o=new Date().getTime();var p=n*1000*60;return n>0?Math.floor(o/p)*p:o}function g(){var n=l();if(!n){return false}n.open("GET",a,true);n.withCredentials=h;n.send(null);n.onload=function(){j();e()};n.onerror=n.onabort=function(){j()};i(function(){n.abort()},k)}function l(){var q;var o=[function(){return new XDomainRequest()},function(){return new XMLHttpRequest()},function(){return new ActiveXObject("Msxml2.XMLHTTP")},function(){return new ActiveXObject("Msxml3.XMLHTTP")},function(){return new ActiveXObject("Microsoft.XMLHTTP")}];for(var n=0;n<o.length;n++){try{q=o[n]()}catch(p){continue}break}return q}function i(o,n){b=setTimeout(o,n)}function j(){if(b){clearTimeout(b);b=null}}})("script",60,/*{{timeout}}*/2000,/*{{withCredentials}}*/false);</script>
+<!-- End Nethru Tag Manager -->
+<!-- WiseCollector 공통스크립트적용. 끝. 2024.02.20. ojs80. -->
+
+	</head>
+	<body>		
+		<div id="wrap">	
+			<div id="header">
+				
+
+<script type="text/javaScript" language="javascript">
+//<![CDATA[
+$(document).ready(function(){
+	
+});
+
+
+function f_loginPage(){
+	window.location = "/member/bodyLogin.do?redirectUrl=/youngChallenge/index.do";
+}
+
+
+$(document).ready(function(){
+	
+	/* $('body').contextmenu(function() {
+		return false;
+	}); */
+	
+	/* $('body').keydown(function(event) {
+		if(event.keyCode == "123") return false;
+	}); */
+});
+
+//]]>
+</script>
+
+<div class="inner">
+	<h1>
+		<a href="/youngChallenge/index.do"><img src="/images/youngChallenge/h1_moel.png" alt="고용노동부" /></a>
+	</h1>
+	<ul class="global">
+		<li class="user">
+			
+				<li><a href="#login" onclick="f_loginPage(); return false;" target="_blank" title="새창">로그인</a></li>
+				<li><a href="/member/custJoin/retrieveCustJoinTp.do"  target="_blank">회원가입</a></li>
+			
+			
+			
+		</li>
+		<li class="last"><a href="/custCenter/custCtrMain.do"  target="_blank">고객센터</a></li>
+	</ul>
+</div>
+			</div>
+			<div>
+				
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+
+	//2024.08.27 고용24 이동
+	{
+		alert("청년도전지원사업 시스템이 고용24(www.work24.go.kr)로 통합되어 고용24 누리집으로 이동됩니다. * 취업지원 - 청년도전지원사업 메뉴를 이용하시길 바랍니다.");
+		document.location.href = "https://www.work24.go.kr";
+	}
+
+	$(window).ready(function() {
+		// 2023.07.20 조건부 임시 팝업 신규
+		var todtTmp 		= '20261116';
+		
+		/*
+		if( todtTmp < 20230805) {
+			//2023. 07. 20. 워크넷 로그인 절차 변경 안내 팝업
+			if (cookiePopVal("youngChToPop1") !="done" ){
+				var newwindow = window.open('/html/youngChallenge/youngChallengeMainPopup1.html','youngChToPop1', 'left=100, top=50, toolbar=0, status=0, width=800, height=600');
+				if (window.focus) {newwindow.focus();}
+			}
+		}
+		*/	
+		
+		// 청년도전지원사업 고용24 서비스 전환 안내
+		if( keis.cookie.get('popAppealSrvStopInvite') != 'done' ) {
+			keis.window.newWindow("/html/youngChallenge/youngChallengeMainPopup2.html", "popAppealSrvStopInvite", 800, 690, 'yes');
+		}
+		
+		
+		$("#btnReg").click(function() {
+			var newwindow = window.open("/youngChallenge/cdjApplRegisterPopup.do","cdjRegPopup", "left=850, top=500, toolbar=0, status=0, width=860, height=800, scrollbars=1");
+		});
+		
+	  	//운영일 경우
+	  	if(locationUrl.indexOf("work.go.kr") >= 0) {
+	  		$("#fileDiv2").remove();
+	  	}else{  
+	  		$("#fileDiv1").remove();
+	  	}
+
+	});
+	
+	
+	var cookiePopVal = function(name) {
+		var arg = name + "=";
+		var alen = arg.length;
+		var clen = document.cookie.length;
+		var i = 0;
+
+		while(i < clen) {
+			var j = i + alen;
+			if(document.cookie.substring(i, j) == arg)
+			return reCookieVal(j);
+
+			i = document.cookie.indexOf(" ", i) + 1;
+			if(i == 0)
+			break;
+		}
+		return null;
+	};
+	
+	function reCookieVal(offset) {
+		var endstr = document.cookie.indexOf(";", offset);
+		if(endstr == -1)
+			endstr = document.cookie.length;
+		return unescape(document.cookie.substring(offset, endstr));
+	}
+	
+	
+	var f_detail = function(ygmnChlnRqutNo) {
+		var newwindow = window.open("/youngChallenge/cdjApplRegisterPopup.do?ygmnChlnRqutNo=" + ygmnChlnRqutNo,"cdjRegPopup", "left=850, top=500, toolbar=0, status=0, width=860, height=1010, scrollbars=1");
+	};
+	
+	
+	var f_operOrg = function() {
+		var newwindow = window.open("/youngChallenge/retrieveCdjOperOrgPopup.do","cdjOperOrgPopup", "left=850, top=500, toolbar=0, status=0, width=860, height=800, scrollbars=1");
+	};
+	
+	
+	var f_question = function() {
+		var newwindow = window.open("/youngChallenge/retrieveCdjQuestionPopup.do","cdjQuestionPopup", "left=850, top=500, toolbar=0, status=0, width=970, height=1000, scrollbars=1");
+	};
+	
+	
+	var f_satisQstnr = function(ygmnChlnRqutNo) {
+		var newwindow = window.open("/youngChallenge/retrieveSatisQstnrPopup.do?ygmnChlnRqutNo=" + ygmnChlnRqutNo,"cdjRegPopup", "left=850, top=500, toolbar=0, status=0, width=860, height=950, scrollbars=1");
+	};
+</script>
+
+<!-- container -->
+<div id="container">
+	<div id="content">
+		<h3>청년도전지원사업 안내</h3>
+
+		<h4>청년도전 지원사업이란?</h4>
+		<ul class="circle_list">
+			<li>청년도전 지원사업은 구직단념 청년들의 구직의욕 고취, 노동시장 참여 및 취업을 촉진할 수 있도록 사업수행 지자체 등 운영기관를 통해<br>➊ 구직단념청년 발굴·모집 → ➋ 사회활동 참여의욕 고취를 위한 맞춤형 프로그램 제공 → ➌ (이수시) 국민취업지원제도, (취업시) 고용촉진장려금까지 연계하여 지원하는 사업을 말함</li>
+		</ul>
+
+		<h4>지원대상</h4>
+		<ul class="circle_list">
+			<li>
+				<strong>(구직단념청년)</strong> ① 6개월이상 취업 및 교육·직업훈련 참여 이력이 없고(고등학교 졸업(예정)자는 예외), ② 구직단념청년 문답표(서식16) 21점 이상(만점 30점)인 청년(만18~34세)				
+			</li>
+			<li>
+				<strong>(자립준비청년)</strong> 아동복지시설 등에서 보호받고 퇴소한 자 중 퇴소 5년이내의 청년 또는 퇴소 대상자임에도 불구하고 퇴소일을 연장한 청년				
+			</li>
+			<li>
+				<strong>(청소년복지시설 입·퇴소 청년)</strong> 「청소년복지지원법」제31조에 따른 청소년복지시설*에서 6개월 이상(합산 불가능) 보호한 만 18~34세 청년<br>
+						* 청소년쉼터, 청소년자립지원관, 청소년회복지원시설 등
+			<li>
+				<strong>(북한 이탈 청년))</strong> 북한을 이탈한 자로서 만 18세~34세 청년<br>
+				* 군사분계선 이북지역("북한")에 주소, 직계가족, 배우자, 직장 등을 두고 있는 자로서 북한을 벗어난 후 외국 국적을 취득하지 아니한 사람 <br>
+				※ 북한이탈주민등록확인서(민원24 발급 가능)를 제출하여 확인 
+			</li>
+			</li>
+			<li>
+				<strong>(지역특화)</strong> 공통요건 충족이 어려운 청년이라도 지원의 필요성이 있다고 인정받은 청년(단, 지자체별 지역특화 기준은 다를 수 있음)<br>
+				* 지역특화 예시 : 보호시설(보육원, 보호관찰소 등) 독립 후 개인적 사정 등으로 국민취업지원제도 등 취업지원서비스 참여가 어려운 청년,<br>
+				심리상담 등 관리가 필요한 청년, 생계형 아르바이트(주 30시간 미만 근로)청년, 경력단절여성, 폐업 자영업 청년, 대학졸업유예자, 대학장기휴학생 등 
+				<p><a href="#none" class="btn_link" onclick="f_question();" title="새창">청년도전 지원사업 참여 구직단념청년 상담원 문답표</a></p>
+			</li>
+		</ul>
+
+		<h4>문의처</h4>
+		<ul class="circle_list">
+			<li>사업수행 지자체 등 운영기관 찾기 : <a href="#none" class="btn_link" onclick="f_operOrg();" title="새창">사업수행 지자체 등 운영기관 목록</a></li>
+		</ul>
+
+		<h3 class="mt80">청년도전지원사업 신청</h3>
+		<div class="box_info">
+			<ul>
+				<li>홈페이지에서는 만 18 ~ 34세 이하의 청년으로, 신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.</li>
+				<li>그 외(생계형 아르바이트 등) 지원 대상은 사업수행 지자체 등 운영기관으로 문의하시기 바랍니다.</li>
+				<li>처리상태가 임시저장 또는 신청 중인 경우, 신청기관명을 통해 수정 및 삭제가 가능합니다.</li>
+			</ul>
+		</div>
+		
+		
+ 		
+
+		<div class="btn_group ac">
+			<button class="btn_btm blue" id="btnReg">신청</button>
+		</div>
+	</div>
+</div>
+<!-- //container -->
+			</div>
+			<div id="footer">
+				
+<div id="footin_wrap">
+	<div class="foot_btm">
+		<span class="logo">
+			<a href="http://www.moel.go.kr/" target="_blank" rel=“noopener noreferer”title="새창"><img src="/images/youngChallenge/layout/foot_logoMoel.gif" alt="고용노동부" /></a>
+			<a href="http://www.keis.or.kr/" target="_blank" rel=“noopener noreferer”title="새창"><img src="/images/youngChallenge/layout/foot_logoKeis.gif" alt="한국고용정보원" /></a>
+		</span>
+		<address>27740 충청북도 음성군 맹동면 태정로6 한국고용정보원</address>
+		<p>
+			
+			홈페이지 전산 이용문의 :<strong> 1577-7114 </strong>(유료, 한국고용정보원 고객상담센터 평일 09:00~18:00)<br/>
+			고용·노동 분야 제도 문의 : <strong>국번없이 1350</strong>(유료, 고용노동부 고객상담센터 평일 09:00~18:00)
+		</p>
+		<p class="copyright"><img src="/images/youngChallenge/layout/copyright.gif" alt="Copyright © 2018 고용노동부 한국고용정보원  all rights reserved." /></p>
+	</div>
+</div>
+			</div>
+		</div>
+	
+	</body>
+</html>
