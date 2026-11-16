@@ -11,7 +11,12 @@ export type AnthropicLike = {
 };
 
 export const VERIFY_MODEL = process.env.VERIFY_MODEL ?? "claude-opus-5-5";
-const MAX_TURNS = 12;
+// 열기 6 + 판단 6 + finish 1 + 거부·재시도 여유
+const MAX_TURNS = 16;
+const MAX_SEARCHES = 3;
+/** 설계 5장: 정책 하나에 60초. 넘기면 새 호출을 하지 않는다 */
+export const DEFAULT_DEADLINE_MS = 60_000;
+const VERDICTS: PageVerdict[] = ["matching_notice", "site_home", "different_program", "error"];
 
 export type PageVerdict = "matching_notice" | "site_home" | "different_program" | "error";
 export type MismatchKind = "recruitment_status" | "region_scope" | "reference_date_wording" | "different_program" | "notice_only_condition";
@@ -38,7 +43,7 @@ export type VerifyResult = {
   usage: { calls: number; inputTokens: number; outputTokens: number; pagesOpened: number };
 };
 
-type Deps = { client: AnthropicLike; web: Web; now: Date; enableSearch?: boolean };
+type Deps = { client: AnthropicLike; web: Web; now: Date; enableSearch?: boolean; deadlineMs?: number; clock?: () => number };
 
 const SYSTEM = `당신은 청년 정책 데이터를 공식 공고와 대조하는 검증 에이전트입니다.
 목표: 주어진 정책의 공식 공고를 찾아, 상태 변화(교육 수료, 취업, 사업자등록)와 관련된 자격 조건과 그 기준 시점을 확인하고, API 데이터와 다른 점을 기록합니다.
@@ -58,7 +63,7 @@ const SYSTEM = `당신은 청년 정책 데이터를 공식 공고와 대조하�
 
 const QUOTE = { type: "string", description: "페이지 원문에 그대로 있는 문장" };
 
-function tools(withSearch: boolean): Record<string, unknown>[] {
+function tools(searchesLeft: number): Record<string, unknown>[] {
   const custom = [
     {
       name: "open_page",
@@ -121,8 +126,9 @@ function tools(withSearch: boolean): Record<string, unknown>[] {
       },
     },
   ];
-  if (!withSearch) return custom;
-  return [...custom, { type: "web_search_20260209", name: "web_search", max_uses: 3, allowed_domains: ["go.kr", "or.kr", "youthcenter.go.kr"] }];
+  if (searchesLeft <= 0) return custom;
+  // max_uses는 요청 한 번당이라, 정책 전체 3회를 지키려고 남은 횟수를 매번 넣는다
+  return [...custom, { type: "web_search_20260209", name: "web_search", max_uses: searchesLeft, allowed_domains: ["go.kr", "or.kr", "youthcenter.go.kr"] }];
 }
 
 export function policyBrief(p: Policy): string {
@@ -163,9 +169,17 @@ type State = {
   limitHit: boolean;
 };
 
-function hasQuote(web: Web, urls: string[], quote: string): boolean {
+function hasQuote(web: Web, urls: string[], quote: unknown): boolean {
+  if (typeof quote !== "string") return false;
   const q = normalizeSpace(quote);
   return q.length > 0 && urls.some((u) => normalizeSpace(web.pageText(u) ?? "").includes(q));
+}
+
+const LIMIT_MESSAGE = "페이지 열기 한도에 도달했습니다. 더 열 수 없습니다. 지금까지 연 페이지로 record_judgement를 마치고 finish로 끝내세요.";
+
+/** 모델이 준 배열 입력: 배열이 아니거나 객체가 아닌 항목은 버린다 */
+function asObjects(x: unknown): Record<string, unknown>[] {
+  return Array.isArray(x) ? x.filter((i): i is Record<string, unknown> => !!i && typeof i === "object") : [];
 }
 
 async function executeTool(
@@ -177,16 +191,22 @@ async function executeTool(
   const step = state.trail.length + 1;
   if (name === "open_page") {
     const url = String(input.url ?? "");
+    if (state.limitHit) return { content: LIMIT_MESSAGE, isError: true };
     const r = await web.openPage(url);
     state.trail.push({ step, action: "open", target: url, reason: r.ok ? "열림" : r.text });
     if (r.ok) ctx.openedUrls.push(url);
     if (!r.ok && r.text.includes("한도")) state.limitHit = true;
+    if (state.limitHit) return { content: LIMIT_MESSAGE, isError: true };
     return r.ok ? { content: r.text } : { content: r.text, isError: true };
   }
   if (name === "record_judgement") {
     const url = String(input.url ?? "");
     const verdict = input.verdict as PageVerdict;
     const quote = typeof input.quote === "string" ? input.quote : null;
+    if (!VERDICTS.includes(verdict)) {
+      state.trail.push({ step, action: "reject", target: url, reason: "알 수 없는 판단 값" });
+      return { content: `verdict는 ${VERDICTS.join(", ")} 중 하나여야 합니다.`, isError: true };
+    }
     if (!ctx.openedUrls.includes(url) && verdict !== "error") {
       state.trail.push({ step, action: "reject", target: url, reason: "열지 않은 페이지에 대한 판단" });
       return { content: "먼저 open_page로 그 페이지를 여세요.", isError: true };
@@ -201,20 +221,26 @@ async function executeTool(
   }
   if (name === "finish") {
     const outcome = input.outcome as VerifyResult["outcome"];
-    const noticeUrl = (input.notice_url as string | null) ?? null;
+    const noticeUrl = typeof input.notice_url === "string" ? input.notice_url : null;
+    if (outcome !== "verified_against_notice" && outcome !== "notice_not_found") {
+      return { content: "outcome은 verified_against_notice 또는 notice_not_found여야 합니다.", isError: true };
+    }
     if (outcome === "verified_against_notice") {
       if (!noticeUrl || (ctx.mode === "agent" && state.judgements.get(noticeUrl) !== "matching_notice")) {
         state.trail.push({ step, action: "reject", target: noticeUrl ?? "", reason: "matching_notice로 판단하지 않은 페이지를 근거로 끝내려 함" });
         return { content: "notice_url은 record_judgement에서 matching_notice로 판단한 페이지여야 합니다. 판단을 기록하거나 notice_not_found로 끝내세요.", isError: true };
       }
     }
-    const sources = outcome === "verified_against_notice" && noticeUrl ? [noticeUrl] : ctx.openedUrls;
-    const findings = ((input.findings as Record<string, string>[]) ?? [])
-      .filter((f) => hasQuote(web, sources, f.quote))
-      .map((f) => ({ kind: f.kind as FindingKind, text: f.text, quote: f.quote }));
-    const mismatches = ((input.mismatches as Record<string, string>[]) ?? [])
+    const verifiedNotice = outcome === "verified_against_notice" && !!noticeUrl;
+    // 공고를 못 찾았으면 발견은 내보내지 않는다: 다른 사업 페이지의 문장이 "공고 기준"으로 보이면 안 된다
+    const findings = verifiedNotice
+      ? asObjects(input.findings)
+          .filter((f) => hasQuote(web, [noticeUrl!], f.quote))
+          .map((f) => ({ kind: String(f.kind) as FindingKind, text: String(f.text ?? ""), quote: String(f.quote) }))
+      : [];
+    const mismatches = asObjects(input.mismatches)
       .filter((m) => hasQuote(web, ctx.openedUrls, m.quote))
-      .map((m) => ({ kind: m.kind as MismatchKind, apiValue: m.api_value, noticeValue: m.notice_value, quote: m.quote, noticeUrl }));
+      .map((m) => ({ kind: String(m.kind) as MismatchKind, apiValue: String(m.api_value ?? ""), noticeValue: String(m.notice_value ?? ""), quote: String(m.quote), noticeUrl }));
     state.trail.push({ step, action: "finish", target: noticeUrl ?? "", reason: outcome });
     state.result = {
       policyId: ctx.policyId,
@@ -234,7 +260,12 @@ async function executeTool(
 async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", firstMessage: string, maxTurns: number): Promise<VerifyResult> {
   const state: State = { trail: [], judgements: new Map(), usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 }, result: null, limitHit: false };
   const openedUrls: string[] = [];
-  const toolDefs = mode === "agent" ? tools(!!deps.enableSearch) : tools(false).filter((t) => t.name === "finish");
+  const clock = deps.clock ?? Date.now;
+  const startedAt = clock();
+  const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
+  let searches = 0;
+  let stopReason = "단계 한도 도달";
+  const toolDefs = () => (mode === "agent" ? tools(deps.enableSearch ? MAX_SEARCHES - searches : 0) : tools(0).filter((t) => t.name === "finish"));
   const messages: Record<string, unknown>[] = [{ role: "user", content: firstMessage }];
   if (mode === "fixed") {
     // 고정 처리: 첫 링크를 코드가 열어 둔다
@@ -249,6 +280,10 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
   }
 
   for (let turn = 0; turn < maxTurns && !state.result; turn++) {
+    if (clock() - startedAt > deadlineMs) {
+      stopReason = "시간 한도 도달";
+      break;
+    }
     const response = await deps.client.beta.messages.create({
       model: VERIFY_MODEL,
       max_tokens: 16000,
@@ -256,22 +291,29 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
       fallbacks: "default",
       output_config: { effort: "medium" },
       system: SYSTEM,
-      tools: toolDefs,
+      tools: toolDefs(),
       messages,
     });
     state.usage.calls++;
     state.usage.inputTokens += response.usage?.input_tokens ?? 0;
     state.usage.outputTokens += response.usage?.output_tokens ?? 0;
     if (response.stop_reason === "refusal") {
-      state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: "모델이 요청을 거절함" });
+      stopReason = "모델이 요청을 거절함";
+      break;
+    }
+    for (const b of response.content) {
+      if (b.type === "server_tool_use") {
+        searches++;
+        state.trail.push({ step: state.trail.length + 1, action: "search", target: JSON.stringify(b.input), reason: "웹 검색" });
+      }
+    }
+    if (!response.content.length) {
+      stopReason = "모델이 빈 응답을 보냄";
       break;
     }
     messages.push({ role: "assistant", content: response.content });
     if (response.stop_reason === "pause_turn") continue;
     const uses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-    for (const b of response.content) {
-      if (b.type === "server_tool_use") state.trail.push({ step: state.trail.length + 1, action: "search", target: JSON.stringify(b.input), reason: "웹 검색" });
-    }
     if (!uses.length) {
       messages.push({ role: "user", content: "도구를 호출해 진행하거나 finish로 끝내세요." });
       continue;
@@ -280,10 +322,13 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
     for (const u of uses) {
       const r = await executeTool(u.name, u.input as Record<string, unknown>, { policyId, web: deps.web, state, mode, openedUrls });
       results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
-      if (state.result || state.limitHit) break;
+      if (state.result) break;
     }
-    if (state.result || state.limitHit) break;
-    messages.push({ role: "user", content: results });
+    if (state.result) break;
+    // 단계 한도가 가까우면 finish할 차례를 남기도록 알린다
+    const content: Record<string, unknown>[] = [...results];
+    if (turn === maxTurns - 3) content.push({ type: "text", text: "단계 한도가 가깝습니다. 다음 응답에서 finish로 끝내세요." });
+    messages.push({ role: "user", content });
   }
 
   state.usage.pagesOpened = deps.web.opened();
@@ -291,7 +336,7 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
     state.result.usage = state.usage;
     return state.result;
   }
-  state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: state.limitHit ? "탐색 한도 도달" : "단계 한도 도달" });
+  state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: stopReason });
   return { policyId, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], trail: state.trail, usage: state.usage };
 }
 

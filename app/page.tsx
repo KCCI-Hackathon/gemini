@@ -196,7 +196,8 @@ export default function Page() {
   const q = data?.questions[0];
   const targets = data?.needsVerification ?? [];
   const checking = targets.filter((id) => verify[id]?.status === "loading").length;
-  const verified = targets.filter((id) => verify[id]?.status === "done").length;
+  const verified = targets.filter((id) => verify[id]?.status === "done" && verify[id]?.result?.outcome === "verified_against_notice").length;
+  const notFound = targets.filter((id) => verify[id]?.status === "done" && verify[id]?.result?.outcome !== "verified_against_notice").length;
   const failed = targets.filter((id) => verify[id]?.status === "error").length;
   const regionLabelOf = regions.find((r) => r.code === profile.sigungu)?.label;
 
@@ -335,7 +336,7 @@ export default function Page() {
               <div className={styles.agentBanner}>
                 {checking > 0
                   ? `에이전트가 ${checking}건의 공식 공고를 찾아 확인하는 중입니다…`
-                  : `상태 변화로 다시 봐야 할 정책 ${targets.length}건 중 ${verified}건을 에이전트가 공식 공고와 대조했습니다.${failed ? ` ${failed}건은 확인하지 못해 확인 필요로 둡니다(${verify[targets.find((id) => verify[id]?.status === "error")!]?.error ?? ""}).` : ""}`}
+                  : `상태 변화로 다시 봐야 할 정책 ${targets.length}건 중 ${verified}건을 에이전트가 공식 공고와 대조했습니다.${notFound ? ` ${notFound}건은 공식 공고를 찾지 못해 확인 필요로 둡니다.` : ""}${failed ? ` ${failed}건은 확인하지 못해 확인 필요로 둡니다(${verify[targets.find((id) => verify[id]?.status === "error")!]?.error ?? ""}).` : ""}`}
               </div>
             )}
 
