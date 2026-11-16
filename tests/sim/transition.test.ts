@@ -60,6 +60,23 @@ describe("simulateTransition", () => {
     }
   });
 
+  test("취업과 무관한 코드(영농종사자만)의 비검증 정책은 취업해도 변화 없음", () => {
+    const rs = simulateTransition(PERSONA_A, "get_employed", NOW);
+    const farm = rs.filter((r) => !r.verified && r.jobCodes.length > 0 && r.jobCodes.every((c) => c === "0013008"));
+    expect(farm.length).toBeGreaterThan(0);
+    for (const r of farm) expect(r.change).toBe("unchanged");
+  });
+
+  test("비검증 정책이 취업 후 새로 해당 범위에 들어오면 '코드 기준' 문구를 쓴다", () => {
+    const rs = simulateTransition(PERSONA_A, "get_employed", NOW);
+    expect(rs.some((r) => !r.verified && r.change === "eligible_if_conditions")).toBe(false);
+    const opened = rs.filter((r) => r.change === "opened_code_only");
+    for (const r of opened) {
+      expect(r.verified).toBe(false);
+      expect(r.jobCodes).toContain("0013001");
+    }
+  });
+
   test("사업자등록 상태로 변경: 청년도전은 재검토", () => {
     const trained = applyTransition(PERSONA_A, "complete_training", NOW);
     const rs = simulateTransition(trained, "register_business", NOW);

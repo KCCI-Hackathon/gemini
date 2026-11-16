@@ -77,12 +77,17 @@ const CODE_OF_STATUS: Partial<Record<StatusKey, string[]>> = {
   business_registered: ["0013002", "0013006"],
 };
 
+/** 프로필의 현재 상태에 맞는 취업 요건 코드 */
+export function statusCodes(profile: Profile): string[] {
+  return [...effectiveStatus(profile)].flatMap((s) => CODE_OF_STATUS[s] ?? []);
+}
+
 export function judgePersonal(
   p: Policy,
   v: VerifiedPolicy | undefined,
   profile: Profile,
   now: Date,
-  opts: { softenCodeStatus?: boolean } = {},
+  opts: { softenCodes?: string[] } = {},
 ): { value: PersonalValue; reasons: string[] } {
   const today = toKstDate(now);
   const verdict = new Verdict(v ? "eligible" : "code_met_unreviewed");
@@ -126,7 +131,11 @@ export function judgePersonal(
   const jobs = p.jobCodes.filter((c) => c !== "0013010");
   if (jobs.length && !p.jobCodes.includes("0013010")) {
     const mine = [...status].flatMap((s) => CODE_OF_STATUS[s] ?? []);
-    if (!jobs.some((c) => mine.includes(c))) verdict.push(opts.softenCodeStatus ? "needs_check" : "ineligible", REASON.codeStatus);
+    if (!jobs.some((c) => mine.includes(c))) {
+      // 상태 전이 전에는 맞던 코드가 전이로 어긋난 경우만 확인 필요로 완화한다
+      const causedByTransition = !!opts.softenCodes && jobs.some((c) => opts.softenCodes!.includes(c));
+      verdict.push(causedByTransition ? "needs_check" : "ineligible", REASON.codeStatus);
+    }
   }
   if (p.schoolCodes.length && !p.schoolCodes.includes("0049010") && !p.schoolCodes.includes(profile.school)) verdict.push("needs_check", REASON.school);
   if (p.specialCodes.length && !p.specialCodes.includes("0014010")) verdict.push("needs_check", REASON.special);

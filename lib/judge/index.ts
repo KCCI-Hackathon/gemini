@@ -55,7 +55,7 @@ export function judgePolicy(
   v: VerifiedPolicy | undefined,
   profile: Profile,
   now: Date,
-  opts: { softenCodeStatus?: boolean } = {},
+  opts: { softenCodes?: string[] } = {},
 ): Axes {
   const personal = judgePersonal(p, v, profile, now, opts);
   const restriction = restrictionAxis(p, v, profile);
@@ -66,12 +66,12 @@ export function judgePolicy(
   return { personal, recruitment: recruitment(p, v, now), time: timeAxis(v, profile, now), restriction };
 }
 
-const NON_INDIVIDUAL = /운영|조성|센터|조사|위원회|의무제|설치|홍보|구축|활성화|협의체|포럼|축제|행사|기념|장려금|인프라/;
+const NON_INDIVIDUAL = /컨소시엄|운영|조성|센터|조사|위원회|의무제|설치|홍보|구축|활성화|협의체|포럼|축제|행사|기념|장려금|인프라/;
 const NON_INDIVIDUAL_PROVISION = new Set(["0042001", "0042012"]); // 인프라 구축, 경제적 규제
 
 export type JudgedPolicy = { policy: Policy; verified: boolean; layer: Layer; axes: Axes };
 
-export function judgeAll(profile: Profile, now: Date, opts: { softenCodeStatus?: boolean } = {}): JudgedPolicy[] {
+export function judgeAll(profile: Profile, now: Date, opts: { softenCodes?: string[] } = {}): JudgedPolicy[] {
   const verified = loadVerified();
   const out: JudgedPolicy[] = [];
   for (const p of loadSnapshot().policies) {

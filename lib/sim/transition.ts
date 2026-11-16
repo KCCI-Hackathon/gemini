@@ -1,5 +1,6 @@
 import { toKstDate } from "@/lib/date";
 import { judgeAll, REASON, type Axes, type EventType, type Profile } from "@/lib/judge";
+import { statusCodes } from "@/lib/judge/personal";
 
 export type Transition = "complete_training" | "get_employed" | "register_business";
 
@@ -8,6 +9,7 @@ export type Change =
   | "recheck_code_only"
   | "reference_date_needed"
   | "eligible_if_conditions"
+  | "opened_code_only"
   | "recheck_after_period"
   | "unchanged";
 
@@ -17,6 +19,7 @@ export const CHANGE_LABEL: Record<Change, string> = {
   recheck_code_only: "자격 재검토(코드 기준, 본문 미확인)",
   reference_date_needed: "자격 판단 기준일 확인 필요",
   eligible_if_conditions: "조건 충족 시 신청 가능",
+  opened_code_only: "새로 검토할 정책(코드 기준, 본문 미확인)",
   recheck_after_period: "수료일 기준 6개월 경과 후 재검토",
   unchanged: "변화 없음",
 };
@@ -49,7 +52,7 @@ function classify(before: Axes, after: Axes, verified: boolean): Change {
   if (after.time.value === "unmet" && after.time.note?.includes("경과") && before.time.note !== after.time.note) return "recheck_after_period";
   if (!verified && newReasons.includes(REASON.codeStatus)) return "recheck_code_only";
   const improved = ORDER[after.personal.value] < ORDER[before.personal.value];
-  if (improved) return "eligible_if_conditions";
+  if (improved) return verified ? "eligible_if_conditions" : "opened_code_only";
   return "recheck";
 }
 
@@ -65,7 +68,7 @@ export type TransitionResult = {
 
 export function simulateTransition(profile: Profile, t: Transition, now: Date): TransitionResult[] {
   const beforeAll = judgeAll(profile, now);
-  const afterAll = judgeAll(applyTransition(profile, t, now), now, { softenCodeStatus: true });
+  const afterAll = judgeAll(applyTransition(profile, t, now), now, { softenCodes: statusCodes(profile) });
   const afterById = new Map(afterAll.map((r) => [r.policy.id, r]));
   const out: TransitionResult[] = [];
   for (const b of beforeAll) {
