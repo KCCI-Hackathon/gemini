@@ -18,6 +18,8 @@ export type Profile = {
   events: ProfileEvent[];
   /** 사용자가 참여 중이라고 답한 정책 번호 */
   participating: string[];
+  /** 상담 질문의 답: 최근 6개월 안에 취업·교육·직업훈련 이력이 있는지. 없으면 모름 */
+  recentHistory?: "yes" | "no";
   /** 화면 표시용. 서버는 이 값을 믿지 않는다 */
   source: "demo_persona" | "user";
 };

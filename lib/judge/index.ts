@@ -33,7 +33,12 @@ function timeAxis(v: VerifiedPolicy | undefined, profile: Profile, now: Date): A
     .sort()
     .pop();
   // 이력이 하나도 없으면 "최근 N개월 이력 없음"을 확인할 수 없다(퇴사 직후일 수도 있다)
-  if (!last) return { value: "needs_check", note: note ?? `최근 ${v.lookback.months}개월 취업·훈련 이력 확인 필요` };
+  if (!last) {
+    // 상담 질문에 답했으면 그 답을 쓴다
+    if (profile.recentHistory === "no") return { value: "met", note };
+    if (profile.recentHistory === "yes") return { value: "unmet", note: note ?? `최근 ${v.lookback.months}개월 안에 취업·훈련 이력이 있어 기간 경과 후 재검토` };
+    return { value: "needs_check", note: note ?? `최근 ${v.lookback.months}개월 취업·훈련 이력 확인 필요` };
+  }
   const months = monthsBetween(last, today);
   if (months < v.lookback.months) return { value: "unmet", note: `수료일 기준 ${v.lookback.months}개월 경과 후 재검토` };
   return { value: "met", note };

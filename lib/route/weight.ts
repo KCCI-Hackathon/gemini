@@ -1,0 +1,79 @@
+// 루트에서 정책을 놓는 순서: "먼저 확인할 순서" 점수.
+// 우리가 정한 규칙이며 공식 기준이 아니다. 어느 길이 낫다는 뜻도, 신청 결과의 예측도 아니다.
+// 점수는 이유들의 합이고, 화면은 이유를 그대로 보여준다.
+import { toKstDate } from "@/lib/date";
+import { loadVerified } from "@/lib/data/verified";
+import type { JudgedPolicy, Profile } from "@/lib/judge";
+
+export type WeightReason = { label: string; points: number };
+export type Weight = { score: number; reasons: WeightReason[] };
+
+export const WEIGHTS = {
+  deadlineWithin14: 30,
+  deadlineWithin30: 20,
+  open: 10,
+  upcoming: 8,
+  always: 6,
+  closed: -20,
+  eligible: 30,
+  codeMet: 14,
+  needsCheckBase: 12,
+  /** 본문을 아직 아무도 확인하지 않은 정책의 '확인 필요'는 낮게 둔다 */
+  needsCheckUnreviewedBase: 4,
+  perOpenCheck: -2,
+  verified: 25,
+  timeUnmet: -15,
+  interest: 12,
+  interestSkill: 8,
+  opened: 20,
+} as const;
+
+function daysBetween(fromYmd: string, toYmd: string): number {
+  const d = (s: string) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+  return Math.round((d(toYmd) - d(fromYmd)) / 86_400_000);
+}
+
+/** 모집 중인 정책의 신청 종료일(검증 정책은 공고 기준) */
+export function deadlineOf(r: JudgedPolicy): string | null {
+  if (r.axes.recruitment !== "open") return null;
+  const v = loadVerified().get(r.policy.id);
+  return v ? v.apply.end : r.policy.applyEnd;
+}
+
+export function weighPolicy(r: JudgedPolicy, ctx: { interest: Profile["interest"]; now: Date; opened?: boolean }): Weight {
+  const reasons: WeightReason[] = [];
+  const add = (label: string, points: number) => reasons.push({ label, points });
+
+  // 모집 상태와 마감
+  const end = deadlineOf(r);
+  if (r.axes.recruitment === "open") {
+    const days = end ? daysBetween(toKstDate(ctx.now), end) : null;
+    if (days != null && days <= 14) add(`마감 ${days}일 전`, WEIGHTS.deadlineWithin14);
+    else if (days != null && days <= 30) add(`마감 ${days}일 전`, WEIGHTS.deadlineWithin30);
+    else add("모집 중", WEIGHTS.open);
+  } else if (r.axes.recruitment === "upcoming") add("모집 예정", WEIGHTS.upcoming);
+  else if (r.axes.recruitment === "always") add("상시 모집", WEIGHTS.always);
+  else if (r.axes.recruitment === "closed") add("모집 종료(다음 모집 확인)", WEIGHTS.closed);
+
+  // 자격 판정
+  const p = r.axes.personal;
+  if (p.value === "eligible") add("확인된 조건을 충족", WEIGHTS.eligible);
+  else if (p.value === "code_met_unreviewed") add("코드 조건 충족(본문 미확인)", WEIGHTS.codeMet);
+  else if (p.value === "needs_check") {
+    const n = Math.min(p.reasons.length, 4);
+    add(`확인할 사항 ${p.reasons.length}개 남음`, (r.verified ? WEIGHTS.needsCheckBase : WEIGHTS.needsCheckUnreviewedBase) + n * WEIGHTS.perOpenCheck);
+  }
+
+  if (r.verified) add("공식 공고를 사람이 확인", WEIGHTS.verified);
+  if (r.axes.time.value === "unmet") add("기간 조건이 아직 남음", WEIGHTS.timeUnmet);
+
+  // 관심 분야
+  const cat = `${r.policy.category.large} ${r.policy.category.middle}`;
+  if (ctx.interest === "startup" && cat.includes("창업")) add("관심 분야(창업)", WEIGHTS.interest);
+  else if (ctx.interest !== "startup" && cat.includes("취업")) add("관심 분야(취업)", WEIGHTS.interest);
+  else if (ctx.interest === "keep_searching" && cat.includes("역량")) add("관심 분야(역량 강화)", WEIGHTS.interestSkill);
+
+  if (ctx.opened) add("이 상태에서 새로 열림", WEIGHTS.opened);
+
+  return { score: reasons.reduce((s, x) => s + x.points, 0), reasons };
+}

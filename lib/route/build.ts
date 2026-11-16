@@ -1,0 +1,146 @@
+// 상태 갈림길 루트: 상태를 마디로 두고(지금 → 수료 후 → 취업/창업), 마디마다 "먼저 확인할 순서"대로 정책을 놓는다.
+// 정책 사이의 연결선은 공고 인용이 있는 것만 싣는다. 외부 호출 없음, 입력 프로필은 바꾸지 않는다.
+import routeLinks from "@/data/route-links.json";
+import { loadSnapshot } from "@/lib/data/snapshot";
+import { loadVerified } from "@/lib/data/verified";
+import { judgeAll, type JudgedPolicy, type PersonalValue, type Profile } from "@/lib/judge";
+import { baselineOpts, effectiveStatus } from "@/lib/judge/personal";
+import { applyTransition, CHANGE_LABEL, classifyChange, type Transition } from "@/lib/sim/transition";
+import { deadlineOf, weighPolicy, type WeightReason } from "./weight";
+
+export type RouteStep = {
+  order: number;
+  policyId: string;
+  name: string;
+  verified: boolean;
+  personal: PersonalValue;
+  recruitment: string;
+  deadline: string | null;
+  score: number;
+  reasons: WeightReason[];
+  /** 시간 조건 안내(예: 수료일 기준 6개월 경과 후 재검토) */
+  note: string | null;
+  /** 앞 마디에서는 닫혀 있다가 이 상태에서 열리는 정책 */
+  opened: boolean;
+};
+
+export type RouteNode = {
+  key: "now" | "after_training" | "employed" | "business";
+  label: string;
+  /** 가정한 상태(오늘 그 일이 일어났다고 가정)인지 */
+  assumed: boolean;
+  transition: Transition | null;
+  steps: RouteStep[];
+  /** 앞 마디에서 본 정책 중 이 상태에서 다시 봐야 하는 것 */
+  affected: { policyId: string; name: string; label: string }[];
+};
+
+export type RouteLink = { from: string; fromName: string; to: string; toName: string; kind: "leads_to" | "blocks"; quote: string; sourceUrl: string | null };
+
+export type Route = { trunk: RouteNode[]; branches: RouteNode[]; links: RouteLink[]; notice: string };
+
+const NOTICE =
+  "번호는 마감일·확인 여부·관심 분야로 계산한 '먼저 확인할 순서'입니다. 우리 서비스가 정한 규칙이며 공식 기준이 아닙니다. 어느 길이 더 낫다는 뜻이 아니고, 신청 결과를 예측하지 않습니다.";
+
+const NODE_OF: Record<Transition, { key: RouteNode["key"]; label: string }> = {
+  complete_training: { key: "after_training", label: "수료한 뒤" },
+  get_employed: { key: "employed", label: "취업한다면" },
+  register_business: { key: "business", label: "사업자등록을 한다면" },
+};
+
+const ORDER: Record<PersonalValue, number> = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 };
+const ROOT_STEPS = 4;
+const NEXT_STEPS = 3;
+
+function nameOf(id: string): string {
+  return loadVerified().get(id)?.name ?? loadSnapshot().policies.find((p) => p.id === id)?.name ?? id;
+}
+
+function links(): RouteLink[] {
+  const out: RouteLink[] = routeLinks.map((l) => ({ from: l.from, fromName: nameOf(l.from), to: l.to, toName: nameOf(l.to), kind: "leads_to" as const, quote: l.quote, sourceUrl: l.sourceUrl }));
+  // 참여 중이면 제한된다고 공고가 적은 관계
+  for (const v of loadVerified().values()) {
+    for (const q of v.restrictionQuotes) {
+      for (const other of q.mentions ?? []) {
+        out.push({ from: other, fromName: nameOf(other), to: v.id, toName: v.name, kind: "blocks", quote: q.text, sourceUrl: v.sources[0]?.url ?? null });
+      }
+    }
+  }
+  return out;
+}
+
+type Built = { node: RouteNode; judged: Map<string, JudgedPolicy>; shown: Set<string>; nextOrder: number };
+
+function buildNode(
+  def: { key: RouteNode["key"]; label: string; transition: Transition | null },
+  profile: Profile,
+  origin: Profile,
+  parent: { profile: Profile; built: Built } | null,
+  now: Date,
+): Built {
+  const all = judgeAll(profile, now, parent ? baselineOpts(origin, parent.profile) : {}).filter((r) => r.layer !== "history" || r.verified);
+  const judged = new Map(all.map((r) => [r.policy.id, r]));
+  const shown = new Set(parent?.built.shown ?? []);
+
+  const candidates = all
+    .filter((r) => r.axes.personal.value !== "ineligible" && !shown.has(r.policy.id))
+    .map((r) => {
+      const before = parent?.built.judged.get(r.policy.id);
+      const opened = !!parent && (!before || ORDER[r.axes.personal.value] < ORDER[before.axes.personal.value]);
+      return { r, opened, w: weighPolicy(r, { interest: profile.interest, now, opened }) };
+    })
+    // 첫 마디: 모집이 끝난 정책은 싣지 않는다. 다음 마디: 그 상태에서 새로 열리는 정책만 싣는다
+    .filter((c) => (parent ? c.opened && (c.r.axes.recruitment !== "closed" || c.r.verified) : c.r.axes.recruitment !== "closed"))
+    .sort((a, b) => b.w.score - a.w.score || a.r.policy.id.localeCompare(b.r.policy.id))
+    .slice(0, parent ? NEXT_STEPS : ROOT_STEPS);
+
+  let order = parent?.built.nextOrder ?? 1;
+  const steps: RouteStep[] = candidates.map((c) => ({
+    order: order++,
+    policyId: c.r.policy.id,
+    name: nameOf(c.r.policy.id),
+    verified: c.r.verified,
+    personal: c.r.axes.personal.value,
+    recruitment: c.r.axes.recruitment,
+    deadline: deadlineOf(c.r),
+    score: c.w.score,
+    reasons: c.w.reasons,
+    note: c.r.axes.time.note ?? null,
+    opened: c.opened,
+  }));
+  for (const s of steps) shown.add(s.policyId);
+
+  const affected: RouteNode["affected"] = [];
+  if (parent) {
+    for (const id of parent.built.shown) {
+      const before = parent.built.judged.get(id);
+      const after = judged.get(id);
+      if (!before || !after) continue;
+      const change = classifyChange(before.axes, after.axes, after.verified);
+      if (change !== "unchanged") affected.push({ policyId: id, name: nameOf(id), label: CHANGE_LABEL[change] });
+    }
+  }
+
+  return { node: { key: def.key, label: def.label, assumed: !!parent, transition: def.transition, steps, affected }, judged, shown, nextOrder: order };
+}
+
+export function buildRoute(profile: Profile, now: Date): Route {
+  const origin = structuredClone(profile);
+  const status = effectiveStatus(origin);
+
+  const root = buildNode({ key: "now", label: "지금", transition: null }, origin, origin, null, now);
+  const trunk: { profile: Profile; built: Built }[] = [{ profile: origin, built: root }];
+
+  if (status.has("in_training")) {
+    const p = applyTransition(origin, "complete_training", now);
+    trunk.push({ profile: p, built: buildNode({ ...NODE_OF.complete_training, transition: "complete_training" }, p, origin, trunk[0], now) });
+  }
+
+  const tip = trunk[trunk.length - 1];
+  const forks: Transition[] = [];
+  if (!status.has("employed")) forks.push("get_employed");
+  if (!status.has("business_registered")) forks.push("register_business");
+  const branches = forks.map((t) => buildNode({ ...NODE_OF[t], transition: t }, applyTransition(tip.profile, t, now), origin, tip, now).node);
+
+  return { trunk: trunk.map((t) => t.built.node), branches, links: links(), notice: NOTICE };
+}

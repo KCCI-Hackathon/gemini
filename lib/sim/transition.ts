@@ -42,7 +42,7 @@ export function applyTransition(profile: Profile, t: Transition, now: Date): Pro
 
 const ORDER = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 } as const;
 
-function classify(before: Axes, after: Axes, verified: boolean): Change {
+export function classifyChange(before: Axes, after: Axes, verified: boolean): Change {
   const newReasons = after.personal.reasons.filter((r) => !before.personal.reasons.includes(r));
   const sameValue = before.personal.value === after.personal.value;
   if (sameValue && newReasons.length === 0 && before.time.value === after.time.value) return "unchanged";
@@ -86,7 +86,7 @@ export function simulateTransition(profile: Profile, t: Transition, now: Date, o
       jobCodes: b.policy.jobCodes,
       before: b.axes,
       after: a.axes,
-      change: classify(b.axes, a.axes, b.verified),
+      change: classifyChange(b.axes, a.axes, b.verified),
     });
   }
   return out;
