@@ -29,10 +29,13 @@ async function getPage(opts: Required<Pick<Options, "apiKey" | "fetchFn" | "page
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await opts.fetchFn(url.toString());
+      if (!res.ok) throw new Error(`page ${pageNum}: HTTP ${res.status}`);
       const body = await res.json();
       const list = body?.result?.youthPolicyList;
       if (!Array.isArray(list)) throw new Error(`page ${pageNum}: 응답에 목록 없음`);
-      return { list: list as RawPolicy[], total: Number(body.result.pagging.totCount) };
+      const total = Number(body.result.pagging?.totCount);
+      if (!Number.isFinite(total) || total <= 0) throw new Error(`page ${pageNum}: 전체 건수(totCount) 없음`);
+      return { list: list as RawPolicy[], total };
     } catch (e) {
       lastError = e;
       if (opts.retryDelayMs) await new Promise((r) => setTimeout(r, opts.retryDelayMs));
@@ -54,6 +57,8 @@ export async function fetchSnapshot(options: Options): Promise<{ count: number }
   for (let p = 2; p <= pages; p++) {
     records.push(...(await getPage(opts, p)).list);
   }
+  // 잘린 결과로 기존 스냅샷을 덮어쓰지 않는다
+  if (records.length !== first.total) throw new Error(`수집 건수 불일치: 받은 ${records.length}건, 전체 건수 ${first.total}건`);
   const snapshot: Snapshot = { asOf: toKstDate(options.now ?? new Date()), records };
   // 모두 받은 뒤에만 교체한다. 부분 실패 시 기존 파일 보존.
   fs.mkdirSync(path.dirname(options.outPath), { recursive: true });

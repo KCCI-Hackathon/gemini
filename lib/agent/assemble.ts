@@ -32,6 +32,8 @@ export function assembleCards(results: JudgedPolicy[], transition: Transition | 
       const g = v.guidance.find((x) => x.transition === transition) ?? v.guidance.find((x) => x.transition === "none");
       const change = changeById.get(r.policy.id);
       const confirmed = [
+        // 수료 예정일 경과 같은 안내는 펼치지 않아도 보이게 맨 앞에 둔다
+        ...(r.axes.time.note ? [r.axes.time.note] : []),
         `모집: ${RECRUIT[r.axes.recruitment]}${v.apply.end ? ` (${v.apply.end}${v.apply.endTime ? ` ${v.apply.endTime}` : ""} 마감)` : ""}`,
         ...(v.referenceDate.status ? [`자격 기준 시점: ${v.referenceDate.status}`] : []),
         ...(change && change.change !== "unchanged" ? [`상태 변화 결과: ${CHANGE_LABEL[change.change]}`] : []),
