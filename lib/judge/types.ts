@@ -46,4 +46,14 @@ export const REASON = {
   special: "특화 조건(중소기업 등) 확인 필요",
   marriage: "혼인 조건 확인 필요",
   participating: "참여 중인 다른 사업으로 제한될 수 있음",
+  history: "최근 취업·훈련 이력 확인 필요",
+  statusUnknown: "현재 취업 상태 확인 필요",
 } as const;
+
+/** 상태 전이 비교의 기준. 전이 전 프로필들(원래 프로필, 이전 가정 상태)에서 계산한다 */
+export type JudgeOpts = {
+  /** 전이 전에 맞던 취업 요건 코드: 이 코드가 전이로 어긋나면 확인 필요로 완화 */
+  softenCodes?: string[];
+  /** 전이 전 상태 집합들: 검증 정책의 상태 조건을 이 중 하나에서 충족했으면 기준일 확인으로 완화 */
+  baseStatuses?: string[][];
+};

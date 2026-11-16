@@ -3,7 +3,7 @@ import { regionLabel } from "@/lib/data/regions";
 import type { Policy } from "@/lib/data/types";
 import type { StatusKey, VerifiedPolicy } from "@/lib/data/verified";
 import { judgeRegion } from "./region";
-import { REASON, type PersonalValue, type Profile } from "./types";
+import { REASON, type JudgeOpts, type PersonalValue, type Profile } from "./types";
 
 /** 생년월과 기준일로 가능한 만 나이 범위. 기준일이 생일 달이면 두 값 */
 export function ageRange(birthYm: string, refYmd: string): [number, number] {
@@ -82,16 +82,29 @@ export function statusCodes(profile: Profile): string[] {
   return [...effectiveStatus(profile)].flatMap((s) => CODE_OF_STATUS[s] ?? []);
 }
 
+/** 전이 전 프로필들로 완화 기준을 만든다 */
+export function baselineOpts(...profiles: Profile[]): JudgeOpts {
+  return {
+    softenCodes: [...new Set(profiles.flatMap(statusCodes))],
+    baseStatuses: profiles.map((p) => [...effectiveStatus(p)]),
+  };
+}
+
+/** 프리랜서·(예비)창업자·영농·기타: 프로필 항목으로 표현할 수 없어 어긋나도 비해당으로 단정하지 않는다 */
+const UNREPRESENTABLE = ["0013004", "0013006", "0013008", "0013009"];
+const EMPLOYMENT_KEYS: StatusKey[] = ["unemployed", "employed", "business_registered"];
+
 export function judgePersonal(
   p: Policy,
   v: VerifiedPolicy | undefined,
   profile: Profile,
   now: Date,
-  opts: { softenCodes?: string[] } = {},
+  opts: JudgeOpts = {},
 ): { value: PersonalValue; reasons: string[] } {
   const today = toKstDate(now);
   const verdict = new Verdict(v ? "eligible" : "code_met_unreviewed");
   const status = effectiveStatus(profile);
+  const statusUnknown = !EMPLOYMENT_KEYS.some((k) => status.has(k));
 
   // 지역
   const region = judgeRegion(p, profile.sigungu);
@@ -112,8 +125,14 @@ export function judgePersonal(
     const excluded = v.statusConditions.excludes.filter((k) => status.has(k));
     if (missing.length || excluded.length) {
       const ref = v.referenceDate.status;
-      const changedBySimulation = profile.events.some((e) => e.status === "simulated");
-      if (changedBySimulation && (!ref || !ref.includes("신청일"))) {
+      // 전이 전 상태에서는 충족이던 조건이 전이로 어긋난 경우만 기준일 문제로 본다
+      const metBefore = (opts.baseStatuses ?? []).some((b) => {
+        const s = new Set(b);
+        return v.statusConditions.requires.every((k) => s.has(k)) && !v.statusConditions.excludes.some((k) => s.has(k));
+      });
+      if (statusUnknown && missing.some((k) => EMPLOYMENT_KEYS.includes(k))) {
+        verdict.push("needs_check", REASON.statusUnknown);
+      } else if (metBefore && (!ref || !ref.includes("신청일"))) {
         verdict.push("needs_check", REASON.referenceDate);
       } else if (v.statusConditions.definitionClear) {
         verdict.push("ineligible", `상태 조건 불충족(${[...missing.map((k) => `${k} 필요`), ...excluded.map((k) => `${k} 제외`)].join(", ")})`);
@@ -134,7 +153,8 @@ export function judgePersonal(
     if (!jobs.some((c) => mine.includes(c))) {
       // 상태 전이 전에는 맞던 코드가 전이로 어긋난 경우만 확인 필요로 완화한다
       const causedByTransition = !!opts.softenCodes && jobs.some((c) => opts.softenCodes!.includes(c));
-      verdict.push(causedByTransition ? "needs_check" : "ineligible", REASON.codeStatus);
+      const ambiguous = jobs.some((c) => UNREPRESENTABLE.includes(c));
+      verdict.push(causedByTransition || ambiguous || statusUnknown ? "needs_check" : "ineligible", REASON.codeStatus);
     }
   }
   if (p.schoolCodes.length && !p.schoolCodes.includes("0049010") && !p.schoolCodes.includes(profile.school)) verdict.push("needs_check", REASON.school);

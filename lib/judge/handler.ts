@@ -8,7 +8,7 @@ import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
 import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, type Transition, type TransitionResult } from "@/lib/sim/transition";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
-import { statusCodes } from "./personal";
+import { baselineOpts } from "./personal";
 
 const NATIONAL = "20260710005400113256";
 
@@ -70,13 +70,14 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   }
   const transitions = parsed.data.transitions ?? [];
   const last = transitions.at(-1) ?? null;
+  const origin = profile;
   for (const t of transitions.slice(0, -1)) profile = applyTransition(profile, t, now);
 
   let changes: TransitionResult[] = [];
   let results;
   if (last) {
-    changes = simulateTransition(profile, last, now);
-    results = judgeAll(applyTransition(profile, last, now), now, { softenCodes: statusCodes(profile) });
+    changes = simulateTransition(profile, last, now, origin);
+    results = judgeAll(applyTransition(profile, last, now), now, baselineOpts(origin, profile));
   } else {
     results = judgeAll(profile, now);
   }

@@ -3,7 +3,7 @@ import { loadSnapshot } from "@/lib/data/snapshot";
 import type { Policy } from "@/lib/data/types";
 import { loadVerified, type VerifiedPolicy } from "@/lib/data/verified";
 import { effectiveStatus, judgePersonal } from "./personal";
-import { REASON, type Axes, type Layer, type Profile } from "./types";
+import { REASON, type Axes, type JudgeOpts, type Layer, type Profile } from "./types";
 
 export * from "./types";
 
@@ -32,7 +32,8 @@ function timeAxis(v: VerifiedPolicy | undefined, profile: Profile, now: Date): A
     .map((e) => e.date)
     .sort()
     .pop();
-  if (!last) return { value: "met", note };
+  // 이력이 하나도 없으면 "최근 N개월 이력 없음"을 확인할 수 없다(퇴사 직후일 수도 있다)
+  if (!last) return { value: "needs_check", note: note ?? `최근 ${v.lookback.months}개월 취업·훈련 이력 확인 필요` };
   const months = monthsBetween(last, today);
   if (months < v.lookback.months) return { value: "unmet", note: `수료일 기준 ${v.lookback.months}개월 경과 후 재검토` };
   return { value: "met", note };
@@ -55,7 +56,7 @@ export function judgePolicy(
   v: VerifiedPolicy | undefined,
   profile: Profile,
   now: Date,
-  opts: { softenCodes?: string[] } = {},
+  opts: JudgeOpts = {},
 ): Axes {
   const personal = judgePersonal(p, v, profile, now, opts);
   const restriction = restrictionAxis(p, v, profile);
@@ -63,7 +64,12 @@ export function judgePolicy(
     personal.value = "needs_check";
     personal.reasons.push(REASON.participating);
   }
-  return { personal, recruitment: recruitment(p, v, now), time: timeAxis(v, profile, now), restriction };
+  const time = timeAxis(v, profile, now);
+  if (time.value === "needs_check" && personal.value === "eligible") {
+    personal.value = "needs_check";
+    personal.reasons.push(REASON.history);
+  }
+  return { personal, recruitment: recruitment(p, v, now), time, restriction };
 }
 
 const NON_INDIVIDUAL = /컨소시엄|운영|조성|센터|조사|위원회|의무제|설치|홍보|구축|활성화|협의체|포럼|축제|행사|기념|장려금|인프라/;
@@ -71,7 +77,7 @@ const NON_INDIVIDUAL_PROVISION = new Set(["0042001", "0042012"]); // 인프라 �
 
 export type JudgedPolicy = { policy: Policy; verified: boolean; layer: Layer; axes: Axes };
 
-export function judgeAll(profile: Profile, now: Date, opts: { softenCodes?: string[] } = {}): JudgedPolicy[] {
+export function judgeAll(profile: Profile, now: Date, opts: JudgeOpts = {}): JudgedPolicy[] {
   const verified = loadVerified();
   const out: JudgedPolicy[] = [];
   for (const p of loadSnapshot().policies) {

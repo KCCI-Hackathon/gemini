@@ -77,13 +77,18 @@ export function parseVerified(raw: unknown): VerifiedPolicy {
 
 let cache: Map<string, VerifiedPolicy> | null = null;
 
-export function loadVerified(): Map<string, VerifiedPolicy> {
-  if (!cache) {
-    cache = new Map(verifiedIndex.map((raw) => {
-      const v = parseVerified(raw);
-      return [v.id, v];
-    }));
+/** 사람이 확인한(human_verified) 정책만 검증 정책으로 쓴다. draft는 비검증 경로로 판정된다 */
+export function buildVerifiedMap(raws: unknown[]): Map<string, VerifiedPolicy> {
+  const out = new Map<string, VerifiedPolicy>();
+  for (const raw of raws) {
+    const v = parseVerified(raw);
+    if (v.verificationStatus === "human_verified") out.set(v.id, v);
   }
+  return out;
+}
+
+export function loadVerified(): Map<string, VerifiedPolicy> {
+  if (!cache) cache = buildVerifiedMap(verifiedIndex);
   return cache;
 }
 

@@ -1,6 +1,6 @@
 import { toKstDate } from "@/lib/date";
 import { judgeAll, REASON, type Axes, type EventType, type Profile } from "@/lib/judge";
-import { statusCodes } from "@/lib/judge/personal";
+import { baselineOpts } from "@/lib/judge/personal";
 
 export type Transition = "complete_training" | "get_employed" | "register_business";
 
@@ -66,9 +66,13 @@ export type TransitionResult = {
   change: Change;
 };
 
-export function simulateTransition(profile: Profile, t: Transition, now: Date): TransitionResult[] {
-  const beforeAll = judgeAll(profile, now);
-  const afterAll = judgeAll(applyTransition(profile, t, now), now, { softenCodes: statusCodes(profile) });
+/**
+ * origin: 사용자가 실제로 입력한 프로필. 전이를 이어 눌렀으면 profile은 이전 가정이 반영된 상태이고,
+ * 완화 기준은 원래 프로필과 직전 상태 둘 다에서 만든다.
+ */
+export function simulateTransition(profile: Profile, t: Transition, now: Date, origin: Profile = profile): TransitionResult[] {
+  const beforeAll = judgeAll(profile, now, origin === profile ? {} : baselineOpts(origin));
+  const afterAll = judgeAll(applyTransition(profile, t, now), now, baselineOpts(origin, profile));
   const afterById = new Map(afterAll.map((r) => [r.policy.id, r]));
   const out: TransitionResult[] = [];
   for (const b of beforeAll) {
