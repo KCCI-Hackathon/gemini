@@ -1,6 +1,8 @@
 // 상담 에이전트(가상 인물 시연 전용, 설계 5장 ⑤). 요청은 가상 인물 번호와 선택지만 받는다.
 import type Anthropic from "@anthropic-ai/sdk";
+import { toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
+import { takeQuota } from "@/lib/limits";
 import { judgeAll } from "@/lib/judge";
 import { PERSONAS, type PersonaId } from "@/lib/judge/personas";
 import type { AnthropicLike } from "@/lib/verify/run";
@@ -56,18 +58,46 @@ function fallbackCards(personaId: PersonaId, now: Date): Card[] {
   return assembleCards(judgeAll(PERSONAS[personaId], now), "none").map((c) => ({ policyId: c.policyId, name: c.name, checkNextInOrder: c.checkNextInOrder, rationale: c.rationale }));
 }
 
-export async function handleAgent(body: unknown, ctx: { env: Record<string, string | undefined>; now: Date; makeClient: () => AnthropicLike }): Promise<Out> {
+/** 입력이 고정된 가상 인물이라 같은 날 결과는 재사용한다 */
+const agentCache = new Map<string, Out>();
+
+export async function handleAgent(body: unknown, ctx: { env: Record<string, string | undefined>; ip?: string; now: Date; makeClient: () => AnthropicLike }): Promise<Out> {
+  const pre = precheck(body);
+  if ("status" in pre) return pre;
+  const pid = pre.pid;
+  if (ctx.env.EXTERNAL_AI_ENABLED !== "true" || !ctx.env.ANTHROPIC_API_KEY) {
+    return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log: [] } };
+  }
+  const key = `${pid}:${toKstDate(ctx.now)}`;
+  const hit = agentCache.get(key);
+  if (hit) return hit;
+  if (!takeQuota(ctx.env, ctx.ip ?? "unknown", ctx.now)) {
+    return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log: [], error: "오늘의 AI 상담 한도에 도달해 코드가 정리한 카드를 보여 드립니다." } };
+  }
+  try {
+    const out = await runAgent(pid, ctx);
+    if (!out.body.fallback) agentCache.set(key, out);
+    return out;
+  } catch {
+    // 호출 실패(과부하·인증·시간 초과)는 사전 조립 카드로 동작한다(설계 7장)
+    return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log: [], error: "AI 호출이 실패해 코드가 정리한 카드를 보여 드립니다." } };
+  }
+}
+
+export function resetAgentState() {
+  agentCache.clear();
+}
+
+function precheck(body: unknown): Out | { pid: PersonaId } {
   if (!body || typeof body !== "object") return { status: 400, body: { error: "요청 형식이 잘못됐습니다." } };
   const keys = Object.keys(body);
   if (keys.some((k) => k !== "personaId")) return { status: 400, body: { error: "가상 인물 번호만 보낼 수 있습니다." } };
   const personaId = (body as { personaId: unknown }).personaId;
   if (typeof personaId !== "string" || !(personaId in PERSONAS)) return { status: 400, body: { error: "가상 인물 번호가 잘못됐습니다." } };
-  const pid = personaId as PersonaId;
+  return { pid: personaId as PersonaId };
+}
 
-  if (ctx.env.EXTERNAL_AI_ENABLED !== "true" || !ctx.env.ANTHROPIC_API_KEY) {
-    return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log: [] } };
-  }
-
+async function runAgent(pid: PersonaId, ctx: { now: Date; makeClient: () => AnthropicLike }): Promise<Out> {
   const payload = buildAgentPayload(pid, ctx.now);
   const verified = loadVerified();
   const knownIds = new Set(payload.policies.map((p) => p.id));
@@ -110,9 +140,11 @@ export async function handleAgent(body: unknown, ctx: { env: Record<string, stri
       } else if (u.name === "finish_cards") {
         log.push({ tool: u.name, summary: "카드 작성" });
         const summary = String(input.summary ?? "");
-        const cards = ((input.cards as { policy_id: string; check_next: string[]; rationale: string }[]) ?? []).filter((c) => knownIds.has(c.policy_id));
+        const raw = Array.isArray(input.cards) ? (input.cards as { policy_id: string; check_next: string[]; rationale: string }[]) : [];
+        const cards = raw.filter((c) => knownIds.has(c.policy_id));
         const text = [summary, ...cards.flatMap((c) => [c.policy_id, ...c.check_next, c.rationale])].join("\n");
-        if (!guardResponse(text, knownIds).ok || !cards.length) {
+        // 모르는 정책 카드가 하나라도 있으면 응답 전체를 버린다(계획 Review Focus 3행)
+        if (cards.length !== raw.length || !guardResponse(text, knownIds).ok || !cards.length) {
           return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log } };
         }
         return {

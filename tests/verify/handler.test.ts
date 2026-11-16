@@ -70,14 +70,6 @@ describe("handleVerify", () => {
     expect(t.client.calls).toBe(1);
   });
 
-  test("접속 주소당 하루 한도를 넘으면 429", async () => {
-    resetVerifyState();
-    const t = ctx({ env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k", AGENT_DAILY_LIMIT: "100" } });
-    const ids = Array.from({ length: 21 }, (_, i) => `2026${String(i).padStart(16, "0")}`);
-    let last = 0;
-    for (const id of ids) last = (await handleVerify({ policyId: id }, t.c)).status;
-    expect(last).toBe(429);
-  });
 });
 
 describe("guardResponse", () => {

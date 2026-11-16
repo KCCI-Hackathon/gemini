@@ -1,6 +1,12 @@
-import { describe, expect, test } from "vitest";
-import { handleAgent } from "@/lib/agent/run";
+import { beforeEach, describe, expect, test } from "vitest";
+import { handleAgent, resetAgentState } from "@/lib/agent/run";
+import { resetLimits } from "@/lib/limits";
 import { scriptedClient } from "../verify/helpers";
+
+beforeEach(() => {
+  resetAgentState();
+  resetLimits();
+});
 
 const NOW = new Date("2026-11-24T12:00:00+09:00");
 const CHALLENGE = "20250122005400110346";
