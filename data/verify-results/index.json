@@ -1,1 +1,475 @@
-{}
+{
+ "20260406005400212445": {
+  "policyId": "20260406005400212445",
+  "mode": "agent",
+  "outcome": "verified_against_notice",
+  "noticeUrl": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412",
+  "findings": [
+   {
+    "kind": "status_reference",
+    "text": "미취업 여부는 신청일이 아니라 시험 응시일 현재 기준. 거주지는 신청일 현재 기준",
+    "quote": "신청일 현재 주민등록상 인천시 거주자이며, 응시일 현재 미취업자 (2025.12.1. 이후 응시한 시험)"
+   },
+   {
+    "kind": "status_condition",
+    "text": "건강보험 직장가입자와 개인사업자는 제외",
+    "quote": "건강보험 직장가입자 및 개인사업자는 제외"
+   },
+   {
+    "kind": "age",
+    "text": "18~39세, 출생일 범위로 명시",
+    "quote": "18세~39세 청년(1986.1.1. ~ 2008.12.31.출생)"
+   },
+   {
+    "kind": "application_period",
+    "text": "신청 마감은 2026-11-30 18시",
+    "quote": "2026.02.01(09시) ~ 2026.11.30(18시)"
+   }
+  ],
+  "mismatches": [
+   {
+    "kind": "notice_only_condition",
+    "apiValue": "추가 자격 없음",
+    "noticeValue": "응시일 현재 미취업자(2025.12.1. 이후 응시한 시험)",
+    "quote": "신청일 현재 주민등록상 인천시 거주자이며, 응시일 현재 미취업자 (2025.12.1. 이후 응시한 시험)",
+    "noticeUrl": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412"
+   },
+   {
+    "kind": "notice_only_condition",
+    "apiValue": "신청 종료일 2026-11-30(시각 없음)",
+    "noticeValue": "2026.11.30 18시 마감",
+    "quote": "2026.02.01(09시) ~ 2026.11.30(18시)",
+    "noticeUrl": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412"
+   }
+  ],
+  "trail": [
+   {
+    "step": 1,
+    "action": "open",
+    "target": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412",
+    "reason": "열림"
+   },
+   {
+    "step": 2,
+    "action": "judge",
+    "target": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412",
+    "judgement": {
+     "verdict": "matching_notice",
+     "reason": "인천청년포털의 '청년 자격증 응시료 지원' 사업 안내로 사업명·주관기관(인천광역시)·2026년 사업기간이 API와 일치",
+     "quote": "주관기관 : 인천광역시 청년정책담당관"
+    },
+    "reason": "인천청년포털의 '청년 자격증 응시료 지원' 사업 안내로 사업명·주관기관(인천광역시)·2026년 사업기간이 API와 일치"
+   },
+   {
+    "step": 3,
+    "action": "finish",
+    "target": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412",
+    "reason": "verified_against_notice"
+   }
+  ],
+  "usage": {
+   "calls": 3,
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "pagesOpened": 1
+  },
+  "producedBy": "claude_code_session"
+ },
+ "20260714005400113258": {
+  "policyId": "20260714005400113258",
+  "mode": "agent",
+  "outcome": "verified_against_notice",
+  "noticeUrl": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?currentPageNo=1&recordCountPerPage=10&systId=SI00000512&systClId=SC00000391",
+  "findings": [
+   {
+    "kind": "status_reference",
+    "text": "취업 여부는 참여 신청일 현재 고용보험 피보험자격으로 확인",
+    "quote": "* 취업여부는 참여 신청일 현재 고용보험 피보험자격 기준으로 확인"
+   },
+   {
+    "kind": "status_condition",
+    "text": "취업 중이거나 사업자등록 중이면 참여 제한",
+    "quote": "① 취업 중이거나 사업자등록 중인 사람"
+   },
+   {
+    "kind": "status_condition",
+    "text": "사업자등록이 있어도 실제 사업을 하지 않음을 증명하면 참여 가능",
+    "quote": "** 사업자등록을 한 경우라도 실제 사업을 영위하지 않는 것을 객관적으로 증명한 경우 참여 가능"
+   },
+   {
+    "kind": "age",
+    "text": "연령은 참여 신청일 현재 기준, 군필자는 최대 만 39세",
+    "quote": "* 연령은 참여 신청일 현재를 기준으로 산정, 군필자의 경우 의무복무 기간만큼 연령 상한을 높여 적용(최대 만 39세)"
+   }
+  ],
+  "mismatches": [
+   {
+    "kind": "reference_date_wording",
+    "apiValue": "아카데미 개시 전까지 참여 제한 사유가 해소되는 경우 참여 가능",
+    "noticeValue": "신청일 현재 기준으로 판단하며, 프로그램 개시일 전까지 해소되면 참여 가능",
+    "quote": "* 신청일 현재 기준으로 판단하며, 프로그램 개시일 전까지 참여 제한 사유가 해소되는 경우 참여 가능(증빙 필요)",
+    "noticeUrl": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?currentPageNo=1&recordCountPerPage=10&systId=SI00000512&systClId=SC00000391"
+   }
+  ],
+  "trail": [
+   {
+    "step": 1,
+    "action": "open",
+    "target": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?currentPageNo=1&recordCountPerPage=10&systId=SI00000512&systClId=SC00000391",
+    "reason": "열림"
+   },
+   {
+    "step": 2,
+    "action": "judge",
+    "target": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?currentPageNo=1&recordCountPerPage=10&systId=SI00000512&systClId=SC00000391",
+    "judgement": {
+     "verdict": "matching_notice",
+     "reason": "고용24 제도안내의 'K-뉴딜 아카데미' 페이지로 지원대상 문구가 API 추가 자격과 일치",
+     "quote": "ㅇ(기본 요건) 미취업 청년(만 15세 이상~만 34세 이하)"
+    },
+    "reason": "고용24 제도안내의 'K-뉴딜 아카데미' 페이지로 지원대상 문구가 API 추가 자격과 일치"
+   },
+   {
+    "step": 3,
+    "action": "finish",
+    "target": "https://www.work24.go.kr/cm/c/f/1100/selecSystInfo.do?currentPageNo=1&recordCountPerPage=10&systId=SI00000512&systClId=SC00000391",
+    "reason": "verified_against_notice"
+   }
+  ],
+  "usage": {
+   "calls": 3,
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "pagesOpened": 1
+  },
+  "producedBy": "claude_code_session"
+ },
+ "20260710005400113256": {
+  "policyId": "20260710005400113256",
+  "mode": "agent",
+  "outcome": "verified_against_notice",
+  "noticeUrl": "https://www.work24.go.kr/ua/z/z/1300/selectEmssRqutIntro.do",
+  "findings": [
+   {
+    "kind": "income",
+    "text": "I유형 요건심사형은 중위소득 60% 이하",
+    "quote": "중위소득 60% 이하"
+   },
+   {
+    "kind": "income",
+    "text": "I유형 선발형(청년특례, 15~34세)은 중위소득 120% 이하",
+    "quote": "중위소득 120% 이하"
+   },
+   {
+    "kind": "status_condition",
+    "text": "I유형 요건심사형은 취업경험 100일 또는 800시간 이상이 필요",
+    "quote": "100일 또는 800시간 이상"
+   }
+  ],
+  "mismatches": [],
+  "trail": [
+   {
+    "step": 1,
+    "action": "open",
+    "target": "https://www.work24.go.kr/cm/main.do",
+    "reason": "열림"
+   },
+   {
+    "step": 2,
+    "action": "judge",
+    "target": "https://www.work24.go.kr/cm/main.do",
+    "judgement": {
+     "verdict": "site_home",
+     "reason": "고용24 첫 화면이라 국민취업지원제도의 자격 조건이 없음",
+     "quote": null
+    },
+    "reason": "고용24 첫 화면이라 국민취업지원제도의 자격 조건이 없음"
+   },
+   {
+    "step": 3,
+    "action": "open",
+    "target": "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/149200005007",
+    "reason": "robots.txt가 이 페이지 수집을 허용하지 않습니다."
+   },
+   {
+    "step": 4,
+    "action": "judge",
+    "target": "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/149200005007",
+    "judgement": {
+     "verdict": "error",
+     "reason": "정부24는 robots.txt가 수집을 허용하지 않아 열 수 없음. 고용24 안의 제도 안내를 찾는다",
+     "quote": null
+    },
+    "reason": "정부24는 robots.txt가 수집을 허용하지 않아 열 수 없음. 고용24 안의 제도 안내를 찾는다"
+   },
+   {
+    "step": 5,
+    "action": "open",
+    "target": "https://www.work24.go.kr/ua/z/z/1300/selectEmssRqutIntro.do",
+    "reason": "열림"
+   },
+   {
+    "step": 6,
+    "action": "judge",
+    "target": "https://www.work24.go.kr/ua/z/z/1300/selectEmssRqutIntro.do",
+    "judgement": {
+     "verdict": "matching_notice",
+     "reason": "고용24의 국민취업지원제도 소개 페이지로 유형별 수급자격 표가 있음",
+     "quote": "국민취업지원제도 참여 요건을 갖추신 분은 취업지원서비스를 제공받으실 수 있고"
+    },
+    "reason": "고용24의 국민취업지원제도 소개 페이지로 유형별 수급자격 표가 있음"
+   },
+   {
+    "step": 7,
+    "action": "finish",
+    "target": "https://www.work24.go.kr/ua/z/z/1300/selectEmssRqutIntro.do",
+    "reason": "verified_against_notice"
+   }
+  ],
+  "usage": {
+   "calls": 7,
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "pagesOpened": 3
+  },
+  "producedBy": "claude_code_session"
+ },
+ "20250122005400110346": {
+  "policyId": "20250122005400110346",
+  "mode": "agent",
+  "outcome": "verified_against_notice",
+  "noticeUrl": "https://www.work24.go.kr/wk/g/b/1100/busiIntro.do",
+  "findings": [
+   {
+    "kind": "lookback",
+    "text": "최근 6개월간 취업·교육·직업훈련 참여 이력이 없어야 함",
+    "quote": "※ 최근 6개월간 취업 및 교육·직업훈련 참여 이력이 없고, 구직단념청년 문답표 확인 결과 21점(30점 만점) 이상인 청년(만 18세 이상~34세 이하)"
+   },
+   {
+    "kind": "age",
+    "text": "만 18세 이상 34세 이하",
+    "quote": "만 18세 이상 ~ 34세 이하 구직단념청년* 등"
+   }
+  ],
+  "mismatches": [
+   {
+    "kind": "reference_date_wording",
+    "apiValue": "사업 신청일 이전 6개월 이상 취업·교육·직업훈련 참여 이력이 없고",
+    "noticeValue": "최근 6개월간(기준일 표현 없음)",
+    "quote": "※ 최근 6개월간 취업 및 교육·직업훈련 참여 이력이 없고, 구직단념청년 문답표 확인 결과 21점(30점 만점) 이상인 청년(만 18세 이상~34세 이하)",
+    "noticeUrl": "https://www.work24.go.kr/wk/g/b/1100/busiIntro.do"
+   }
+  ],
+  "trail": [
+   {
+    "step": 1,
+    "action": "open",
+    "target": "https://www.work.go.kr/youngChallenge/index.do",
+    "reason": "robots.txt가 이 페이지 수집을 허용하지 않습니다."
+   },
+   {
+    "step": 2,
+    "action": "judge",
+    "target": "https://www.work.go.kr/youngChallenge/index.do",
+    "judgement": {
+     "verdict": "error",
+     "reason": "워크넷은 robots.txt가 /youngChallenge/ 수집을 허용하지 않아 열 수 없음",
+     "quote": null
+    },
+    "reason": "워크넷은 robots.txt가 /youngChallenge/ 수집을 허용하지 않아 열 수 없음"
+   },
+   {
+    "step": 3,
+    "action": "open",
+    "target": "http://www.moel.go.kr/policy/policyinfo/young/list18.do",
+    "reason": "열림"
+   },
+   {
+    "step": 4,
+    "action": "judge",
+    "target": "http://www.moel.go.kr/policy/policyinfo/young/list18.do",
+    "judgement": {
+     "verdict": "error",
+     "reason": "고용노동부 페이지가 접속 오류 화면을 돌려줌",
+     "quote": "기술적인 문제로 서비스에 접속이 되지 않았습니다."
+    },
+    "reason": "고용노동부 페이지가 접속 오류 화면을 돌려줌"
+   },
+   {
+    "step": 5,
+    "action": "open",
+    "target": "https://www.work24.go.kr/wk/g/b/1100/busiIntro.do",
+    "reason": "열림"
+   },
+   {
+    "step": 6,
+    "action": "judge",
+    "target": "https://www.work24.go.kr/wk/g/b/1100/busiIntro.do",
+    "judgement": {
+     "verdict": "matching_notice",
+     "reason": "고용24의 청년도전지원사업 사업소개 페이지로 지원대상(구직단념청년, 만 18~34세)이 API와 같은 사업",
+     "quote": "구직단념 청년 등을 대상으로 맞춤형 프로그램을 제공하여 청년의 구직 의욕 고취, 노동시장 참여 및 취업촉진 지원"
+    },
+    "reason": "고용24의 청년도전지원사업 사업소개 페이지로 지원대상(구직단념청년, 만 18~34세)이 API와 같은 사업"
+   },
+   {
+    "step": 7,
+    "action": "finish",
+    "target": "https://www.work24.go.kr/wk/g/b/1100/busiIntro.do",
+    "reason": "verified_against_notice"
+   }
+  ],
+  "usage": {
+   "calls": 7,
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "pagesOpened": 3
+  },
+  "producedBy": "claude_code_session"
+ },
+ "20260406005400212442": {
+  "policyId": "20260406005400212442",
+  "mode": "agent",
+  "outcome": "verified_against_notice",
+  "noticeUrl": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418",
+  "findings": [
+   {
+    "kind": "age",
+    "text": "나이는 2026-01-01 기준, 출생일 범위로 명시",
+    "quote": "인천 거주 18세~39세 이하 재직 청년(생애1회) * 2026. 1. 1. 기준(1986. 1. 2. ~ 2008. 1. 1. 출생자)"
+   },
+   {
+    "kind": "tenure",
+    "text": "2025-01-01부터 신청일 현재까지 같은 기업에 근무, 4대보험 가입",
+    "quote": "2025. 1. 1. 부터 신청일 현재 동일기업에 정상(휴직자 제외) 근무자, 4대보험 가입자(국민·건강·산재·고용보험 모두 가입),"
+   },
+   {
+    "kind": "income",
+    "text": "연소득 2,190만원 이상 4,000만원 이하",
+    "quote": "연소득 4,000만원 이하 ~ 2,190만원 이상인 자"
+   }
+  ],
+  "mismatches": [
+   {
+    "kind": "notice_only_condition",
+    "apiValue": "추가 자격 없음",
+    "noticeValue": "2025.1.1.부터 신청일 현재 동일기업 근무, 4대보험 가입",
+    "quote": "2025. 1. 1. 부터 신청일 현재 동일기업에 정상(휴직자 제외) 근무자, 4대보험 가입자(국민·건강·산재·고용보험 모두 가입),",
+    "noticeUrl": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418"
+   }
+  ],
+  "trail": [
+   {
+    "step": 1,
+    "action": "open",
+    "target": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418",
+    "reason": "열림"
+   },
+   {
+    "step": 2,
+    "action": "judge",
+    "target": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418",
+    "judgement": {
+     "verdict": "matching_notice",
+     "reason": "인천청년포털의 '드림For 청년통장' 사업 안내로 사업명과 대상(인천 재직 청년)이 API와 일치",
+     "quote": "인천시 청년근로자의 장기근속 유지 및 자산형성을 위한 목돈마련 지원"
+    },
+    "reason": "인천청년포털의 '드림For 청년통장' 사업 안내로 사업명과 대상(인천 재직 청년)이 API와 일치"
+   },
+   {
+    "step": 3,
+    "action": "finish",
+    "target": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=418",
+    "reason": "verified_against_notice"
+   }
+  ],
+  "usage": {
+   "calls": 3,
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "pagesOpened": 1
+  },
+  "producedBy": "claude_code_session"
+ },
+ "20260921005400113480": {
+  "policyId": "20260921005400113480",
+  "mode": "agent",
+  "outcome": "verified_against_notice",
+  "noticeUrl": "https://www.atfis.or.kr/lunch/obi/BizIntro.do",
+  "findings": [
+   {
+    "kind": "region",
+    "text": "전국이 아니라 예산이 확보된 지방정부에 있는 중소기업만 대상",
+    "quote": "지원대상은 예산이 확보된 지방정부에 위치한 중소기업에 재직 중인 근로자 5만명을 선정합니다."
+   },
+   {
+    "kind": "status_condition",
+    "text": "해당 중소기업에 재직 중인 건강보험 직장가입 근로자",
+    "quote": "해당 중소기업에 재직 중인 건강보험 직장가입 근로자"
+   },
+   {
+    "kind": "application_period",
+    "text": "신청은 연중, 관할 지방정부에 문의",
+    "quote": "신청기간 : 연중 * 관할 지방정부 문의"
+   }
+  ],
+  "mismatches": [
+   {
+    "kind": "region_scope",
+    "apiValue": "전국(16개 시도, 지역 코드 256개)",
+    "noticeValue": "예산이 확보된 지방정부에 위치한 중소기업",
+    "quote": "지원대상은 예산이 확보된 지방정부에 위치한 중소기업에 재직 중인 근로자 5만명을 선정합니다.",
+    "noticeUrl": "https://www.atfis.or.kr/lunch/obi/BizIntro.do"
+   }
+  ],
+  "trail": [
+   {
+    "step": 1,
+    "action": "open",
+    "target": "https://www.mafra.go.kr/home/index.do",
+    "reason": "열림"
+   },
+   {
+    "step": 2,
+    "action": "judge",
+    "target": "https://www.mafra.go.kr/home/index.do",
+    "judgement": {
+     "verdict": "site_home",
+     "reason": "농림축산식품부 첫 화면이라 이 사업의 자격 조건이 없음. 사업 운영기관(aT)의 사업 사이트를 찾는다",
+     "quote": null
+    },
+    "reason": "농림축산식품부 첫 화면이라 이 사업의 자격 조건이 없음. 사업 운영기관(aT)의 사업 사이트를 찾는다"
+   },
+   {
+    "step": 3,
+    "action": "open",
+    "target": "https://www.atfis.or.kr/lunch/obi/BizIntro.do",
+    "reason": "열림"
+   },
+   {
+    "step": 4,
+    "action": "judge",
+    "target": "https://www.atfis.or.kr/lunch/obi/BizIntro.do",
+    "judgement": {
+     "verdict": "matching_notice",
+     "reason": "한국농수산식품유통공사(aT)가 운영하는 '직장인 든든한 점심밥 지원사업' 사업소개로 대상(중소기업 재직 근로자)이 API와 같은 사업",
+     "quote": "직장인 든든한 점심밥 지원사업"
+    },
+    "reason": "한국농수산식품유통공사(aT)가 운영하는 '직장인 든든한 점심밥 지원사업' 사업소개로 대상(중소기업 재직 근로자)이 API와 같은 사업"
+   },
+   {
+    "step": 5,
+    "action": "finish",
+    "target": "https://www.atfis.or.kr/lunch/obi/BizIntro.do",
+    "reason": "verified_against_notice"
+   }
+  ],
+  "usage": {
+   "calls": 5,
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "pagesOpened": 2
+  },
+  "producedBy": "claude_code_session"
+ }
+}

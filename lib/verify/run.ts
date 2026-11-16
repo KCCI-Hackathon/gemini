@@ -41,6 +41,8 @@ export type VerifyResult = {
   mismatches: Mismatch[];
   trail: TrailStep[];
   usage: { calls: number; inputTokens: number; outputTokens: number; pagesOpened: number };
+  /** 서비스 안의 에이전트(Claude API)가 아니라 개발 도구가 같은 루프로 사전 실행한 결과면 표시한다 */
+  producedBy?: "claude_code_session";
 };
 
 type Deps = { client: AnthropicLike; web: Web; now: Date; enableSearch?: boolean; deadlineMs?: number; clock?: () => number };

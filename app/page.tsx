@@ -465,6 +465,7 @@ function VerifyView({ r, source }: { r: VerifyResult; source?: string }) {
       <p className={styles.cardLabel}>
         공식 공고 기준 AI 확인(사람 검토 전) <span className={styles.aiTag}>AI 생성</span>
         {source === "saved" && <span className={styles.hint}> · 저장된 실행</span>}
+        {r.producedBy === "claude_code_session" && <span className={styles.hint}> · 개발 도구(Claude Code)가 같은 도구·검사 규칙으로 사전 실행</span>}
       </p>
       {r.outcome === "verified_against_notice" ? (
         <p>근거 공고: <a href={r.noticeUrl ?? "#"} target="_blank" rel="noreferrer">{r.noticeUrl}</a></p>

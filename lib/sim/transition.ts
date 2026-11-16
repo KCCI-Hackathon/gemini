@@ -96,7 +96,8 @@ export function simulateTransition(profile: Profile, t: Transition, now: Date, o
 export function needsVerification(results: TransitionResult[], verifiedCache: Set<string>): string[] {
   return results
     .filter((r) => (r.change === "recheck_code_only" || r.change === "reference_date_needed") && !verifiedCache.has(r.policyId))
-    .sort((a, b) => Number(a.verified) - Number(b.verified))
+    // 기준일이 문제인 정책이 먼저: 공고의 기준 시점을 확인하면 판정이 실제로 달라진다
+    .sort((a, b) => Number(b.change === "reference_date_needed") - Number(a.change === "reference_date_needed"))
     .slice(0, 5)
     .map((r) => r.policyId);
 }
