@@ -64,3 +64,34 @@
 .rationale { margin: 0; color: var(--muted); font-size: 13px; }
 
 .footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
+
+/* 상태 갈림길 루트 */
+.routeWrap { display: grid; gap: 10px; }
+.route { display: flex; gap: 0; align-items: flex-start; }
+.routeCol { display: flex; align-items: flex-start; flex: 1 1 0; min-width: 0; }
+.routeCol > .routeNode { flex: 1 1 0; min-width: 0; }
+.routeArrow { flex: 0 0 28px; text-align: center; color: var(--muted); font-size: 20px; padding-top: 12px; }
+.routeFork { flex: 1.1 1 0; min-width: 0; display: grid; gap: 10px; border-left: 2px dashed var(--line); padding-left: 12px; }
+.routeNode { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface); }
+.routeActive { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.routeHead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.routeHead .link { margin-left: auto; font-size: 13px; }
+.routeSteps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.routeStep { display: flex; gap: 8px; align-items: flex-start; }
+.routeNum { flex: 0 0 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--surface); font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+.routeBody { display: grid; gap: 4px; min-width: 0; }
+.routeName { background: none; border: 0; padding: 0; color: var(--ink); font-weight: 600; text-align: left; display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; }
+.routeName:hover { text-decoration: underline; }
+.routeWhy { font-size: 13px; color: var(--muted); }
+.routeWhy ul, .routeAffected ul, .routeLinks ul { margin: 4px 0 0; padding-left: 18px; }
+.routeAffected { border-top: 1px dashed var(--line); padding-top: 8px; font-size: 13px; }
+.routeAffected .routeName { font-weight: 500; }
+.routeLinks { font-size: 14px; display: grid; gap: 4px; }
+.routeLinks blockquote { margin: 2px 0 6px; padding-left: 8px; border-left: 3px solid var(--line); color: var(--muted); font-size: 13px; }
+@media (max-width: 860px) {
+  .route { flex-direction: column; gap: 0; }
+  .routeCol { flex-direction: column; align-items: stretch; width: 100%; }
+  .routeArrow { flex: 0 0 auto; transform: rotate(90deg); padding: 2px 0; align-self: center; }
+  .routeFork { border-left: 0; padding-left: 0; border-top: 2px dashed var(--line); padding-top: 12px; width: 100%; }
+}
+.routeTitle { margin: 0; font-size: 16px; }
