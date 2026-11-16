@@ -88,6 +88,19 @@ export default function Page() {
   const [showAll, setShowAll] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [verify, setVerify] = useState<Record<string, VerifyState>>({});
+  const [agent, setAgent] = useState<{ loading: boolean; fallback?: boolean; summary?: string; cards?: { policyId: string; name: string; checkNextInOrder: string[]; rationale: string }[]; log?: { tool: string; summary: string }[]; error?: string } | null>(null);
+
+  async function askAgent() {
+    setAgent({ loading: true });
+    try {
+      const res = await fetch("/api/agent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ personaId: "demo-1" }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setAgent({ loading: false, ...body });
+    } catch (e) {
+      setAgent({ loading: false, error: String(e instanceof Error ? e.message : e) });
+    }
+  }
 
   useEffect(() => {
     const p = loadProfile();
@@ -336,6 +349,37 @@ export default function Page() {
             )}
             {data.historyCount > 0 && <p className={styles.hint}>이미 마감된 지난 공고 {data.historyCount}건은 현재 판정에 쓰지 않습니다.</p>}
           </section>
+
+          {profile.source === "demo_persona" && (
+            <section className={styles.panel} aria-labelledby="agent-h">
+              <div className={styles.panelHead}>
+                <h2 id="agent-h">상담 에이전트 <span className={styles.aiTag}>가상 인물 시연</span></h2>
+                <button className={styles.secondary} onClick={askAgent} disabled={agent?.loading}>{agent?.loading ? "확인 중…" : "먼저 확인할 일 정리 받기"}</button>
+              </div>
+              <p className={styles.hint}>가상 인물의 판정 결과로만 동작합니다. 내 정보를 입력한 경우에는 외부 AI를 부르지 않습니다.</p>
+              {agent?.error && <p className={styles.error}>{agent.error}</p>}
+              {agent && !agent.loading && !agent.error && (
+                <div className={styles.verify}>
+                  {agent.fallback ? (
+                    <p className={styles.hint}>AI 응답 대신 검증 정책의 확인 순서를 보여줍니다(AI 꺼짐 또는 응답 검사 실패).</p>
+                  ) : (
+                    agent.summary && <p>{agent.summary} <span className={styles.aiTag}>AI 생성</span></p>
+                  )}
+                  <ul>
+                    {agent.cards?.map((c) => (
+                      <li key={c.policyId}><b>{c.name}</b>: {c.checkNextInOrder.join(" → ")}</li>
+                    ))}
+                  </ul>
+                  {!!agent.log?.length && (
+                    <details>
+                      <summary>에이전트가 한 일 ({agent.log.length}단계)</summary>
+                      <ol>{agent.log.map((l, k) => <li key={k}>{l.tool} · {l.summary}</li>)}</ol>
+                    </details>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
 
           <section className={styles.panel} aria-labelledby="cards-h">
             <h2 id="cards-h">검증된 정책의 행동 카드</h2>
