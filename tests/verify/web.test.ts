@@ -44,6 +44,32 @@ describe("createWeb", () => {
     expect(r.text).toContain("한도");
   });
 
+  test("허용 도메인이 허용되지 않은 곳으로 리다이렉트하면 따라가지 않는다", async () => {
+    const redirecting = (async (u: string | URL) => {
+      const url = String(u);
+      if (url.endsWith("/robots.txt")) return new Response("", { status: 404 });
+      if (url.startsWith("https://www.atfis.or.kr")) return new Response(null, { status: 302, headers: { location: "https://evil.example.com/x" } });
+      return new Response("<p>evil</p>", { status: 200 });
+    }) as unknown as typeof fetch;
+    const web = createWeb({ fetchFn: redirecting, extraHosts: [] });
+    const r = await web.openPage("https://www.atfis.or.kr/lunch");
+    expect(r.ok).toBe(false);
+    expect(r.text).toContain("허용되지 않은");
+  });
+
+  test("허용 도메인 안의 리다이렉트는 따라간다", async () => {
+    const redirecting = (async (u: string | URL) => {
+      const url = String(u);
+      if (url.endsWith("/robots.txt")) return new Response("", { status: 404 });
+      if (url === "https://www.atfis.or.kr/lunch") return new Response(null, { status: 302, headers: { location: "/lunch/main.do" } });
+      return new Response("<p>본문</p>", { status: 200 });
+    }) as unknown as typeof fetch;
+    const web = createWeb({ fetchFn: redirecting, extraHosts: [] });
+    const r = await web.openPage("https://www.atfis.or.kr/lunch");
+    expect(r.ok).toBe(true);
+    expect(r.text).toContain("본문");
+  });
+
   test("robots.txt가 막으면 열지 않는다", async () => {
     const blocking = (async (u: string | URL) =>
       String(u).endsWith("/robots.txt") ? new Response("User-agent: *\nDisallow: /", { status: 200 }) : new Response("<p>x</p>")) as unknown as typeof fetch;

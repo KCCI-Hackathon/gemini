@@ -85,8 +85,19 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
       const u = new URL(url);
       if (!robotsAllows(await robotsFor(u.origin), u.pathname)) return { ok: false, text: "robots.txt가 이 페이지 수집을 허용하지 않습니다." };
       try {
-        const res = await fetchFn(url, { signal: AbortSignal.timeout(LIMITS.timeoutMs), headers: { "user-agent": "galimgil-policy-verifier/0.1" } });
-        if (!res.ok) return { ok: false, text: `HTTP ${res.status}` };
+        // 리다이렉트는 직접 따라가며 매번 허용 도메인을 다시 확인한다(최대 3번)
+        let current = url;
+        let res: Response | null = null;
+        for (let hop = 0; hop <= 3; hop++) {
+          res = await fetchFn(current, { redirect: "manual", signal: AbortSignal.timeout(LIMITS.timeoutMs), headers: { "user-agent": "galimgil-policy-verifier/0.1" } });
+          const loc = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+          if (!loc) break;
+          const next = new URL(loc, current).toString();
+          if (!isAllowedUrl(next, opts.extraHosts)) return { ok: false, text: `허용되지 않은 도메인으로 이동하려 해 멈췄습니다: ${new URL(next).hostname}` };
+          current = next;
+          if (hop === 3) return { ok: false, text: "리다이렉트가 너무 많습니다." };
+        }
+        if (!res || !res.ok) return { ok: false, text: `HTTP ${res?.status ?? "?"}` };
         const text = htmlToText(await res.text()).slice(0, LIMITS.maxChars);
         pages.set(url, text);
         return { ok: true, text };
