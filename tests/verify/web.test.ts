@@ -70,6 +70,66 @@ describe("createWeb", () => {
     expect(r.text).toContain("본문");
   });
 
+  const site = (routes: Record<string, () => Response>, seen: { url: string; redirect?: string }[] = []) =>
+    (async (u: string | URL, init?: RequestInit) => {
+      const url = String(u);
+      seen.push({ url, redirect: init?.redirect });
+      return (routes[url] ?? (() => new Response("", { status: 404 })))();
+    }) as unknown as typeof fetch;
+
+  test("리다이렉트로 옮겨 간 사이트의 robots.txt도 지킨다", async () => {
+    const web = createWeb({
+      fetchFn: site({
+        "https://a.go.kr/r": () => new Response(null, { status: 302, headers: { location: "https://b.go.kr/secret" } }),
+        "https://b.go.kr/robots.txt": () => new Response("User-agent: *\nDisallow: /secret"),
+        "https://b.go.kr/secret": () => new Response("<p>비공개</p>"),
+      }),
+      extraHosts: [],
+    });
+    const r = await web.openPage("https://a.go.kr/r");
+    expect(r.ok).toBe(false);
+    expect(r.text).toContain("robots");
+  });
+
+  test("User-agent 줄이 연달아 오는 그룹도 적용한다", async () => {
+    const web = createWeb({
+      fetchFn: site({
+        "https://a.go.kr/robots.txt": () => new Response("User-agent: *\nUser-agent: other\nDisallow: /"),
+        "https://a.go.kr/x": () => new Response("<p>x</p>"),
+      }),
+      extraHosts: [],
+    });
+    expect((await web.openPage("https://a.go.kr/x")).ok).toBe(false);
+  });
+
+  test("와일드카드와 쿼리스트링 규칙을 지키고, Allow가 더 구체적이면 연다", async () => {
+    const routes = {
+      "https://a.go.kr/robots.txt": () => new Response("User-agent: *\nDisallow: /*.do\nDisallow: /board?id=\nAllow: /open/view.do"),
+      "https://a.go.kr/a/list.do": () => new Response("<p>x</p>"),
+      "https://a.go.kr/board?id=3": () => new Response("<p>x</p>"),
+      "https://a.go.kr/open/view.do": () => new Response("<p>열림</p>"),
+    };
+    const web = createWeb({ fetchFn: site(routes), extraHosts: [] });
+    expect((await web.openPage("https://a.go.kr/a/list.do")).ok).toBe(false);
+    expect((await web.openPage("https://a.go.kr/board?id=3")).ok).toBe(false);
+    expect((await web.openPage("https://a.go.kr/open/view.do")).ok).toBe(true);
+  });
+
+  test("robots.txt 요청은 리다이렉트를 따라가지 않는다", async () => {
+    const seen: { url: string; redirect?: string }[] = [];
+    const web = createWeb({ fetchFn: site({ "https://a.go.kr/x": () => new Response("<p>x</p>") }, seen), extraHosts: [] });
+    await web.openPage("https://a.go.kr/x");
+    expect(seen.find((s) => s.url.endsWith("/robots.txt"))?.redirect).toBe("manual");
+  });
+
+  test("정부24·정책브리핑은 공식 출처로 허용하되 비슷한 이름은 거부", () => {
+    expect(isAllowedUrl("https://www.gov.kr/portal/service/serviceInfo/1", [])).toBe(true);
+    expect(isAllowedUrl("https://plus.gov.kr/x", [])).toBe(true);
+    expect(isAllowedUrl("https://www.korea.kr/news", [])).toBe(true);
+    expect(isAllowedUrl("https://evilgov.kr/", [])).toBe(false);
+    expect(isAllowedUrl("https://gov.kr.evil.com/", [])).toBe(false);
+  });
+
   test("robots.txt가 막으면 열지 않는다", async () => {
     const blocking = (async (u: string | URL) =>
       String(u).endsWith("/robots.txt") ? new Response("User-agent: *\nDisallow: /", { status: 200 }) : new Response("<p>x</p>")) as unknown as typeof fetch;

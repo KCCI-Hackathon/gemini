@@ -128,7 +128,7 @@ function tools(searchesLeft: number): Record<string, unknown>[] {
   ];
   if (searchesLeft <= 0) return custom;
   // max_uses는 요청 한 번당이라, 정책 전체 3회를 지키려고 남은 횟수를 매번 넣는다
-  return [...custom, { type: "web_search_20260209", name: "web_search", max_uses: searchesLeft, allowed_domains: ["go.kr", "or.kr", "youthcenter.go.kr"] }];
+  return [...custom, { type: "web_search_20260209", name: "web_search", max_uses: searchesLeft, allowed_domains: ["go.kr", "or.kr", "gov.kr", "korea.kr"] }];
 }
 
 export function policyBrief(p: Policy): string {
