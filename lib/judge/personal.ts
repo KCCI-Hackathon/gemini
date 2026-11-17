@@ -35,6 +35,16 @@ export function effectiveStatus(profile: Profile): Set<StatusKey> {
   return s;
 }
 
+/** 사유 문구에 쓰는 상태 이름 */
+const STATUS_LABEL: Partial<Record<StatusKey, string>> = {
+  in_training: "교육·훈련 수강 중",
+  unemployed: "미취업",
+  employed: "재직",
+  health_insured_employee: "건강보험 직장가입",
+  business_registered: "사업자등록",
+  participating_national_employment_support: "국민취업지원제도 참여",
+};
+
 const RANK: Record<PersonalValue, number> = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 };
 
 class Verdict {
@@ -135,7 +145,7 @@ export function judgePersonal(
       } else if (metBefore && (!ref || !ref.includes("신청일"))) {
         verdict.push("needs_check", REASON.referenceDate);
       } else if (v.statusConditions.definitionClear) {
-        verdict.push("ineligible", `상태 조건 불충족(${[...missing.map((k) => `${k} 필요`), ...excluded.map((k) => `${k} 제외`)].join(", ")})`);
+        verdict.push("ineligible", `상태 조건 불충족(${[...missing.map((k) => `${STATUS_LABEL[k] ?? k} 필요`), ...excluded.map((k) => `${STATUS_LABEL[k] ?? k} 제외`)].join(", ")})`);
       } else {
         verdict.push("needs_check", REASON.referenceDate);
       }

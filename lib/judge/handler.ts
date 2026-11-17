@@ -7,6 +7,7 @@ import { assembleCards, type ActionCard } from "@/lib/agent/assemble";
 import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
 import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, type Transition, type TransitionResult } from "@/lib/sim/transition";
 import { buildRoute, type Route } from "@/lib/route/build";
+import { buildTimeline, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
 import { baselineOpts } from "./personal";
@@ -32,6 +33,13 @@ const RequestSchema = z.object({
     .object({
       participating_national_employment_support: z.enum(["예", "아니오", "모름"]).optional(),
       recent_history: z.enum(["예", "아니오", "모름"]).optional(),
+    })
+    .optional(),
+  /** 타임라인의 가정: 기준일(수료일 또는 오늘)로부터 몇 개월 뒤 취업·사업자등록인지 */
+  plan: z
+    .object({
+      employAfterMonths: z.number().int().min(0).max(12).nullable().optional(),
+      businessAfterMonths: z.number().int().min(0).max(12).nullable().optional(),
     })
     .optional(),
 });
@@ -66,6 +74,7 @@ export type JudgeBody =
       cards: ActionCard[];
       questions: Question[];
       route: Route;
+      timeline: Timeline;
       needsVerification: string[];
     };
 
@@ -135,6 +144,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       // 이미 답한 질문은 다시 묻지 않는다
       questions: rankOpenQuestions(results).filter((q) => !answered.has(q.key)),
       route: buildRoute(origin, now),
+      timeline: buildTimeline(origin, now, parsed.data.plan ?? {}),
       needsVerification: last ? needsVerification(changes, new Set()) : [],
     },
   };
