@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 import { regionOptions } from "@/lib/data/regions";
 import type { JudgeBody, JudgeItem } from "@/lib/judge/handler";
 import type { Profile } from "@/lib/judge/types";
+import type { Route, RouteNode } from "@/lib/route/build";
 import type { VerifyResult } from "@/lib/verify/run";
 
 type Transition = "complete_training" | "get_employed" | "register_business";
@@ -84,7 +85,13 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [transitions, setTransitions] = useState<Transition[]>([]);
-  const [answer, setAnswer] = useState<string | null>(null);
+  // 상담 질문의 답(질문 key → 예/아니오/모름). 모름·건너뛰기도 기록해 다시 묻지 않는다
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // 마지막으로 판정을 요청한 프로필. 편집 중인 값이 아니라 이 값으로 상태 변경·질문을 다시 계산한다
+  const [judged, setJudged] = useState<Profile | null>(null);
+  // 루트에서 누른 정책: 그 상태의 목록이 도착한 뒤 펼쳐서 보여준다
+  const [pendingShow, setPendingShow] = useState<string | null>(null);
+  const requestSeq = useRef(0);
   const [showAll, setShowAll] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [verify, setVerify] = useState<Record<string, VerifyState>>({});
@@ -107,23 +114,26 @@ export default function Page() {
     if (p) setProfile(p);
   }, []);
 
-  async function judge(p: Profile, ts: Transition[], ans: string | null) {
+  async function judge(p: Profile, ts: Transition[], ans: Record<string, string>) {
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
+    setJudged(p);
     try {
       const res = await fetch("/api/judge", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile: p, transitions: ts, ...(ans ? { answers: { participating_national_employment_support: ans } } : {}) }),
+        body: JSON.stringify({ profile: p, transitions: ts, answers: ans }),
       });
       const body = (await res.json()) as JudgeBody;
       if ("error" in body) throw new Error(body.error);
+      if (seq !== requestSeq.current) return; // 더 늦게 보낸 요청이 있으면 이 응답은 버린다
       setData(body);
       if (body.needsVerification.length) runVerifications(body.needsVerification);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }
 
@@ -155,14 +165,15 @@ export default function Page() {
     }
     if (profile.source === "user") saveProfile(profile);
     setTransitions([]);
-    void judge(profile, [], answer);
+    setAnswers({}); // 프로필을 바꿔 다시 판정하면 이전 답은 쓰지 않는다
+    void judge(profile, [], {});
   }
 
   function useDemo() {
     setProfile(DEMO);
     setTransitions([]);
-    setAnswer(null);
-    void judge(DEMO, [], null);
+    setAnswers({});
+    void judge(DEMO, [], {});
   }
 
   function clearMine() {
@@ -170,30 +181,56 @@ export default function Page() {
     setProfile(EMPTY);
     setData(null);
     setTransitions([]);
-    setAnswer(null);
+    setAnswers({});
     setVerify({});
   }
 
   function addTransition(t: Transition) {
     const next = [...transitions, t];
     setTransitions(next);
-    void judge(profile, next, answer);
+    void judge(judged ?? profile, next, answers);
   }
 
   function resetTransitions() {
     setTransitions([]);
-    void judge(profile, [], answer);
+    void judge(judged ?? profile, [], answers);
   }
 
-  function answerQuestion(a: string) {
-    setAnswer(a);
-    void judge(profile, transitions, a);
+  /** 루트의 마디를 눌렀을 때: 그 마디까지의 상태 변화를 한 번에 적용해 아래 목록을 그 상태로 본다 */
+  function goToNode(path: Transition[]) {
+    setTransitions(path);
+    void judge(judged ?? profile, path, answers);
   }
+
+  function answerQuestion(key: string, a: string) {
+    const next = { ...answers, [key]: a };
+    setAnswers(next);
+    if (a !== "모름") void judge(judged ?? profile, transitions, next);
+  }
+
+  /** 루트에서 정책을 눌렀을 때: 그 마디의 상태로 목록을 맞춘 뒤 펼친다(루트의 판정과 목록의 판정이 같은 상태 기준이 되게) */
+  function showPolicy(id: string, path: Transition[]) {
+    const sameState = path.length === transitions.length && path.every((t, i) => t === transitions[i]);
+    setPendingShow(id);
+    if (!sameState) goToNode(path);
+  }
+
+  useEffect(() => {
+    if (!pendingShow || loading || !data) return;
+    const id = pendingShow;
+    setPendingShow(null);
+    if (!data.items.some((i) => i.id === id)) return;
+    setShowAll(true);
+    setOpen((o) => ({ ...o, [id]: true }));
+    requestAnimationFrame(() => document.getElementById(`p-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [pendingShow, loading, data]);
 
   const visibleIds = new Set(data?.defaultVisible ?? []);
   const items = data ? (showAll ? data.items : data.items.filter((i) => visibleIds.has(i.id))) : [];
   const sorted = [...items].sort((a, b) => Number(!!b.change) - Number(!!a.change) || Number(b.verified) - Number(a.verified));
-  const q = data?.questions[0];
+  const openQuestions = (data?.questions ?? []).filter((x) => !(x.key in answers));
+  const q = openQuestions[0];
+  const answeredCount = Object.values(answers).filter((a) => a !== "모름").length;
   const targets = data?.needsVerification ?? [];
   const checking = targets.filter((id) => verify[id]?.status === "loading").length;
   const verified = targets.filter((id) => verify[id]?.status === "done" && verify[id]?.result?.outcome === "verified_against_notice").length;
@@ -305,19 +342,24 @@ export default function Page() {
               ))}
             </div>
 
-            {q && answer === null && (
+            {q && (
               <div className={styles.question}>
+                <span className={styles.cardLabel}>상담 질문 {openQuestions.length > 1 ? `(남은 질문 ${openQuestions.length}개)` : ""}</span>
                 <span>
-                  <b>{q.question}</b> 답하시면 {q.relatedCount}개 정책의 제한 조건을 더 구체적으로 볼 수 있습니다.
+                  <b>{q.question}</b> 답하시면 정책 {q.mayChangeCount}개의 판정과 아래 루트의 순서를 더 정확히 볼 수 있습니다.
                 </span>
                 <div className={styles.row}>
-                  {q.options.map((o) => (
-                    <button key={o} className={styles.ghost} onClick={() => answerQuestion(o)}>{o}</button>
+                  {q.options.filter((o) => o !== "모름").map((o) => (
+                    <button key={o} className={styles.ghost} disabled={loading} onClick={() => answerQuestion(q.key, o)}>{o}</button>
                   ))}
-                  <button className={styles.link} onClick={() => setAnswer("모름")}>건너뛰기</button>
+                  <button className={styles.link} onClick={() => answerQuestion(q.key, "모름")}>잘 모르겠어요</button>
                 </div>
+                <span className={styles.hint}>답은 판정 계산에만 쓰이고 저장하거나 외부 AI로 보내지 않습니다.</span>
               </div>
             )}
+            {!q && answeredCount > 0 && <p className={styles.hint}>상담 질문 {answeredCount}개의 답을 판정과 루트에 반영했습니다.</p>}
+
+            <RouteView route={data.route} active={transitions} loading={loading} onGo={goToNode} onShow={showPolicy} />
 
             <div className={styles.transitions}>
               <span className={styles.hint}>상태가 바뀌면? (오늘 바뀐다고 가정, 저장된 정보는 바뀌지 않음)</span>
@@ -418,10 +460,108 @@ export default function Page() {
   );
 }
 
+function RouteView({ route, active, loading, onGo, onShow }: { route: Route; active: Transition[]; loading: boolean; onGo: (path: Transition[]) => void; onShow: (id: string, path: Transition[]) => void }) {
+  const trunkPath = (upto: number) => route.trunk.slice(0, upto + 1).flatMap((n) => (n.transition ? [n.transition] : []));
+  const fullTrunk = trunkPath(route.trunk.length - 1);
+  const same = (a: Transition[], b: Transition[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const node = (n: RouteNode, path: Transition[]) => (
+    <div key={n.key} className={`${styles.routeNode} ${same(active, path) ? styles.routeActive : ""}`} aria-current={same(active, path) ? "step" : undefined}>
+      <div className={styles.routeHead}>
+        <strong>{n.label}</strong>
+        {n.assumed && <span className={styles.badge}>가정</span>}
+        {!same(active, path) && (
+          <button className={styles.link} disabled={loading} onClick={() => onGo(path)}>이 상태로 목록 보기</button>
+        )}
+      </div>
+      {n.note && <p className={styles.hint}>{n.note}</p>}
+      {n.steps.length === 0 && <p className={styles.hint}>{n.assumed ? "이 상태에서 새로 열리는 정책을 찾지 못했습니다." : "지금 확인할 정책을 찾지 못했습니다."}</p>}
+      <ol className={styles.routeSteps}>
+        {n.steps.map((s) => (
+          <li key={s.policyId} className={styles.routeStep}>
+            <span className={styles.routeNum}>{s.order}</span>
+            <div className={styles.routeBody}>
+              <button className={styles.routeName} onClick={() => onShow(s.policyId, path)}>
+                {s.name}
+                {s.verified && <span className={styles.verifiedTag}>검증됨</span>}
+              </button>
+              <span className={styles.badges}>
+                <span className={`${styles.badge} ${styles[PERSONAL[s.personal].cls]}`}>{PERSONAL[s.personal].label}</span>
+                <span className={styles.badge}>{RECRUIT[s.recruitment]}{s.deadline ? ` ~${s.deadline.slice(5)}` : ""}</span>
+              </span>
+              {s.note && <span className={styles.hint}>{s.note}</span>}
+              <details className={styles.routeWhy}>
+                <summary>이 순서인 이유</summary>
+                <ul>
+                  {s.reasons.map((r) => (
+                    <li key={r.label}>{r.label} <b>{r.points > 0 ? `+${r.points}` : r.points}</b></li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {n.affected.length > 0 && (
+        <div className={styles.routeAffected}>
+          <span className={styles.cardLabel}>앞에서 본 정책 중 다시 볼 것</span>
+          <ul>
+            {n.affected.map((a) => (
+              <li key={a.policyId}><button className={styles.routeName} onClick={() => onShow(a.policyId, path)}>{a.name}</button> — {a.label}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <section className={styles.routeWrap} aria-label="상태 갈림길 루트">
+      <div className={styles.panelHead}>
+        <h3 className={styles.routeTitle}>내 갈림길</h3>
+        <span className={styles.hint}>번호는 먼저 확인할 순서 · 가정 마디는 &lsquo;오늘 그 일이 일어났다면&rsquo;</span>
+      </div>
+      <div className={styles.route}>
+        {route.trunk.map((n, i) => (
+          <div key={n.key} className={styles.routeCol}>
+            {node(n, trunkPath(i))}
+            <span className={styles.routeArrow} aria-hidden="true">{i < route.trunk.length - 1 || route.branches.length ? "→" : ""}</span>
+          </div>
+        ))}
+        {route.branches.length > 0 && (
+          <div className={styles.routeFork}>
+            <span className={styles.hint}>여기서 길이 갈립니다. 두 길의 번호는 각각 이어집니다.</span>
+            {route.branches.map((n) => node(n, [...fullTrunk, ...(n.transition ? [n.transition] : [])]))}
+          </div>
+        )}
+      </div>
+      {route.links.length > 0 && (
+        <div className={styles.routeLinks}>
+          <span className={styles.cardLabel}>원문에 적힌 정책 사이의 관계</span>
+          <ul>
+            {route.links.map((l) => (
+              <li key={`${l.kind}-${l.from}-${l.to}-${l.quote.slice(0, 12)}`}>
+                {l.kind === "leads_to" ? <>{l.fromName} <b>→</b> {l.toName} <span className={styles.badge}>이어짐</span></> : <>{l.fromName} 참여 중이면 {l.toName} <span className={`${styles.badge} ${styles.no}`}>제한</span></>}
+                <blockquote>
+                  {l.quote}
+                  <span className={styles.hint}>
+                    {" "}— {l.source === "official" ? "공식 공고" : "온통청년 API의 정책 설명"}
+                    {l.checkedAt ? ` (${l.checkedAt} 확인)` : ""}
+                    {l.sourceUrl && <> · <a href={l.sourceUrl} target="_blank" rel="noreferrer">출처 보기</a></>}
+                  </span>
+                </blockquote>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className={styles.hint}>{route.notice}</p>
+    </section>
+  );
+}
+
 function PolicyRow({ item, open, onToggle, verify, onVerify }: { item: JudgeItem; open: boolean; onToggle: () => void; verify?: VerifyState; onVerify: () => void }) {
   const p = PERSONAL[item.personal];
   return (
-    <li className={styles.item}>
+    <li className={styles.item} id={`p-${item.id}`}>
       <button className={styles.itemHead} onClick={onToggle} aria-expanded={open}>
         <span className={styles.itemName}>
           {item.name}

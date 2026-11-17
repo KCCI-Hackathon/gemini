@@ -27,15 +27,20 @@ function timeAxis(v: VerifiedPolicy | undefined, profile: Profile, now: Date): A
   if (!v?.lookback) return { value: "na", note };
   const status = effectiveStatus(profile);
   if (status.has("in_training")) return { value: "unmet", note: note ?? "교육·훈련 수강 중" };
-  const last = profile.events
+  const lastEvent = profile.events
     .filter((e) => e.status !== "scheduled" && (e.type === "training_completion" || e.type === "employment"))
-    .map((e) => e.date)
-    .sort()
+    .sort((a, b) => a.date.localeCompare(b.date))
     .pop();
+  const last = lastEvent?.date;
   // 이력이 하나도 없으면 "최근 N개월 이력 없음"을 확인할 수 없다(퇴사 직후일 수도 있다)
-  if (!last) return { value: "needs_check", note: note ?? `최근 ${v.lookback.months}개월 취업·훈련 이력 확인 필요` };
+  if (!last) {
+    // 상담 질문에 답했으면 그 답을 쓴다
+    if (profile.recentHistory === "no") return { value: "met", note };
+    if (profile.recentHistory === "yes") return { value: "unmet", note: note ?? `최근 ${v.lookback.months}개월 안에 취업·훈련 이력이 있어 기간 경과 후 재검토` };
+    return { value: "needs_check", note: note ?? `최근 ${v.lookback.months}개월 취업·훈련 이력 확인 필요` };
+  }
   const months = monthsBetween(last, today);
-  if (months < v.lookback.months) return { value: "unmet", note: `수료일 기준 ${v.lookback.months}개월 경과 후 재검토` };
+  if (months < v.lookback.months) return { value: "unmet", note: `${lastEvent?.type === "employment" ? "취업일" : "수료일"} 기준 ${v.lookback.months}개월 경과 후 재검토` };
   return { value: "met", note };
 }
 
@@ -68,6 +73,11 @@ export function judgePolicy(
   if (time.value === "needs_check" && personal.value === "eligible") {
     personal.value = "needs_check";
     personal.reasons.push(REASON.history);
+  }
+  // 기간 조건이 아직 남아 있으면 "조건상 해당"이라고 하지 않는다
+  if (time.value === "unmet" && personal.value === "eligible") {
+    personal.value = "needs_check";
+    personal.reasons.push(REASON.period);
   }
   return { personal, recruitment: recruitment(p, v, now), time, restriction };
 }

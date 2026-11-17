@@ -13,7 +13,7 @@ const NATIONAL = "20260710005400113256";
 
 type QuestionDef = { key: string; question: string; options: string[]; related: (r: JudgedPolicy) => boolean };
 
-/** 이번 범위의 질문은 하나(설계 5장 ⑤). 목록 구조로 두어 늘릴 수 있게 한다 */
+/** 상담 질문 후보. 답하면 판정이 바뀌는 것만 둔다 */
 const DEFS: QuestionDef[] = [
   {
     key: "participating_national_employment_support",
@@ -23,6 +23,12 @@ const DEFS: QuestionDef[] = [
       r.axes.restriction.quotes.some((q) => q.includes("국민취업지원")) ||
       r.policy.texts.excluded.includes("국민취업지원") ||
       r.policy.id === NATIONAL,
+  },
+  {
+    key: "recent_history",
+    question: "최근 6개월 안에 취업했거나 교육·직업훈련에 참여한 적이 있나요?",
+    options: ["예", "아니오", "모름"],
+    related: (r) => r.axes.time.value === "needs_check",
   },
 ];
 
@@ -41,6 +47,7 @@ export function rankOpenQuestions(results: JudgedPolicy[], defs: QuestionDef[] =
         stillOpenCount: related.length - mayChange.length,
       };
     })
-    .filter((q) => q.relatedCount > 0)
+    // 답해도 판정이 바뀌지 않는 질문은 묻지 않는다
+    .filter((q) => q.mayChangeCount > 0)
     .sort((a, b) => b.mayChangeCount - a.mayChangeCount || a.stillOpenCount - b.stillOpenCount);
 }

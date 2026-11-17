@@ -6,6 +6,7 @@ import { loadVerified, StatusKey } from "@/lib/data/verified";
 import { assembleCards, type ActionCard } from "@/lib/agent/assemble";
 import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
 import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, type Transition, type TransitionResult } from "@/lib/sim/transition";
+import { buildRoute, type Route } from "@/lib/route/build";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
 import { baselineOpts } from "./personal";
@@ -20,13 +21,19 @@ const ProfileSchema = z.object({
   interest: z.enum(["job", "keep_searching", "startup"]),
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration"]), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), status: z.enum(["scheduled", "completed", "simulated"]) })),
   participating: z.array(z.string()),
+  recentHistory: z.enum(["yes", "no"]).optional(),
   source: z.enum(["demo_persona", "user"]),
 });
 
 const RequestSchema = z.object({
   profile: ProfileSchema,
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
-  answers: z.object({ participating_national_employment_support: z.enum(["예", "아니오", "모름"]).optional() }).optional(),
+  answers: z
+    .object({
+      participating_national_employment_support: z.enum(["예", "아니오", "모름"]).optional(),
+      recent_history: z.enum(["예", "아니오", "모름"]).optional(),
+    })
+    .optional(),
 });
 
 export type JudgeItem = {
@@ -58,6 +65,7 @@ export type JudgeBody =
       historyCount: number;
       cards: ActionCard[];
       questions: Question[];
+      route: Route;
       needsVerification: string[];
     };
 
@@ -68,6 +76,9 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   if (parsed.data.answers?.participating_national_employment_support === "예" && !profile.participating.includes(NATIONAL)) {
     profile.participating.push(NATIONAL);
   }
+  const history = parsed.data.answers?.recent_history;
+  if (history === "예") profile.recentHistory = "yes";
+  if (history === "아니오") profile.recentHistory = "no";
   const transitions = parsed.data.transitions ?? [];
   const last = transitions.at(-1) ?? null;
   const origin = profile;
@@ -81,6 +92,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   } else {
     results = judgeAll(profile, now);
   }
+  const answered = new Set(Object.entries(parsed.data.answers ?? {}).filter(([, v]) => v && v !== "모름").map(([k]) => k));
   const changeById = new Map(changes.map((c) => [c.policyId, c]));
   const verified = loadVerified();
 
@@ -120,7 +132,9 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       defaultVisible: selectDefaultVisible(items, now),
       historyCount: results.length - current.length,
       cards: assembleCards(results, last ?? "none", changes),
-      questions: rankOpenQuestions(results),
+      // 이미 답한 질문은 다시 묻지 않는다
+      questions: rankOpenQuestions(results).filter((q) => !answered.has(q.key)),
+      route: buildRoute(origin, now),
       needsVerification: last ? needsVerification(changes, new Set()) : [],
     },
   };

@@ -42,14 +42,15 @@ export function applyTransition(profile: Profile, t: Transition, now: Date): Pro
 
 const ORDER = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 } as const;
 
-function classify(before: Axes, after: Axes, verified: boolean): Change {
+export function classifyChange(before: Axes, after: Axes, verified: boolean): Change {
   const newReasons = after.personal.reasons.filter((r) => !before.personal.reasons.includes(r));
   const sameValue = before.personal.value === after.personal.value;
   if (sameValue && newReasons.length === 0 && before.time.value === after.time.value) return "unchanged";
   // 원래부터 다른 이유로 비해당이던 정책은 상태가 바뀌어도 사용자가 할 일이 없다
   if (before.personal.value === "ineligible" && after.personal.value === "ineligible" && before.time.note === after.time.note) return "unchanged";
   if (newReasons.includes(REASON.referenceDate)) return "reference_date_needed";
-  if (after.time.value === "unmet" && after.time.note?.includes("경과") && before.time.note !== after.time.note) return "recheck_after_period";
+  // 그 상태에서 다른 이유로 비해당이면 기간이 지나도 달라지지 않으므로 기간 라벨을 붙이지 않는다
+  if (after.personal.value !== "ineligible" && after.time.value === "unmet" && after.time.note?.includes("수료일") && before.time.note !== after.time.note) return "recheck_after_period";
   if (!verified && newReasons.includes(REASON.codeStatus)) return "recheck_code_only";
   const improved = ORDER[after.personal.value] < ORDER[before.personal.value];
   if (improved) return verified ? "eligible_if_conditions" : "opened_code_only";
@@ -86,7 +87,7 @@ export function simulateTransition(profile: Profile, t: Transition, now: Date, o
       jobCodes: b.policy.jobCodes,
       before: b.axes,
       after: a.axes,
-      change: classify(b.axes, a.axes, b.verified),
+      change: classifyChange(b.axes, a.axes, b.verified),
     });
   }
   return out;
