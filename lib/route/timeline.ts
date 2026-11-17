@@ -221,7 +221,17 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
       a.policyId.localeCompare(b.policyId),
   );
   let order = 1;
-  const rows: TimelineRow[] = chosen.map(({ score: _score, closeDate: _c, closeText: _t, ...d }) => ({ ...d, order: d.firstAvailable ? order++ : null }));
+  const rows: TimelineRow[] = chosen.map((d) => ({
+    order: d.firstAvailable ? order++ : null,
+    policyId: d.policyId,
+    name: d.name,
+    verified: d.verified,
+    cells: d.cells,
+    firstAvailable: d.firstAvailable,
+    lastAvailable: d.lastAvailable,
+    personalAtStart: d.personalAtStart,
+    summary: d.summary,
+  }));
 
   // 그날 일어나는 일: 삶의 사건이 먼저, 그다음 정책의 열림·닫힘
   const moments: Moment[] = events.map((e) => ({ date: e.date, kind: "life" as const, text: `${EVENT_LABEL[e.type]}했다고 가정`, policyId: null }));

@@ -5,7 +5,8 @@ import styles from "./page.module.css";
 import { regionOptions } from "@/lib/data/regions";
 import type { JudgeBody, JudgeItem } from "@/lib/judge/handler";
 import type { Profile } from "@/lib/judge/types";
-import type { Route, RouteNode } from "@/lib/route/build";
+import type { Route } from "@/lib/route/build";
+import type { CellState, Timeline, TimelinePlan } from "@/lib/route/timeline";
 import type { VerifyResult } from "@/lib/verify/run";
 
 type Transition = "complete_training" | "get_employed" | "register_business";
@@ -92,6 +93,8 @@ export default function Page() {
   // 루트에서 누른 정책: 그 상태의 목록이 도착한 뒤 펼쳐서 보여준다
   const [pendingShow, setPendingShow] = useState<string | null>(null);
   const requestSeq = useRef(0);
+  // 시뮬레이션의 가정: 기준일(수료일 또는 오늘)로부터 몇 개월 뒤 취업·사업자등록인지
+  const [plan, setPlan] = useState<TimelinePlan>({});
   const [showAll, setShowAll] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [verify, setVerify] = useState<Record<string, VerifyState>>({});
@@ -114,7 +117,7 @@ export default function Page() {
     if (p) setProfile(p);
   }, []);
 
-  async function judge(p: Profile, ts: Transition[], ans: Record<string, string>) {
+  async function judge(p: Profile, ts: Transition[], ans: Record<string, string>, pl: TimelinePlan = plan) {
     const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
@@ -123,7 +126,7 @@ export default function Page() {
       const res = await fetch("/api/judge", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile: p, transitions: ts, answers: ans }),
+        body: JSON.stringify({ profile: p, transitions: ts, answers: ans, plan: pl }),
       });
       const body = (await res.json()) as JudgeBody;
       if ("error" in body) throw new Error(body.error);
@@ -166,14 +169,16 @@ export default function Page() {
     if (profile.source === "user") saveProfile(profile);
     setTransitions([]);
     setAnswers({}); // 프로필을 바꿔 다시 판정하면 이전 답은 쓰지 않는다
-    void judge(profile, [], {});
+    setPlan({});
+    void judge(profile, [], {}, {});
   }
 
   function useDemo() {
     setProfile(DEMO);
     setTransitions([]);
     setAnswers({});
-    void judge(DEMO, [], {});
+    setPlan({});
+    void judge(DEMO, [], {}, {});
   }
 
   function clearMine() {
@@ -194,6 +199,11 @@ export default function Page() {
   function resetTransitions() {
     setTransitions([]);
     void judge(judged ?? profile, [], answers);
+  }
+
+  function changePlan(next: TimelinePlan) {
+    setPlan(next);
+    void judge(judged ?? profile, transitions, answers, next);
   }
 
   /** 루트의 마디를 눌렀을 때: 그 마디까지의 상태 변화를 한 번에 적용해 아래 목록을 그 상태로 본다 */
@@ -359,7 +369,7 @@ export default function Page() {
             )}
             {!q && answeredCount > 0 && <p className={styles.hint}>상담 질문 {answeredCount}개의 답을 판정과 루트에 반영했습니다.</p>}
 
-            <RouteView route={data.route} active={transitions} loading={loading} onGo={goToNode} onShow={showPolicy} />
+            <SimulationView timeline={data.timeline} route={data.route} plan={plan} status={(judged ?? profile).currentStatus} loading={loading} onPlan={changePlan} onShow={(id) => showPolicy(id, transitions)} />
 
             <div className={styles.transitions}>
               <span className={styles.hint}>상태가 바뀌면? (오늘 바뀐다고 가정, 저장된 정보는 바뀌지 않음)</span>
@@ -460,83 +470,156 @@ export default function Page() {
   );
 }
 
-function RouteView({ route, active, loading, onGo, onShow }: { route: Route; active: Transition[]; loading: boolean; onGo: (path: Transition[]) => void; onShow: (id: string, path: Transition[]) => void }) {
-  const trunkPath = (upto: number) => route.trunk.slice(0, upto + 1).flatMap((n) => (n.transition ? [n.transition] : []));
-  const fullTrunk = trunkPath(route.trunk.length - 1);
-  const same = (a: Transition[], b: Transition[]) => a.length === b.length && a.every((x, i) => x === b[i]);
-  const node = (n: RouteNode, path: Transition[]) => (
-    <div key={n.key} className={`${styles.routeNode} ${same(active, path) ? styles.routeActive : ""}`} aria-current={same(active, path) ? "step" : undefined}>
-      <div className={styles.routeHead}>
-        <strong>{n.label}</strong>
-        {n.assumed && <span className={styles.badge}>가정</span>}
-        {!same(active, path) && (
-          <button className={styles.link} disabled={loading} onClick={() => onGo(path)}>이 상태로 목록 보기</button>
+const CELL: Record<CellState, { label: string; cls: string }> = {
+  ok: { label: "신청 구간(조건 충족)", cls: "cellOk" },
+  check: { label: "신청 구간(확인할 것 있음)", cls: "cellCheck" },
+  wait: { label: "기간 조건이 남음", cls: "cellWait" },
+  closed: { label: "모집 기간 아님", cls: "cellClosed" },
+  no: { label: "조건상 비해당", cls: "cellNo" },
+};
+const MOMENT_MARK = { life: "●", open: "＋", close: "－" } as const;
+const ym = (d: string) => `${d.slice(0, 4)}년 ${Number(d.slice(5, 7))}월`;
+const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+
+function SimulationView({ timeline: t, route, plan, status, loading, onPlan, onShow }: { timeline: Timeline; route: Route; plan: TimelinePlan; status: Profile["currentStatus"]; loading: boolean; onPlan: (p: TimelinePlan) => void; onShow: (id: string) => void }) {
+  const [step, setStep] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const last = t.months.length - 1;
+
+  useEffect(() => {
+    if (!playing) return;
+    if (step >= last) {
+      setPlaying(false);
+      return;
+    }
+    const id = setTimeout(() => setStep((x) => Math.min(last, x + 1)), 1400);
+    return () => clearTimeout(id);
+  }, [playing, step, last]);
+
+  const from = t.months[step];
+  const until = t.months[step + 1] ?? "9999-12-31";
+  const moments = t.moments.filter((m) => m.date >= from && m.date < until);
+  const openNow = t.rows.filter((r) => r.cells[step] === "ok" || r.cells[step] === "check");
+  const waiting = t.rows.filter((r) => r.cells[step] === "wait");
+  const monthsOptions = Array.from({ length: 13 }, (_, k) => k);
+  const pick = (v: string) => (v === "" ? null : Number(v));
+  const optionLabel = (k: number) => (k === 0 ? `${t.baseLabel} 당일` : `${t.baseLabel}부터 ${k}개월 뒤`);
+  const hasLife = (k: number) => t.moments.some((m) => m.kind === "life" && m.date >= t.months[k] && m.date < (t.months[k + 1] ?? "9999-12-31"));
+
+  return (
+    <section className={styles.sim} aria-label="시간 흐름 시뮬레이션">
+      <div className={styles.panelHead}>
+        <h3 className={styles.routeTitle}>시뮬레이션: 앞으로 12개월</h3>
+        <span className={styles.hint}>한 달씩 넘기며 내 정책의 신청 구간이 언제 열리고 닫히는지 봅니다</span>
+      </div>
+
+      <div className={styles.simPlan}>
+        <span className={styles.cardLabel}>가정 바꾸기</span>
+        {!status.includes("employed") && (
+          <label>
+            취업
+            <select value={plan.employAfterMonths ?? ""} disabled={loading} onChange={(e) => onPlan({ ...plan, employAfterMonths: pick(e.target.value) })}>
+              <option value="">가정하지 않음</option>
+              {monthsOptions.map((k) => <option key={k} value={k}>{optionLabel(k)}</option>)}
+            </select>
+          </label>
+        )}
+        {!status.includes("business_registered") && (
+          <label>
+            사업자등록
+            <select value={plan.businessAfterMonths ?? ""} disabled={loading} onChange={(e) => onPlan({ ...plan, businessAfterMonths: pick(e.target.value) })}>
+              <option value="">가정하지 않음</option>
+              {monthsOptions.map((k) => <option key={k} value={k}>{optionLabel(k)}</option>)}
+            </select>
+          </label>
         )}
       </div>
-      {n.note && <p className={styles.hint}>{n.note}</p>}
-      {n.steps.length === 0 && <p className={styles.hint}>{n.assumed ? "이 상태에서 새로 열리는 정책을 찾지 못했습니다." : "지금 확인할 정책을 찾지 못했습니다."}</p>}
-      <ol className={styles.routeSteps}>
-        {n.steps.map((s) => (
-          <li key={s.policyId} className={styles.routeStep}>
-            <span className={styles.routeNum}>{s.order}</span>
-            <div className={styles.routeBody}>
-              <button className={styles.routeName} onClick={() => onShow(s.policyId, path)}>
-                {s.name}
-                {s.verified && <span className={styles.verifiedTag}>검증됨</span>}
-              </button>
-              <span className={styles.badges}>
-                <span className={`${styles.badge} ${styles[PERSONAL[s.personal].cls]}`}>{PERSONAL[s.personal].label}</span>
-                <span className={styles.badge}>{RECRUIT[s.recruitment]}{s.deadline ? ` ~${s.deadline.slice(5)}` : ""}</span>
-              </span>
-              {s.note && <span className={styles.hint}>{s.note}</span>}
-              <details className={styles.routeWhy}>
-                <summary>이 순서인 이유</summary>
-                <ul>
-                  {s.reasons.map((r) => (
-                    <li key={r.label}>{r.label} <b>{r.points > 0 ? `+${r.points}` : r.points}</b></li>
-                  ))}
-                </ul>
-              </details>
-            </div>
-          </li>
+
+      <div className={styles.simStage} aria-live="polite">
+        <div>
+          <div className={styles.simMonth}>{ym(from)}</div>
+          <div className={styles.simState}>상태: <b>{t.stateLabels[step]}</b>{step === 0 ? " · 오늘" : ` · 오늘부터 ${step}개월 뒤`}</div>
+        </div>
+        <div className={styles.row}>
+          <button className={styles.ghost} disabled={step === 0} onClick={() => { setPlaying(false); setStep(step - 1); }}>◀ 이전 달</button>
+          <button className={styles.primary} onClick={() => { if (step >= last) setStep(0); setPlaying(!playing); }}>{playing ? "⏸ 멈춤" : step >= last ? "↺ 처음부터" : "▶ 흘려보기"}</button>
+          <button className={styles.ghost} disabled={step === last} onClick={() => { setPlaying(false); setStep(step + 1); }}>다음 달 ▶</button>
+        </div>
+      </div>
+
+      <div className={styles.simStrip} role="tablist" aria-label="달 고르기">
+        {t.months.map((m, k) => (
+          <button key={m} role="tab" aria-selected={k === step} className={`${styles.simTick} ${k === step ? styles.simTickOn : ""} ${k < step ? styles.simTickPast : ""}`} onClick={() => { setPlaying(false); setStep(k); }}>
+            {Number(m.slice(5, 7))}월
+            {hasLife(k) && <span className={styles.simDot} aria-label="상태 변화가 있는 달" />}
+          </button>
         ))}
-      </ol>
-      {n.affected.length > 0 && (
-        <div className={styles.routeAffected}>
-          <span className={styles.cardLabel}>앞에서 본 정책 중 다시 볼 것</span>
-          <ul>
-            {n.affected.map((a) => (
-              <li key={a.policyId}><button className={styles.routeName} onClick={() => onShow(a.policyId, path)}>{a.name}</button> — {a.label}</li>
+      </div>
+
+      <div className={styles.simCols}>
+        <div className={styles.simBox}>
+          <span className={styles.cardLabel}>이 달에 일어나는 일</span>
+          {moments.length === 0 && <p className={styles.hint}>이 달에는 변화가 없습니다.</p>}
+          <ul className={styles.simMoments}>
+            {moments.map((m) => (
+              <li key={`${m.date}-${m.kind}-${m.text}`} className={styles[`moment_${m.kind}`]}>
+                <span className={styles.simMark} aria-hidden="true">{MOMENT_MARK[m.kind]}</span>
+                <span><b>{md(m.date)}</b> {m.policyId ? <button className={styles.routeName} onClick={() => onShow(m.policyId!)}>{m.text}</button> : m.text}</span>
+              </li>
             ))}
           </ul>
         </div>
-      )}
-    </div>
-  );
-  return (
-    <section className={styles.routeWrap} aria-label="상태 갈림길 루트">
-      <div className={styles.panelHead}>
-        <h3 className={styles.routeTitle}>내 갈림길</h3>
-        <span className={styles.hint}>번호는 먼저 확인할 순서 · 가정 마디는 &lsquo;오늘 그 일이 일어났다면&rsquo;</span>
+        <div className={styles.simBox}>
+          <span className={styles.cardLabel}>이 달에 신청 구간이 열려 있는 정책 {openNow.length}개</span>
+          {openNow.length === 0 && <p className={styles.hint}>이 달에 열려 있는 신청 구간이 없습니다.</p>}
+          <ul className={styles.simOpen}>
+            {openNow.map((r) => (
+              <li key={r.policyId}>
+                <span className={styles.routeNum}>{r.order}</span>
+                <div className={styles.routeBody}>
+                  <button className={styles.routeName} onClick={() => onShow(r.policyId)}>
+                    {r.name}
+                    {r.verified && <span className={styles.verifiedTag}>검증됨</span>}
+                  </button>
+                  <span className={styles.badges}>
+                    <span className={`${styles.badge} ${r.cells[step] === "ok" ? (r.verified ? styles.ok : styles.info) : styles.warn}`}>{r.cells[step] === "ok" ? (r.verified ? "조건 충족" : "코드 조건 충족(본문 미검토)") : "확인할 것 있음"}</span>
+                  </span>
+                  <span className={styles.hint}>{r.summary}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {waiting.length > 0 && <p className={styles.hint}>기간 조건이 남은 정책: {waiting.map((r) => r.name).join(", ")}</p>}
+        </div>
       </div>
-      <div className={styles.route}>
-        {route.trunk.map((n, i) => (
-          <div key={n.key} className={styles.routeCol}>
-            {node(n, trunkPath(i))}
-            <span className={styles.routeArrow} aria-hidden="true">{i < route.trunk.length - 1 || route.branches.length ? "→" : ""}</span>
-          </div>
-        ))}
-        {route.branches.length > 0 && (
-          <div className={styles.routeFork}>
-            <span className={styles.hint}>여기서 길이 갈립니다. 두 길의 번호는 각각 이어집니다.</span>
-            {route.branches.map((n) => node(n, [...fullTrunk, ...(n.transition ? [n.transition] : [])]))}
-          </div>
-        )}
-      </div>
+
+      <details className={styles.simAll}>
+        <summary>전체 기간 한눈에 보기 (정책 {t.rows.length}개)</summary>
+        <div className={styles.simLegend}>
+          {(Object.keys(CELL) as CellState[]).map((k) => (
+            <span key={k}><i className={`${styles.cell} ${styles[CELL[k].cls]}`} /> {CELL[k].label}</span>
+          ))}
+        </div>
+        <ul className={styles.gantt}>
+          {t.rows.map((r) => (
+            <li key={r.policyId}>
+              <div className={styles.ganttName}>
+                <span className={styles.ganttOrder}>{r.order ?? "–"}</span>
+                <button className={styles.routeName} onClick={() => onShow(r.policyId)}>{r.name}{r.verified && <span className={styles.verifiedTag}>검증됨</span>}</button>
+              </div>
+              <div className={styles.ganttCells} role="img" aria-label={r.summary}>
+                {r.cells.map((c, k) => <i key={k} title={`${ym(t.months[k])}: ${CELL[c].label}`} className={`${styles.cell} ${styles[CELL[c].cls]} ${k === step ? styles.cellNow : ""}`} />)}
+              </div>
+              <span className={styles.hint}>{r.summary}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+
       {route.links.length > 0 && (
-        <div className={styles.routeLinks}>
-          <span className={styles.cardLabel}>원문에 적힌 정책 사이의 관계</span>
-          <ul>
+        <details className={styles.simAll}>
+          <summary>원문에 적힌 정책 사이의 관계 ({route.links.length}개)</summary>
+          <ul className={styles.routeLinks}>
             {route.links.map((l) => (
               <li key={`${l.kind}-${l.from}-${l.to}-${l.quote.slice(0, 12)}`}>
                 {l.kind === "leads_to" ? <>{l.fromName} <b>→</b> {l.toName} <span className={styles.badge}>이어짐</span></> : <>{l.fromName} 참여 중이면 {l.toName} <span className={`${styles.badge} ${styles.no}`}>제한</span></>}
@@ -551,9 +634,9 @@ function RouteView({ route, active, loading, onGo, onShow }: { route: Route; act
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
-      <p className={styles.hint}>{route.notice}</p>
+      <p className={styles.hint}>{t.notice}</p>
     </section>
   );
 }

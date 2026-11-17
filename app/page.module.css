@@ -95,3 +95,53 @@
   .routeFork { border-left: 0; padding-left: 0; border-top: 2px dashed var(--line); padding-top: 12px; width: 100%; }
 }
 .routeTitle { margin: 0; font-size: 16px; }
+
+/* 시간 흐름 시뮬레이션 */
+.sim { display: grid; gap: 12px; }
+.simPlan { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.simPlan label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.simPlan select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.simStage { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--accent-soft); border-radius: 12px; padding: 14px 16px; }
+.simMonth { font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--accent); }
+.simState { font-size: 14px; margin-top: 4px; }
+.simStrip { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 4px; }
+.simTick { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; font-size: 12px; color: var(--muted); }
+.simTickPast { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.simTickOn { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 700; }
+.simDot { position: absolute; top: 3px; right: 4px; width: 6px; height: 6px; border-radius: 999px; background: var(--warn); }
+.simCols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; align-items: start; }
+.simBox { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; min-width: 0; }
+.simMoments, .simOpen, .gantt { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.simMoments li { display: flex; gap: 8px; font-size: 14px; align-items: baseline; }
+.simMoments .routeName { font-weight: 500; }
+.simMark { flex: 0 0 18px; text-align: center; font-weight: 800; }
+.moment_life .simMark { color: var(--warn); }
+.moment_open .simMark { color: var(--ok); }
+.moment_close .simMark { color: var(--no); }
+.simOpen li { display: flex; gap: 8px; align-items: flex-start; }
+.simAll { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.simAll summary { cursor: pointer; font-weight: 600; }
+.simLegend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 10px 0; }
+.simLegend span { display: inline-flex; gap: 4px; align-items: center; }
+.gantt li { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 4px 10px; align-items: center; }
+.gantt li > .hint { grid-column: 2; font-size: 12px; }
+.ganttName { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.ganttName .routeName { font-weight: 500; font-size: 14px; }
+.ganttOrder { flex: 0 0 20px; color: var(--muted); font-size: 12px; text-align: right; }
+.ganttCells { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 2px; }
+.cell { display: inline-block; height: 14px; min-width: 10px; border-radius: 3px; }
+.simLegend .cell { width: 14px; }
+.cellOk { background: var(--ok); }
+.cellCheck { background: var(--warn); }
+.cellWait { background: repeating-linear-gradient(45deg, var(--info-bg), var(--info-bg) 3px, var(--info) 3px, var(--info) 4px); }
+.cellClosed { background: var(--line); }
+.cellNo { background: transparent; border: 1px dashed var(--line); }
+.cellNow { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 720px) {
+  .simCols { grid-template-columns: 1fr; }
+  .simMonth { font-size: 24px; }
+  .simTick { font-size: 10px; padding: 6px 0; white-space: nowrap; letter-spacing: -0.5px; }
+  .simStrip { gap: 2px; }
+  .gantt li { grid-template-columns: 1fr; }
+  .gantt li > .hint { grid-column: 1; }
+}
