@@ -47,6 +47,7 @@ export function rankOpenQuestions(results: JudgedPolicy[], defs: QuestionDef[] =
         stillOpenCount: related.length - mayChange.length,
       };
     })
-    .filter((q) => q.relatedCount > 0)
+    // 답해도 판정이 바뀌지 않는 질문은 묻지 않는다
+    .filter((q) => q.mayChangeCount > 0)
     .sort((a, b) => b.mayChangeCount - a.mayChangeCount || a.stillOpenCount - b.stillOpenCount);
 }

@@ -31,16 +31,29 @@ export type RouteNode = {
   assumed: boolean;
   transition: Transition | null;
   steps: RouteStep[];
+  /** 마디 전체에 해당하는 안내(예: 수료 예정일이 지났습니다) */
+  note: string | null;
   /** 앞 마디에서 본 정책 중 이 상태에서 다시 봐야 하는 것 */
   affected: { policyId: string; name: string; label: string }[];
 };
 
-export type RouteLink = { from: string; fromName: string; to: string; toName: string; kind: "leads_to" | "blocks"; quote: string; sourceUrl: string | null };
+export type RouteLink = {
+  from: string;
+  fromName: string;
+  to: string;
+  toName: string;
+  kind: "leads_to" | "blocks";
+  quote: string;
+  /** 인용의 출처: 공식 공고(사람이 확인) 또는 온통청년 API의 텍스트 */
+  source: "official" | "api";
+  sourceUrl: string | null;
+  checkedAt: string | null;
+};
 
 export type Route = { trunk: RouteNode[]; branches: RouteNode[]; links: RouteLink[]; notice: string };
 
 const NOTICE =
-  "번호는 마감일·확인 여부·관심 분야로 계산한 '먼저 확인할 순서'입니다. 우리 서비스가 정한 규칙이며 공식 기준이 아닙니다. 어느 길이 더 낫다는 뜻이 아니고, 신청 결과를 예측하지 않습니다.";
+  "번호는 '먼저 확인할 순서'입니다. 사람이 공식 공고를 확인한 정책을 먼저 놓고, 그 안에서 마감일·자격 판정·관심 분야로 계산한 점수 순으로 놓습니다. 우리 서비스가 정한 규칙이며 공식 기준이 아닙니다. 어느 길이 더 낫다는 뜻이 아니고, 신청 결과를 예측하지 않습니다.";
 
 const NODE_OF: Record<Transition, { key: RouteNode["key"]; label: string }> = {
   complete_training: { key: "after_training", label: "수료한 뒤" },
@@ -52,22 +65,28 @@ const ORDER: Record<PersonalValue, number> = { eligible: 0, code_met_unreviewed:
 const ROOT_STEPS = 4;
 const NEXT_STEPS = 3;
 
+function normName(name: string): string {
+  return name.replace(/\([^)]*\)/g, "").replace(/\s+/g, "");
+}
+
 function nameOf(id: string): string {
   return loadVerified().get(id)?.name ?? loadSnapshot().policies.find((p) => p.id === id)?.name ?? id;
 }
 
 function links(): RouteLink[] {
-  const out: RouteLink[] = routeLinks.map((l) => ({ from: l.from, fromName: nameOf(l.from), to: l.to, toName: nameOf(l.to), kind: "leads_to" as const, quote: l.quote, sourceUrl: l.sourceUrl }));
+  const out: RouteLink[] = routeLinks.map((l) => ({ from: l.from, fromName: nameOf(l.from), to: l.to, toName: nameOf(l.to), kind: "leads_to" as const, quote: l.quote, source: "official" as const, sourceUrl: l.sourceUrl, checkedAt: l.checkedAt }));
   // 참여 중이면 제한된다고 공고가 적은 관계
   for (const v of loadVerified().values()) {
     for (const q of v.restrictionQuotes) {
       for (const other of q.mentions ?? []) {
-        out.push({ from: other, fromName: nameOf(other), to: v.id, toName: v.name, kind: "blocks", quote: q.text, sourceUrl: v.sources[0]?.url ?? null });
+        out.push({ from: other, fromName: nameOf(other), to: v.id, toName: v.name, kind: "blocks", quote: q.text, source: q.source, sourceUrl: q.source === "official" ? (v.sources[0]?.url ?? null) : null, checkedAt: q.source === "official" ? (v.sources[0]?.checkedAt ?? null) : null });
       }
     }
   }
   return out;
 }
+
+const first = (r: JudgedPolicy) => r.verified && r.axes.recruitment !== "closed";
 
 type Built = { node: RouteNode; judged: Map<string, JudgedPolicy>; shown: Set<string>; nextOrder: number };
 
@@ -82,8 +101,12 @@ function buildNode(
   const judged = new Map(all.map((r) => [r.policy.id, r]));
   const shown = new Set(parent?.built.shown ?? []);
 
+  // 검증 정책과 이름이 같은 미확인 항목(예: 군·구가 따로 등록한 같은 사업)은 접는다
+  const verifiedNames = all.filter((r) => r.verified).map((r) => normName(r.policy.name));
+  const duplicateOfVerified = (r: JudgedPolicy) => !r.verified && verifiedNames.some((n) => normName(r.policy.name).includes(n));
+
   const candidates = all
-    .filter((r) => r.axes.personal.value !== "ineligible" && !shown.has(r.policy.id))
+    .filter((r) => r.axes.personal.value !== "ineligible" && !shown.has(r.policy.id) && !duplicateOfVerified(r))
     .map((r) => {
       const before = parent?.built.judged.get(r.policy.id);
       const opened = !!parent && (!before || ORDER[r.axes.personal.value] < ORDER[before.axes.personal.value]);
@@ -91,7 +114,16 @@ function buildNode(
     })
     // 첫 마디: 모집이 끝난 정책은 싣지 않는다. 다음 마디: 그 상태에서 새로 열리는 정책만 싣는다
     .filter((c) => (parent ? c.opened && (c.r.axes.recruitment !== "closed" || c.r.verified) : c.r.axes.recruitment !== "closed"))
-    .sort((a, b) => b.w.score - a.w.score || a.r.policy.id.localeCompare(b.r.policy.id))
+    // 사람이 확인했고 모집이 열려 있는 정책을 먼저 놓는다. 그 안에서 점수 순,
+    // 동점이면 사람이 확인한 정책, 마감이 가까운 정책, 정책 번호 순
+    .sort(
+      (a, b) =>
+        Number(first(b.r)) - Number(first(a.r)) ||
+        b.w.score - a.w.score ||
+        Number(b.r.verified) - Number(a.r.verified) ||
+        (deadlineOf(a.r) ?? "9999").localeCompare(deadlineOf(b.r) ?? "9999") ||
+        a.r.policy.id.localeCompare(b.r.policy.id),
+    )
     .slice(0, parent ? NEXT_STEPS : ROOT_STEPS);
 
   let order = parent?.built.nextOrder ?? 1;
@@ -105,7 +137,8 @@ function buildNode(
     deadline: deadlineOf(c.r),
     score: c.w.score,
     reasons: c.w.reasons,
-    note: c.r.axes.time.note ?? null,
+    // 정책 자체의 기간 조건 안내만 싣는다. 마디 전체 안내는 node.note
+    note: c.r.axes.time.value !== "na" ? (c.r.axes.time.note ?? null) : null,
     opened: c.opened,
   }));
   for (const s of steps) shown.add(s.policyId);
@@ -121,7 +154,8 @@ function buildNode(
     }
   }
 
-  return { node: { key: def.key, label: def.label, assumed: !!parent, transition: def.transition, steps, affected }, judged, shown, nextOrder: order };
+  const nodeNote = all.find((r) => r.axes.time.value === "na" && r.axes.time.note)?.axes.time.note ?? null;
+  return { node: { key: def.key, label: def.label, assumed: !!parent, transition: def.transition, steps, note: nodeNote, affected }, judged, shown, nextOrder: order };
 }
 
 export function buildRoute(profile: Profile, now: Date): Route {
@@ -142,5 +176,8 @@ export function buildRoute(profile: Profile, now: Date): Route {
   if (!status.has("business_registered")) forks.push("register_business");
   const branches = forks.map((t) => buildNode({ ...NODE_OF[t], transition: t }, applyTransition(tip.profile, t, now), origin, tip, now).node);
 
-  return { trunk: trunk.map((t) => t.built.node), branches, links: links(), notice: NOTICE };
+  const trunkNodes = trunk.map((t) => t.built.node);
+  // 루트에 나오는 정책과 관련된 관계만 보여준다
+  const onRoute = new Set([...trunkNodes, ...branches].flatMap((n) => [...n.steps.map((s) => s.policyId), ...n.affected.map((a) => a.policyId)]));
+  return { trunk: trunkNodes, branches, links: links().filter((l) => onRoute.has(l.from) || onRoute.has(l.to)), notice: NOTICE };
 }

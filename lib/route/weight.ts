@@ -45,12 +45,16 @@ export function weighPolicy(r: JudgedPolicy, ctx: { interest: Profile["interest"
   const add = (label: string, points: number) => reasons.push({ label, points });
 
   // 모집 상태와 마감
+  // 본문을 아무도 확인하지 않았고 확인할 것이 남은 정책: 자격 근거가 약하므로 마감·관심 가점을 줄인다
+  const weak = !r.verified && r.axes.personal.value === "needs_check";
+  const scale = (n: number) => (weak ? Math.floor(n / 2) : n);
   const end = deadlineOf(r);
   if (r.axes.recruitment === "open") {
     const days = end ? daysBetween(toKstDate(ctx.now), end) : null;
-    if (days != null && days <= 14) add(`마감 ${days}일 전`, WEIGHTS.deadlineWithin14);
-    else if (days != null && days <= 30) add(`마감 ${days}일 전`, WEIGHTS.deadlineWithin30);
-    else add("모집 중", WEIGHTS.open);
+    const label = days === 0 ? "오늘 마감" : `마감 ${days}일 전`;
+    if (days != null && days <= 14) add(label, scale(WEIGHTS.deadlineWithin14));
+    else if (days != null && days <= 30) add(label, scale(WEIGHTS.deadlineWithin30));
+    else add("모집 중", scale(WEIGHTS.open));
   } else if (r.axes.recruitment === "upcoming") add("모집 예정", WEIGHTS.upcoming);
   else if (r.axes.recruitment === "always") add("상시 모집", WEIGHTS.always);
   else if (r.axes.recruitment === "closed") add("모집 종료(다음 모집 확인)", WEIGHTS.closed);
@@ -69,11 +73,14 @@ export function weighPolicy(r: JudgedPolicy, ctx: { interest: Profile["interest"
 
   // 관심 분야
   const cat = `${r.policy.category.large} ${r.policy.category.middle}`;
-  if (ctx.interest === "startup" && cat.includes("창업")) add("관심 분야(창업)", WEIGHTS.interest);
-  else if (ctx.interest !== "startup" && cat.includes("취업")) add("관심 분야(취업)", WEIGHTS.interest);
-  else if (ctx.interest === "keep_searching" && cat.includes("역량")) add("관심 분야(역량 강화)", WEIGHTS.interestSkill);
+  if (!weak) {
+    if (ctx.interest === "startup" && cat.includes("창업")) add("관심 분야(창업)", WEIGHTS.interest);
+    else if (ctx.interest !== "startup" && cat.includes("취업")) add("관심 분야(취업)", WEIGHTS.interest);
+    else if (ctx.interest === "keep_searching" && cat.includes("역량")) add("관심 분야(역량 강화)", WEIGHTS.interestSkill);
+  }
 
-  if (ctx.opened) add("이 상태에서 새로 열림", WEIGHTS.opened);
+  // 모집이 끝났거나 기간 조건이 남은 정책은 당장 검토할 수 없으므로 이 가점을 주지 않는다
+  if (ctx.opened && r.axes.recruitment !== "closed" && r.axes.time.value !== "unmet") add("이 상태에서 새로 검토 대상", WEIGHTS.opened);
 
   return { score: reasons.reduce((s, x) => s + x.points, 0), reasons };
 }

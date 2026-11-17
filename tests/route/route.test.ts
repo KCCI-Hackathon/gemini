@@ -34,7 +34,7 @@ describe("weighPolicy: 먼저 확인할 순서 점수", () => {
   });
 
   test("관심이 창업이면 창업 분야 정책의 점수가 오른다", () => {
-    const startup = results.find((r) => r.policy.category.middle.includes("창업") && r.axes.personal.value !== "ineligible")!;
+    const startup = results.find((r) => r.policy.category.middle.includes("창업") && r.axes.personal.value === "code_met_unreviewed")!;
     const asJob = weighPolicy(startup, { interest: "job", now: NOW }).score;
     const asStartup = weighPolicy(startup, { interest: "startup", now: NOW }).score;
     expect(asStartup).toBeGreaterThan(asJob);

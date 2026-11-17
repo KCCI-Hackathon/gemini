@@ -49,6 +49,7 @@ export const REASON = {
   marriage: "혼인 조건 확인 필요",
   participating: "참여 중인 다른 사업으로 제한될 수 있음",
   history: "최근 취업·훈련 이력 확인 필요",
+  period: "기간 경과 후 재검토",
   statusUnknown: "현재 취업 상태 확인 필요",
 } as const;
 
