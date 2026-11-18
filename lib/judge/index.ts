@@ -1,3 +1,5 @@
+import { fieldCheckEffect } from "@/lib/verify/downgrade";
+import { savedResult } from "@/lib/verify/saved";
 import { isOpenAt, monthsBetween, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import type { Policy } from "@/lib/data/types";
@@ -79,7 +81,27 @@ export function judgePolicy(
     personal.value = "needs_check";
     personal.reasons.push(REASON.period);
   }
-  return { personal, recruitment: recruitment(p, v, now), time, restriction };
+  const axes: Axes = { personal, recruitment: recruitment(p, v, now), time, restriction };
+  return applySavedFieldChecks(axes, p, v, now);
+}
+
+const RANK_V = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 } as const;
+
+/** 준비 단계 저장 결과의 항목별 대조를 반영한다. 낮추기만 한다(통합 설계 5.3-4) */
+function applySavedFieldChecks(axes: Axes, p: Policy, v: VerifiedPolicy | undefined, now: Date): Axes {
+  const saved = savedResult(p.id);
+  if (!saved || saved.outcome !== "verified_against_notice") return axes;
+  const e = fieldCheckEffect(saved, p, v, toKstDate(now));
+  const lower = (reason: string) => {
+    if (RANK_V[axes.personal.value] < RANK_V.needs_check) axes.personal.value = "needs_check";
+    if (!axes.personal.reasons.includes(reason)) axes.personal.reasons.push(reason);
+  };
+  if (e.newRound) lower(REASON.roundReview);
+  for (const r of e.personal) lower(r);
+  const notes = [...(e.recruitment ? [e.recruitment] : []), ...e.notes];
+  if (e.recruitment && axes.recruitment !== "closed") axes.recruitment = "unknown";
+  if (notes.length) axes.fieldNotes = notes;
+  return axes;
 }
 
 const NON_INDIVIDUAL = /컨소시엄|운영|조성|센터|조사|위원회|의무제|설치|홍보|구축|활성화|협의체|포럼|축제|행사|기념|장려금|인프라/;

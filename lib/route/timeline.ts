@@ -3,17 +3,20 @@
 // 현재 공고 기준의 계산이며 이후의 새 공고·변경은 반영되지 않는다. 언제 취업·창업하는 것이 낫다는 판단을 하지 않는다.
 // 외부 호출 없음, 입력 프로필은 바꾸지 않는다.
 import { addMonths, toKstDate } from "@/lib/date";
+import { regionLabel } from "@/lib/data/regions";
 import { loadVerified } from "@/lib/data/verified";
 import { judgeAll, type EventType, type JudgedPolicy, type PersonalValue, type Profile } from "@/lib/judge";
 import { baselineOpts, effectiveStatus } from "@/lib/judge/personal";
+import type { Evidence } from "@/lib/judge/rules";
 import { weighPolicy } from "./weight";
 
-export type TimelinePlan = { employAfterMonths?: number | null; businessAfterMonths?: number | null };
+/** move: 이사 예정(대상 시군구, 오늘부터 몇 개월 뒤). 그 날부터 지역 판정을 새 시군구로 한다 */
+export type TimelinePlan = { employAfterMonths?: number | null; businessAfterMonths?: number | null; move?: { sigungu: string; afterMonths: number } | null };
 
 /** ok: 조건 충족, check: 확인할 것이 남음, wait: 기간 조건이 남음, closed: 모집 기간 아님, no: 조건상 비해당 */
 export type CellState = "ok" | "check" | "wait" | "closed" | "no";
 
-export type TimelineEvent = { type: EventType; date: string; label: string; assumed: true };
+export type TimelineEvent = { type: EventType; date: string; label: string; assumed: true; sigungu?: string };
 
 export type TimelineRow = {
   /** 신청 구간이 시작되는 순서. 기간 안에 구간이 없으면 null */
@@ -26,6 +29,14 @@ export type TimelineRow = {
   firstAvailable: string | null;
   lastAvailable: string | null;
   personalAtStart: PersonalValue | null;
+  /** 가정한 사건으로 신청 구간 안에서 판정 사유가 바뀌는 날(그날부터 다시 확인) */
+  breaks: string[];
+  /** 경계: 가정한 사건으로 판정이 바뀌는 날(구간이 열리거나 닫히거나 사유가 바뀜). 그 달은 선후 확인 필요 */
+  boundaries: string[];
+  /** 신청 구간이 시작되는 시점의 조건별 근거(회차별 규칙이 있는 정책만) */
+  evidence: Evidence[];
+  /** 신청 구간이 시작되는 시점의 판정 사유. 구간이 없으면 없는 이유 하나 */
+  reasons: string[];
   summary: string;
 };
 
@@ -46,7 +57,7 @@ export type Timeline = {
 
 const HORIZON = 12;
 const EXTRA_ROWS = 6;
-const EVENT_LABEL: Record<EventType, string> = { training_completion: "수료", employment: "취업", business_registration: "사업자등록" };
+const EVENT_LABEL: Record<EventType, string> = { training_completion: "수료", employment: "취업", business_registration: "사업자등록", relocation: "이사" };
 
 const NOTICE =
   "가정한 날짜에 따라 달라지는 신청 구간을 현재 공고 기준으로 계산한 것입니다. 데이터 기준일 이후의 새 공고와 변경은 반영되지 않습니다. 언제 취업하거나 창업하는 것이 낫다는 뜻이 아니며, 신청 결과를 예측하지 않습니다.";
@@ -87,6 +98,10 @@ function plannedEvents(profile: Profile, today: string, plan: TimelinePlan): { b
   };
   add("employment", plan.employAfterMonths, status.has("employed"));
   add("business_registration", plan.businessAfterMonths, status.has("business_registered"));
+  if (plan.move && plan.move.sigungu !== profile.sigungu) {
+    const date = addMonths(today, plan.move.afterMonths);
+    events.push({ type: "relocation", date, label: `이사(${regionLabel(plan.move.sigungu)}, ${date}, 오늘부터 ${plan.move.afterMonths}개월 뒤)`, assumed: true, sigungu: plan.move.sigungu });
+  }
   events.sort((a, b) => a.date.localeCompare(b.date));
   return { base, baseLabel, events };
 }
@@ -96,6 +111,10 @@ function profileAt(origin: Profile, events: TimelineEvent[], ymd: string, upto =
   const p = structuredClone(origin);
   const applied = events.filter((e) => e.date <= ymd).slice(0, upto);
   for (const e of applied) {
+    if (e.type === "relocation") {
+      p.sigungu = e.sigungu!;
+      continue;
+    }
     p.events = p.events.filter((x) => !(x.type === e.type && x.status !== "completed"));
     p.events.push({ type: e.type, date: e.date, status: "simulated" });
   }
@@ -138,15 +157,28 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
     return r ? stateOf(r) : undefined;
   };
 
+  // 사건이 일어난 날 판정 사유가 달라지면, 열려 있어도 같은 구간으로 잇지 않는다
+  const eventDates = new Set(events.map((e) => e.date));
+  const keyAt = (id: string, i: number) => {
+    const r = perSample[i].get(id);
+    return r ? `${stateOf(r)}|${r.axes.personal.reasons.join("|")}` : "";
+  };
+  const breaksAt = (id: string, i: number) => i > 0 && eventDates.has(samples[i]) && keyAt(id, i) !== keyAt(id, i - 1);
+
   type Draft = Omit<TimelineRow, "order"> & { score: number; closeDate: string | null; closeText: string };
   const drafts: Draft[] = [];
-  for (const id of perSample[0].keys()) {
+  // 이사로 지역이 바뀌면 나중 시점에만 보이는 정책도 있다: 모든 시점의 정책을 모은다
+  const allIds = new Set(perSample.flatMap((m) => [...m.keys()]));
+  for (const id of allIds) {
     const states = samples.map((_, i) => stateAt(id, i));
     const first = states.findIndex(available);
-    const r0 = perSample[0].get(id)!;
+    const r0 = perSample.find((m) => m.has(id))!.get(id)!;
     if (first === -1 && !r0.verified) continue;
     let last = first;
     while (last !== -1 && last + 1 < states.length && available(states[last + 1])) last++;
+    // 구간은 이어지지만 가정한 사건으로 판정 사유가 바뀌는 날
+    const boundaries = samples.filter((_, i) => breaksAt(id, i) && (available(states[i]) || available(states[i - 1])));
+    const breaks = first === -1 ? [] : samples.filter((_, i) => i > first && i <= last && breaksAt(id, i));
 
     const startRow = first === -1 ? null : perSample[first].get(id)!;
     let summary: string;
@@ -183,7 +215,8 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
         }
       }
       const check = stateOf(startRow) === "check" ? ` · 확인할 사항 ${startRow.axes.personal.reasons.length}개` : "";
-      summary = `${startWhy} · ${endText}${check}`;
+      const changes = breaks.map((b) => ` · ${b} ${EVENT_LABEL[events.find((e) => e.date === b)!.type]} 후 다시 확인`).join("");
+      summary = `${startWhy} · ${endText}${check}${changes}`;
     }
 
     drafts.push({
@@ -201,6 +234,10 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
       closeDate,
       closeText,
       personalAtStart: startRow?.axes.personal.value ?? null,
+      breaks,
+      boundaries,
+      evidence: (startRow ?? r0).axes.personal.evidence ?? [],
+      reasons: startRow ? startRow.axes.personal.reasons : [whyNot(perSample[perSample.length - 1].get(id) ?? r0)],
       summary,
       score: startRow ? weighPolicy(startRow, { interest: origin.interest, now: at(samples[first]) }).score : 0,
     });
@@ -230,6 +267,10 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
     firstAvailable: d.firstAvailable,
     lastAvailable: d.lastAvailable,
     personalAtStart: d.personalAtStart,
+    breaks: d.breaks,
+    boundaries: d.boundaries,
+    evidence: d.evidence,
+    reasons: d.reasons,
     summary: d.summary,
   }));
 

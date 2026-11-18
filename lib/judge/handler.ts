@@ -7,6 +7,7 @@ import { assembleCards, type ActionCard } from "@/lib/agent/assemble";
 import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
 import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, type Transition, type TransitionResult } from "@/lib/sim/transition";
 import { buildRoute, type Route } from "@/lib/route/build";
+import { buildRoadmap, type Roadmap } from "@/lib/route/roadmap";
 import { buildTimeline, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
@@ -23,6 +24,7 @@ const ProfileSchema = z.object({
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration"]), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), status: z.enum(["scheduled", "completed", "simulated"]) })),
   participating: z.array(z.string()),
   recentHistory: z.enum(["yes", "no"]).optional(),
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   source: z.enum(["demo_persona", "user"]),
 });
 
@@ -40,6 +42,7 @@ const RequestSchema = z.object({
     .object({
       employAfterMonths: z.number().int().min(0).max(12).nullable().optional(),
       businessAfterMonths: z.number().int().min(0).max(12).nullable().optional(),
+      move: z.object({ sigungu: z.string().regex(/^\d{5}$/), afterMonths: z.number().int().min(0).max(12) }).nullable().optional(),
     })
     .optional(),
 });
@@ -75,6 +78,7 @@ export type JudgeBody =
       questions: Question[];
       route: Route;
       timeline: Timeline;
+      roadmap: Roadmap;
       needsVerification: string[];
     };
 
@@ -101,6 +105,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   } else {
     results = judgeAll(profile, now);
   }
+  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {});
   const answered = new Set(Object.entries(parsed.data.answers ?? {}).filter(([, v]) => v && v !== "모름").map(([k]) => k));
   const changeById = new Map(changes.map((c) => [c.policyId, c]));
   const verified = loadVerified();
@@ -144,7 +149,8 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       // 이미 답한 질문은 다시 묻지 않는다
       questions: rankOpenQuestions(results).filter((q) => !answered.has(q.key)),
       route: buildRoute(origin, now),
-      timeline: buildTimeline(origin, now, parsed.data.plan ?? {}),
+      timeline,
+      roadmap: buildRoadmap(timeline),
       needsVerification: last ? needsVerification(changes, new Set()) : [],
     },
   };

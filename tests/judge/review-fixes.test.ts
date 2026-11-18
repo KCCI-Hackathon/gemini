@@ -29,11 +29,11 @@ describe("C1: 이력 정보가 없으면 최근 이력 조건을 충족했다고
 });
 
 describe("I1: 검증 정책은 전이 전에 충족하던 조건이 어긋날 때만 기준일 확인으로 완화", () => {
-  test("재직자가 사업자등록을 가정해도 미취업자 대상 인천 응시료는 그대로 비해당", () => {
+  test("재직자는 응시일을 모르면 인천 응시료가 비해당이 아니라 '응시일 확인 필요'(응시일에 미취업이었을 수 있음)", () => {
     const employed: Profile = { ...PERSONA_A, currentStatus: ["employed"], events: [] };
     const r = simulateTransition(employed, "register_business", NOW).find((x) => x.policyId === INCHEON)!;
-    expect(r.after.personal.value).toBe("ineligible");
-    expect(r.change).toBe("unchanged");
+    expect(r.before.personal.reasons).toContain("응시일 확인 필요");
+    expect(r.after.personal.value).toBe("needs_check");
   });
 });
 

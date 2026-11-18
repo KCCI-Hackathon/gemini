@@ -3,7 +3,7 @@ import { handleVerify, resetVerifyState } from "@/lib/verify/handler";
 import { scriptedClient } from "./helpers";
 import { guardResponse } from "@/lib/agent/guard";
 
-const ID = "20260406005400212445";
+const ID = "20260928005400113623"; // 승인 규칙이 없는 정책(실시간 대조 대상)
 const finishNotFound = [[{ name: "finish", input: { outcome: "notice_not_found", notice_url: null, findings: [], mismatches: [] } }]];
 
 function ctx(over: Partial<Parameters<typeof handleVerify>[1]> = {}) {

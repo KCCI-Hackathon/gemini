@@ -19,6 +19,38 @@ const Quote = z.object({
 });
 export type Quote = z.infer<typeof Quote>;
 
+/** 조건의 기준일 종류(통합 설계 4.3) */
+export const Basis = z.enum(["apply_date", "exam_date", "notice_date", "fixed_date", "resolvable_before_start", "unspecified"]);
+export type Basis = z.infer<typeof Basis>;
+
+const Condition = z.object({
+  key: StatusKey,
+  kind: z.enum(["requires", "excludes"]),
+  basis: Basis,
+  /** 공고가 그 상태의 정의를 분명히 하는가. false면 어긋나도 비해당 대신 확인 필요 */
+  definitionClear: z.boolean().default(true),
+  quote: Quote,
+  /** 사람이 이 조건과 근거 문장의 연결을 확인했는가. null이면 확인 대기 */
+  supportsConfirmed: z.object({ by: z.literal("human"), at: z.string() }).nullable(),
+});
+
+/** 공고 회차 하나의 규칙. 회차마다 승인(approved) 또는 검토 중(under_review) */
+export const RoundSchema = z.object({
+  id: z.string(),
+  notice: z.object({
+    year: z.number().int(),
+    round: z.string(),
+    title: z.string(),
+    url: z.string(),
+    applyStart: z.string().nullable(),
+    applyEnd: z.string().nullable(),
+    checkedAt: z.string(),
+  }),
+  status: z.enum(["approved", "under_review"]),
+  conditions: z.array(Condition),
+});
+export type Round = z.infer<typeof RoundSchema>;
+
 const Transition = z.enum(["none", "complete_training", "get_employed", "register_business"]);
 
 export const VerifiedPolicySchema = z.object({
@@ -68,6 +100,8 @@ export const VerifiedPolicySchema = z.object({
     .array(z.object({ transition: Transition, checkOrder: z.array(z.string()).min(1), rationale: z.string() }))
     .default([]),
   notes: z.string().default(""),
+  /** 회차별 규칙. 있으면 상태 조건은 statusConditions 대신 이것으로 판정한다 */
+  rounds: z.array(RoundSchema).optional(),
 });
 export type VerifiedPolicy = z.infer<typeof VerifiedPolicySchema>;
 

@@ -60,12 +60,12 @@ describe("I13: 한도 계산", () => {
   test("없는 정책 번호는 한도를 쓰지 않는다", async () => {
     const client = scriptedClient(notFound);
     for (let i = 0; i < 25; i++) expect((await handleVerify({ policyId: `2099${String(i).padStart(16, "0")}` }, vctx(client))).status).toBe(404);
-    expect((await handleVerify({ policyId: "20260406005400212445" }, vctx(client))).status).toBe(200);
+    expect((await handleVerify({ policyId: "20260928005400113623" }, vctx(client))).status).toBe(200);
   });
 
   test("같은 정책을 동시에 요청하면 한 번만 실행한다", async () => {
     const client = scriptedClient(notFound);
-    const id = "20260406005400212445";
+    const id = "20260928005400113623";
     await Promise.all([handleVerify({ policyId: id }, vctx(client)), handleVerify({ policyId: id }, vctx(client))]);
     expect(client.calls).toBe(1);
   });

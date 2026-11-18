@@ -4,7 +4,47 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import type { Policy } from "@/lib/data/types";
+import { toKstDate } from "@/lib/date";
 import { normalizeSpace, type Web } from "./web";
+
+const ymdOrNull = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+
+/** API 쪽 값. 날짜·숫자 항목은 코드가 비교할 수 있게 정해진 형식으로 */
+function apiValueOf(field: FieldCheck["field"], p: Policy): string {
+  switch (field) {
+    case "apply_period":
+      return p.applyPeriodType === "always" ? "상시" : `${p.applyStart ?? ""}~${p.applyEnd ?? ""}`;
+    case "biz_period":
+      return p.bizEnd ?? "";
+    case "age":
+      return `${p.minAge ?? ""}~${p.maxAge ?? ""}`;
+    case "region":
+      return p.zipCodes.join(",");
+    case "status_school_special":
+      return [...p.jobCodes, ...p.schoolCodes, ...p.specialCodes].join(",");
+    case "income":
+      return p.texts.income;
+    case "support":
+      return p.texts.support.slice(0, 200);
+    case "extra_conditions":
+      return `${p.texts.addQualification} ${p.texts.excluded}`.trim().slice(0, 200);
+    case "apply_link":
+      return p.links.apply ?? "";
+  }
+}
+
+/** 인용이 원문에 없으면 notice_not_found. 신청기간·연령은 AI가 뽑은 값을 코드가 비교해 상태를 정한다 */
+function toFieldCheck(f: Record<string, unknown>, p: Policy, quoted: (q: string) => boolean): FieldCheck[] {
+  const field = String(f.field) as FieldCheck["field"];
+  if (!(FIELDS as readonly string[]).includes(field)) return [];
+  const noticeValue = String(f.notice_value ?? "").replace(/\s+/g, "");
+  const quote = typeof f.quote === "string" ? f.quote : "";
+  const apiValue = apiValueOf(field, p);
+  let status = (["match", "differs", "not_in_notice"].includes(String(f.status)) ? f.status : "notice_not_found") as FieldCheck["status"];
+  if (status !== "not_in_notice" && (!quote || !quoted(quote))) status = "notice_not_found";
+  else if (status !== "not_in_notice" && (field === "apply_period" || field === "age")) status = noticeValue === apiValue.replace(/\s+/g, "") ? "match" : "differs";
+  return [{ field, status, apiValue, noticeValue, quote }];
+}
 
 export type AnthropicLike = {
   beta: { messages: { create(params: Record<string, unknown>): Promise<Anthropic.Beta.BetaMessage> } };
@@ -32,6 +72,18 @@ export type TrailStep = {
   reason: string;
 };
 
+/** 항목별 대조(통합 설계 4.2). 판정 근거와는 다른 질문: "API 값이 공고와 같은가" */
+export const FIELDS = ["apply_period", "biz_period", "age", "region", "status_school_special", "income", "support", "extra_conditions", "apply_link"] as const;
+export type FieldCheck = {
+  field: (typeof FIELDS)[number];
+  status: "match" | "differs" | "not_in_notice" | "notice_not_found";
+  apiValue: string;
+  noticeValue: string;
+  quote: string;
+};
+/** 대조한 공고의 연도·회차 */
+export type NoticeRound = { year: number; round: string; title: string; applyStart: string | null; applyEnd: string | null };
+
 export type VerifyResult = {
   policyId: string;
   mode: "agent" | "fixed";
@@ -41,6 +93,12 @@ export type VerifyResult = {
   mismatches: Mismatch[];
   trail: TrailStep[];
   usage: { calls: number; inputTokens: number; outputTokens: number; pagesOpened: number };
+  fieldChecks?: FieldCheck[];
+  /** 사람이 항목별 대조를 원문과 확인했으면 기록한다(검증 표시 '공고 항목 확인됨') */
+  fieldChecksConfirmed?: { by: "human"; at: string };
+  notice?: NoticeRound | null;
+  /** 대조한 날(KST). 7일이 지나면 준비 단계에서 다시 대조한다 */
+  checkedAt?: string;
   /** 서비스 안의 에이전트(Claude API)가 아니라 개발 도구가 같은 루프로 사전 실행한 결과면 표시한다 */
   producedBy?: "claude_code_session";
 };
@@ -122,6 +180,28 @@ function tools(searchesLeft: number): Record<string, unknown>[] {
               additionalProperties: false,
             },
           },
+          field_checks: {
+            type: "array",
+            description: "API 항목과 공고 값의 항목별 대조. 신청기간은 YYYY-MM-DD~YYYY-MM-DD, 연령은 최소~최대 숫자로 notice_value에 적는다",
+            items: {
+              type: "object",
+              properties: {
+                field: { type: "string", enum: [...FIELDS] },
+                status: { type: "string", enum: ["match", "differs", "not_in_notice"] },
+                notice_value: { type: "string" },
+                quote: QUOTE,
+              },
+              required: ["field", "status", "notice_value"],
+              additionalProperties: false,
+            },
+          },
+          notice: {
+            type: ["object", "null"],
+            description: "대조한 공고의 연도·회차·제목·신청기간",
+            properties: { year: { type: "integer" }, round: { type: "string" }, title: { type: "string" }, apply_start: { type: ["string", "null"] }, apply_end: { type: ["string", "null"] } },
+            required: ["year", "round", "title"],
+            additionalProperties: false,
+          },
         },
         required: ["outcome", "notice_url", "findings", "mismatches"],
         additionalProperties: false,
@@ -187,7 +267,7 @@ function asObjects(x: unknown): Record<string, unknown>[] {
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: { policyId: string; web: Web; state: State; mode: "agent" | "fixed"; openedUrls: string[] },
+  ctx: { policyId: string; web: Web; state: State; mode: "agent" | "fixed"; openedUrls: string[]; now: Date },
 ): Promise<{ content: string; isError?: boolean }> {
   const { web, state } = ctx;
   const step = state.trail.length + 1;
@@ -243,6 +323,11 @@ async function executeTool(
     const mismatches = asObjects(input.mismatches)
       .filter((m) => hasQuote(web, ctx.openedUrls, m.quote))
       .map((m) => ({ kind: String(m.kind) as MismatchKind, apiValue: String(m.api_value ?? ""), noticeValue: String(m.notice_value ?? ""), quote: String(m.quote), noticeUrl }));
+    const policy = loadSnapshot().policies.find((x) => x.id === ctx.policyId);
+    const fieldChecks = verifiedNotice && policy ? asObjects(input.field_checks).flatMap((f) => toFieldCheck(f, policy, (q) => hasQuote(web, [noticeUrl!], q))) : [];
+    const n = verifiedNotice && input.notice && typeof input.notice === "object" ? (input.notice as Record<string, unknown>) : null;
+    const notice: NoticeRound | null =
+      n && typeof n.year === "number" ? { year: n.year, round: String(n.round ?? ""), title: String(n.title ?? ""), applyStart: ymdOrNull(n.apply_start), applyEnd: ymdOrNull(n.apply_end) } : null;
     state.trail.push({ step, action: "finish", target: noticeUrl ?? "", reason: outcome });
     state.result = {
       policyId: ctx.policyId,
@@ -251,6 +336,9 @@ async function executeTool(
       noticeUrl: outcome === "verified_against_notice" ? noticeUrl : null,
       findings,
       mismatches,
+      fieldChecks,
+      notice,
+      checkedAt: toKstDate(ctx.now),
       trail: state.trail,
       usage: state.usage,
     };
@@ -322,7 +410,7 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
     }
     const results = [];
     for (const u of uses) {
-      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policyId, web: deps.web, state, mode, openedUrls });
+      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policyId, web: deps.web, state, mode, openedUrls, now: deps.now });
       results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
       if (state.result) break;
     }
@@ -339,7 +427,7 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
     return state.result;
   }
   state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: stopReason });
-  return { policyId, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], trail: state.trail, usage: state.usage };
+  return { policyId, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(deps.now), trail: state.trail, usage: state.usage };
 }
 
 export async function runVerification(policyId: string, deps: Deps): Promise<VerifyResult> {

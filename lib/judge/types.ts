@@ -1,6 +1,7 @@
 import type { StatusKey } from "@/lib/data/verified";
+import type { Evidence } from "./rules";
 
-export type EventType = "training_completion" | "employment" | "business_registration";
+export type EventType = "training_completion" | "employment" | "business_registration" | "relocation";
 
 export type ProfileEvent = {
   type: EventType;
@@ -20,6 +21,8 @@ export type Profile = {
   participating: string[];
   /** 상담 질문의 답: 최근 6개월 안에 취업·교육·직업훈련 이력이 있는지. 없으면 모름 */
   recentHistory?: "yes" | "no";
+  /** 응시일 기준 정책을 위한 응시(예정)일. 없으면 모름 */
+  examDate?: string;
   /** 화면 표시용. 서버는 이 값을 믿지 않는다 */
   source: "demo_persona" | "user";
 };
@@ -27,10 +30,13 @@ export type Profile = {
 export type PersonalValue = "eligible" | "code_met_unreviewed" | "needs_check" | "ineligible";
 
 export type Axes = {
-  personal: { value: PersonalValue; reasons: string[] };
+  /** evidence: 회차별 규칙이 있는 정책에서 조건마다 쓴 근거 */
+  personal: { value: PersonalValue; reasons: string[]; evidence?: Evidence[] };
   recruitment: "open" | "upcoming" | "closed" | "always" | "unknown";
   time: { value: "met" | "unmet" | "needs_check" | "na"; note?: string };
   restriction: { value: "applies" | "official_quote" | "confirmed_relation" | "unknown"; quotes: string[] };
+  /** 저장된 항목별 대조에서 온 문구(모집 축을 낮춘 이유, 참고 문구) */
+  fieldNotes?: string[];
 };
 
 export type Layer = "verified" | "partial" | "history";
@@ -51,6 +57,7 @@ export const REASON = {
   history: "최근 취업·훈련 이력 확인 필요",
   period: "기간 경과 후 재검토",
   statusUnknown: "현재 취업 상태 확인 필요",
+  roundReview: "올해 공고 기준 확인 중",
 } as const;
 
 /** 상태 전이 비교의 기준. 전이 전 프로필들(원래 프로필, 이전 가정 상태)에서 계산한다 */

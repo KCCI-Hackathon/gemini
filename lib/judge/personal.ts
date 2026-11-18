@@ -1,3 +1,4 @@
+import { judgeConditions, pickRound, type Evidence } from "./rules";
 import { toKstDate } from "@/lib/date";
 import { regionLabel } from "@/lib/data/regions";
 import type { Policy } from "@/lib/data/types";
@@ -16,6 +17,11 @@ export function ageRange(birthYm: string, refYmd: string): [number, number] {
 }
 
 /** 이벤트를 적용한 현재 상태. scheduled는 반영하지 않는다 */
+/** 그날까지 일어난(가정 포함) 사건만 반영한 상태. 예정(scheduled)은 반영하지 않는다 */
+export function statusAt(profile: Profile, ymd: string): Set<StatusKey> {
+  return effectiveStatus({ ...profile, events: profile.events.filter((e) => e.date <= ymd) });
+}
+
 export function effectiveStatus(profile: Profile): Set<StatusKey> {
   const s = new Set<StatusKey>(profile.currentStatus);
   const events = profile.events.filter((e) => e.status !== "scheduled").sort((a, b) => a.date.localeCompare(b.date));
@@ -45,11 +51,18 @@ const STATUS_LABEL: Partial<Record<StatusKey, string>> = {
   participating_national_employment_support: "국민취업지원제도 참여",
 };
 
+/** "미취업 조건: 공고의 대상 정의 확인 필요" */
+function definitionReason(missing: StatusKey[], excluded: StatusKey[]): string {
+  const keys = [...missing, ...excluded].map((k) => STATUS_LABEL[k] ?? k);
+  return `${keys.join("·")} 조건: 공고의 대상 정의 확인 필요`;
+}
+
 const RANK: Record<PersonalValue, number> = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible: 3 };
 
 class Verdict {
   value: PersonalValue;
   reasons: string[] = [];
+  evidence?: Evidence[];
   constructor(start: PersonalValue) {
     this.value = start;
   }
@@ -130,6 +143,21 @@ export function judgePersonal(
       const ref = v.age.referenceRule === "fixed_date" ? v.age.referenceDate : v.age.referenceRule === "apply_date" ? today : null;
       judgeAge(verdict, v.age.min, v.age.max, profile.birthYm, ref, today);
     }
+    // 회차별 규칙이 있으면 신청 시점의 회차로 조건마다 판정한다
+    if (v.rounds?.length) {
+      const pick = pickRound(v.rounds, today);
+      if (pick.state === "under_review") verdict.push("needs_check", REASON.roundReview);
+      else if (pick.round) {
+        const employmentRule = pick.round.conditions.some((c) => EMPLOYMENT_KEYS.includes(c.key));
+        const r = judgeConditions(pick.round, status, profile.examDate ? statusAt(profile, profile.examDate) : null);
+        verdict.evidence = r.evidence;
+        if (statusUnknown && employmentRule) verdict.push("needs_check", REASON.statusUnknown);
+        else for (const [val, reason] of r.verdicts) verdict.push(val, reason);
+      }
+      if (v.tenure && status.has("employed")) verdict.push("needs_check", REASON.tenure);
+      if (v.incomeQuote) verdict.push("needs_check", REASON.income);
+      return verdict;
+    }
     // 상태 조건
     const missing = v.statusConditions.requires.filter((k) => !status.has(k));
     const excluded = v.statusConditions.excludes.filter((k) => status.has(k));
@@ -144,10 +172,12 @@ export function judgePersonal(
         verdict.push("needs_check", REASON.statusUnknown);
       } else if (metBefore && (!ref || !ref.includes("신청일"))) {
         verdict.push("needs_check", REASON.referenceDate);
+        if (!v.statusConditions.definitionClear) verdict.push("needs_check", definitionReason(missing, excluded));
       } else if (v.statusConditions.definitionClear) {
         verdict.push("ineligible", `상태 조건 불충족(${[...missing.map((k) => `${STATUS_LABEL[k] ?? k} 필요`), ...excluded.map((k) => `${STATUS_LABEL[k] ?? k} 제외`)].join(", ")})`);
       } else {
-        verdict.push("needs_check", REASON.referenceDate);
+        // 공고가 상태의 정의를 분명히 하지 않는다: 기준일이 아니라 대상 정의가 문제다
+        verdict.push("needs_check", definitionReason(missing, excluded));
       }
     }
     if (v.tenure && status.has("employed")) verdict.push("needs_check", REASON.tenure);

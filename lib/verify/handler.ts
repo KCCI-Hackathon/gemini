@@ -1,5 +1,8 @@
 // /api/verify 처리. 요청은 정책 번호 하나만 받는다(설계 7장 서버 격리).
+import { toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { loadVerified } from "@/lib/data/verified";
+import { pickRound } from "@/lib/judge/rules";
 import { resetLimits, takeQuota } from "@/lib/limits";
 import { runVerification, policyHosts, type AnthropicLike, type VerifyResult } from "./run";
 import { createWeb } from "./web";
@@ -32,13 +35,19 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
   if (typeof policyId !== "string" || !/^\d{20}$/.test(policyId)) return { status: 400, body: { error: "정책 번호 형식이 잘못됐습니다." } };
 
   if (ctx.saved[policyId]) return { status: 200, body: { source: "saved", result: ctx.saved[policyId] } };
-  if (cache.has(policyId)) return { status: 200, body: { source: "cache", result: cache.get(policyId)! } };
+  const policy = loadSnapshot().policies.find((p) => p.id === policyId);
+  if (!policy) return { status: 404, body: { error: "정책을 찾을 수 없습니다." } };
+  // 찾는 키는 정책 번호 + API 수정일(통합 설계 4.4). 회차는 결과 안에 기록한다
+  const key = `${policyId}:${policy.modifiedAt}`;
+  if (cache.has(key)) return { status: 200, body: { source: "cache", result: cache.get(key)! } };
+  // 그 회차에 승인된 규칙이 있으면 사람이 확인한 근거로 판정한다: 실시간 AI 대조로 덮지 않는다(5.4)
+  const v = loadVerified().get(policyId);
+  if (v?.rounds?.length && pickRound(v.rounds, toKstDate(ctx.now)).state === "approved") {
+    return { status: 409, body: { error: "승인된 공고 규칙이 있는 정책은 실시간 AI 대조를 하지 않습니다." } };
+  }
   if (ctx.env.EXTERNAL_AI_ENABLED !== "true" || !ctx.env.ANTHROPIC_API_KEY) {
     return { status: 503, body: { error: "AI 검증이 꺼져 있습니다. 저장된 결과가 있는 정책만 볼 수 있습니다." } };
   }
-
-  const policy = loadSnapshot().policies.find((p) => p.id === policyId);
-  if (!policy) return { status: 404, body: { error: "정책을 찾을 수 없습니다." } };
 
   // 같은 정책을 이미 실행 중이면 그 결과를 함께 기다린다(중복 실행·중복 과금 방지)
   const running = inflight.get(policyId);
@@ -55,7 +64,7 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
   inflight.set(policyId, p);
   try {
     const result = await p;
-    cache.set(policyId, result);
+    cache.set(key, result);
     return { status: 200, body: { source: "live", result } };
   } catch {
     return { status: 502, body: { error: "AI 검증 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요." } };

@@ -35,8 +35,8 @@ describe("judgePolicy: 시연 인물 가(수강 중, 미취업)의 현재 판정
     expect(j(INCHEON).personal.value).toBe("eligible");
     expect(j(INCHEON).recruitment).toBe("open");
   });
-  test("k-뉴딜: 훈련 수강 중이라 조건상 비해당", () => {
-    expect(j(KNEWDEAL).personal.value).toBe("ineligible");
+  test("k-뉴딜: 훈련 수강 중이지만 공고상 개시일 전 해소 가능이라 확인 필요", () => {
+    expect(j(KNEWDEAL).personal.value).toBe("needs_check");
   });
   test("국민취업지원제도: 소득 조건이 있어 확인 필요, 상시", () => {
     expect(j(NATIONAL).personal.value).toBe("needs_check");

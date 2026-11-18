@@ -28,19 +28,19 @@ describe("simulateTransition", () => {
     expect(change(rs, INCHEON)).toBe("unchanged");
   });
 
-  test("취업 상태로 변경: 인천 응시료는 기준일 확인, 국취는 기준일 확인, 드림For는 조건 충족 시 검토(모집 종료)", () => {
+  test("취업 상태로 변경: 인천 응시료는 기준일(응시일) 확인, 국취는 대상 정의 확인, 드림For는 조건 충족 시 검토(모집 종료)", () => {
     const rs = simulateTransition(PERSONA_A, "get_employed", NOW);
     expect(change(rs, INCHEON)).toBe("reference_date_needed");
-    expect(change(rs, NATIONAL)).toBe("reference_date_needed");
+    expect(change(rs, NATIONAL)).toBe("definition_check");
     const d = rs.find((r) => r.policyId === DREAMFOR)!;
     expect(d.change).toBe("eligible_if_conditions");
     expect(d.after.recruitment).toBe("closed");
   });
 
-  test("이어서 적용: 수료 → 취업이면 k-뉴딜은 신청 가능 → 재검토", () => {
+  test("이어서 적용: 수료 → 취업이면 k-뉴딜은 '개시일 전 해소' 기준일 확인", () => {
     const trained = applyTransition(PERSONA_A, "complete_training", NOW);
     const rs = simulateTransition(trained, "get_employed", NOW);
-    expect(change(rs, KNEWDEAL)).toBe("recheck");
+    expect(change(rs, KNEWDEAL)).toBe("reference_date_needed");
   });
 
   test("일괄 비해당 금지: 제한없음 코드의 비검증 정책은 취업해도 그대로", () => {

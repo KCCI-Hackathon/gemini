@@ -25,9 +25,10 @@ describe("buildTimeline: 정책의 신청 구간을 기간 순으로 놓는다",
     expect(t.events.map((e) => `${e.type}:${e.date}`)).toEqual(["training_completion:2026-12-19"]);
   });
 
-  test("인천 응시료는 오늘부터, K-뉴딜은 수료일부터, 청년도전은 수료 6개월 뒤부터", () => {
+  test("인천 응시료와 K-뉴딜은 오늘부터(K-뉴딜은 수료일에 판정이 바뀜), 청년도전은 수료 6개월 뒤부터", () => {
     expect(row(t, INCHEON).firstAvailable).toBe("2026-11-24");
-    expect(row(t, KNEWDEAL).firstAvailable).toBe("2026-12-19");
+    expect(row(t, KNEWDEAL).firstAvailable).toBe("2026-11-24");
+    expect(row(t, KNEWDEAL).breaks).toEqual(["2026-12-19"]);
     expect(row(t, CHALLENGE).firstAvailable).toBe("2027-06-19");
   });
 
@@ -82,10 +83,10 @@ describe("개월 수 조절", () => {
     expect(c.summary).toContain("취업");
   });
 
-  test("K-뉴딜은 취업을 가정한 날부터 구간이 끊긴다", () => {
+  test("K-뉴딜은 수료일에 바로 취업해도 비해당이 아니라 '개시일 전 해소 확인'으로 이어진다", () => {
     const t = buildTimeline(PERSONA_A, new Date("2026-11-24T12:00:00+09:00"), { employAfterMonths: 0 });
-    // 수료일에 바로 취업: 미취업 구간이 없다
-    expect(row(t, KNEWDEAL).firstAvailable).toBeNull();
+    expect(row(t, KNEWDEAL).firstAvailable).toBe("2026-11-24");
+    expect(row(t, KNEWDEAL).breaks).toEqual(["2026-12-19"]);
   });
 
   test("수강 중이 아니면 기준은 오늘", () => {
@@ -122,7 +123,7 @@ describe("달마다 넘겨 보는 시뮬레이션", () => {
   test("일어나는 일은 날짜순이고, 삶의 사건과 정책의 열림·닫힘이 섞여 나온다", () => {
     expect(t.moments.map((m) => m.date)).toEqual([...t.moments.map((m) => m.date)].sort());
     expect(texts("2026-12-19", "2026-12-20").join(" ")).toContain("life:수료");
-    expect(t.moments.some((m) => m.kind === "open" && m.policyId === KNEWDEAL && m.date === "2026-12-19")).toBe(true);
+    expect(t.moments.some((m) => m.kind === "open" && m.policyId === KNEWDEAL)).toBe(false); // 오늘부터 열려 있다
     expect(t.moments.some((m) => m.kind === "close" && m.policyId === KNEWDEAL && m.date === "2026-12-31")).toBe(true);
     expect(t.moments.some((m) => m.kind === "open" && m.policyId === CHALLENGE && m.date === "2027-06-19")).toBe(true);
     expect(t.moments.some((m) => m.kind === "close" && m.policyId === CHALLENGE && m.date === "2027-08-19")).toBe(true);

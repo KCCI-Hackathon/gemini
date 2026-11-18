@@ -47,7 +47,7 @@ describe("I5: 모델이 형식이 틀린 입력을 줘도 죽지 않는다", () 
 
   test("AI 호출이 실패하면 500이 아니라 502 JSON", async () => {
     const failing = { beta: { messages: { create: async () => { throw new Error("529 overloaded"); } } } } as unknown as AnthropicLike;
-    const r = await handleVerify({ policyId: INCHEON }, { env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k" }, ip: "1.1.1.1", now: NOW, makeClient: () => failing, saved: {} });
+    const r = await handleVerify({ policyId: BIO }, { env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k" }, ip: "1.1.1.1", now: NOW, makeClient: () => failing, saved: {} });
     expect(r.status).toBe(502);
     expect(r.body.error).toBeTruthy();
   });

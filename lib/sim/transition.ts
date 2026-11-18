@@ -8,6 +8,7 @@ export type Change =
   | "recheck"
   | "recheck_code_only"
   | "reference_date_needed"
+  | "definition_check"
   | "eligible_if_conditions"
   | "opened_code_only"
   | "recheck_after_period"
@@ -18,6 +19,7 @@ export const CHANGE_LABEL: Record<Change, string> = {
   recheck: "자격 재검토",
   recheck_code_only: "자격 재검토(코드 기준, 본문 미확인)",
   reference_date_needed: "자격 판단 기준일 확인 필요",
+  definition_check: "공고의 대상 정의 확인 필요",
   eligible_if_conditions: "조건 충족 시 신청 가능",
   opened_code_only: "새로 검토할 정책(코드 기준, 본문 미확인)",
   recheck_after_period: "수료일 기준 6개월 경과 후 재검토",
@@ -48,7 +50,9 @@ export function classifyChange(before: Axes, after: Axes, verified: boolean): Ch
   if (sameValue && newReasons.length === 0 && before.time.value === after.time.value) return "unchanged";
   // 원래부터 다른 이유로 비해당이던 정책은 상태가 바뀌어도 사용자가 할 일이 없다
   if (before.personal.value === "ineligible" && after.personal.value === "ineligible" && before.time.note === after.time.note) return "unchanged";
-  if (newReasons.includes(REASON.referenceDate)) return "reference_date_needed";
+  // 회차별 규칙의 사유: 기준 시점(응시일·개시일 전 해소·기준 시점 없음)과 대상 정의는 공고를 다시 봐야 풀린다
+  if (newReasons.some((r) => r === REASON.referenceDate || r === "응시일 확인 필요" || r.includes("기준 시점이 없어") || r.includes("개시일 전 해소"))) return "reference_date_needed";
+  if (newReasons.some((r) => r.includes("공고의 대상 정의"))) return "definition_check";
   // 그 상태에서 다른 이유로 비해당이면 기간이 지나도 달라지지 않으므로 기간 라벨을 붙이지 않는다
   if (after.personal.value !== "ineligible" && after.time.value === "unmet" && after.time.note?.includes("수료일") && before.time.note !== after.time.note) return "recheck_after_period";
   if (!verified && newReasons.includes(REASON.codeStatus)) return "recheck_code_only";
@@ -94,11 +98,13 @@ export function simulateTransition(profile: Profile, t: Transition, now: Date, o
 }
 
 /** 상태가 바뀌면 에이전트가 확인하러 갈 정책(설계 5장 ④). 최대 5개 */
+const RANK_OF = (c: Change) => (c === "reference_date_needed" ? 0 : c === "definition_check" ? 1 : 2);
+
 export function needsVerification(results: TransitionResult[], verifiedCache: Set<string>): string[] {
   return results
-    .filter((r) => (r.change === "recheck_code_only" || r.change === "reference_date_needed") && !verifiedCache.has(r.policyId))
-    // 기준일이 문제인 정책이 먼저: 공고의 기준 시점을 확인하면 판정이 실제로 달라진다
-    .sort((a, b) => Number(b.change === "reference_date_needed") - Number(a.change === "reference_date_needed"))
+    .filter((r) => (r.change === "recheck_code_only" || r.change === "reference_date_needed" || r.change === "definition_check") && !verifiedCache.has(r.policyId))
+    // 기준일이 문제인 정책이 먼저, 그다음 대상 정의: 공고를 확인하면 판정이 실제로 달라진다
+    .sort((a, b) => RANK_OF(a.change) - RANK_OF(b.change))
     .slice(0, 5)
     .map((r) => r.policyId);
 }

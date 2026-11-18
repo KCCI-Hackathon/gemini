@@ -3,34 +3,162 @@
   "name": "청년도전지원사업",
   "applicationSubject": "individual",
   "statusConditions": {
-    "requires": ["unemployed"],
-    "excludes": ["in_training", "employed", "business_registered"],
+    "requires": [
+      "unemployed"
+    ],
+    "excludes": [
+      "in_training",
+      "employed",
+      "business_registered"
+    ],
     "definitionClear": true,
     "quotes": [
-      { "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.", "source": "official", "url": "https://www.work.go.kr/youngChallenge/index.do" }
+      {
+        "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.",
+        "source": "official",
+        "url": "https://www.work.go.kr/youngChallenge/index.do"
+      }
     ]
   },
-  "referenceDate": { "status": "신청일 기준 최근 6개월", "residence": null },
+  "referenceDate": {
+    "status": "신청일 기준 최근 6개월",
+    "residence": null
+  },
   "lookback": {
     "kind": "no_training_or_employment",
     "months": 6,
-    "quote": { "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.", "source": "official", "url": "https://www.work.go.kr/youngChallenge/index.do" }
+    "quote": {
+      "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.",
+      "source": "official",
+      "url": "https://www.work.go.kr/youngChallenge/index.do"
+    }
   },
   "tenure": null,
-  "age": { "min": 18, "max": 34, "referenceRule": null, "referenceDate": null, "quote": null },
-  "regionScope": { "sigunguLabels": null, "quote": null },
+  "age": {
+    "min": 18,
+    "max": 34,
+    "referenceRule": null,
+    "referenceDate": null,
+    "quote": null
+  },
+  "regionScope": {
+    "sigunguLabels": null,
+    "quote": null
+  },
   "incomeQuote": null,
   "restrictionQuotes": [
-    { "text": "국민취업지원제도에 참여하여 수혜 중인 자", "source": "api", "mentions": ["20260710005400113256"] }
+    {
+      "text": "국민취업지원제도에 참여하여 수혜 중인 자",
+      "source": "api",
+      "mentions": [
+        "20260710005400113256"
+      ]
+    }
   ],
   "confirmedRelations": [],
-  "apply": { "start": null, "end": null, "endTime": null, "type": "always" },
-  "sources": [{ "url": "https://www.work.go.kr/youngChallenge/index.do", "checkedAt": "2026-11-16" }],
+  "apply": {
+    "start": null,
+    "end": null,
+    "endTime": null,
+    "type": "always"
+  },
+  "sources": [
+    {
+      "url": "https://www.work.go.kr/youngChallenge/index.do",
+      "checkedAt": "2026-11-16"
+    }
+  ],
   "verificationStatus": "human_verified",
   "guidance": [
-    { "transition": "none", "checkOrder": ["실제(예정) 수료일 확인", "신청일 기준 최근 6개월의 취업·직업훈련 이력 확인", "국민취업지원제도 참여 여부 확인"], "rationale": "수강 중이거나 최근 6개월 안에 직업훈련 이력이 있으면 신청할 수 없다." },
-    { "transition": "complete_training", "checkOrder": ["수료일로부터 6개월이 지난 날짜 확인", "그 사이 취업 이력이 생기지 않았는지 확인"], "rationale": "수료 즉시 신청할 수 있는 것이 아니라, 신청일 기준 6개월 안에 훈련 이력이 없어야 한다." },
-    { "transition": "get_employed", "checkOrder": ["취업 후에는 대상이 아님. 퇴사 후 6개월 경과 여부 확인"], "rationale": "최근 6개월 안의 취업 이력도 제한 조건이다." }
+    {
+      "transition": "none",
+      "checkOrder": [
+        "실제(예정) 수료일 확인",
+        "신청일 기준 최근 6개월의 취업·직업훈련 이력 확인",
+        "국민취업지원제도 참여 여부 확인"
+      ],
+      "rationale": "수강 중이거나 최근 6개월 안에 직업훈련 이력이 있으면 신청할 수 없다."
+    },
+    {
+      "transition": "complete_training",
+      "checkOrder": [
+        "수료일로부터 6개월이 지난 날짜 확인",
+        "그 사이 취업 이력이 생기지 않았는지 확인"
+      ],
+      "rationale": "수료 즉시 신청할 수 있는 것이 아니라, 신청일 기준 6개월 안에 훈련 이력이 없어야 한다."
+    },
+    {
+      "transition": "get_employed",
+      "checkOrder": [
+        "취업 후에는 대상이 아님. 퇴사 후 6개월 경과 여부 확인"
+      ],
+      "rationale": "최근 6개월 안의 취업 이력도 제한 조건이다."
+    }
   ],
-  "notes": "API 본문은 '6개월 이상 … 참여 이력이 없고', 공식 신청 안내는 '신청일로부터 6개월 이내 … 이력이 없어야'로 표현이 다르다. 참여 제한 목록은 API 본문 기준(공식 페이지 미확인)."
+  "notes": "API 본문은 '6개월 이상 … 참여 이력이 없고', 공식 신청 안내는 '신청일로부터 6개월 이내 … 이력이 없어야'로 표현이 다르다. 참여 제한 목록은 API 본문 기준(공식 페이지 미확인). 2026-11-18: 회차별 규칙(rounds)으로 옮김. 조건별 사람 재확인(supportsConfirmed) 대기.",
+  "rounds": [
+    {
+      "id": "2026",
+      "notice": {
+        "year": 2026,
+        "round": "2026년",
+        "title": "청년도전지원사업(고용24 안내, 상시)",
+        "url": "https://www.work.go.kr/youngChallenge/index.do",
+        "applyStart": null,
+        "applyEnd": null,
+        "checkedAt": "2026-11-16"
+      },
+      "status": "approved",
+      "conditions": [
+        {
+          "key": "unemployed",
+          "kind": "requires",
+          "basis": "apply_date",
+          "definitionClear": true,
+          "quote": {
+            "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.",
+            "source": "official",
+            "url": "https://www.work.go.kr/youngChallenge/index.do"
+          },
+          "supportsConfirmed": null
+        },
+        {
+          "key": "in_training",
+          "kind": "excludes",
+          "basis": "apply_date",
+          "definitionClear": true,
+          "quote": {
+            "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.",
+            "source": "official",
+            "url": "https://www.work.go.kr/youngChallenge/index.do"
+          },
+          "supportsConfirmed": null
+        },
+        {
+          "key": "employed",
+          "kind": "excludes",
+          "basis": "apply_date",
+          "definitionClear": true,
+          "quote": {
+            "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.",
+            "source": "official",
+            "url": "https://www.work.go.kr/youngChallenge/index.do"
+          },
+          "supportsConfirmed": null
+        },
+        {
+          "key": "business_registered",
+          "kind": "excludes",
+          "basis": "apply_date",
+          "definitionClear": true,
+          "quote": {
+            "text": "신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.",
+            "source": "official",
+            "url": "https://www.work.go.kr/youngChallenge/index.do"
+          },
+          "supportsConfirmed": null
+        }
+      ]
+    }
+  ]
 }

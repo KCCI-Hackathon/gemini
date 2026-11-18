@@ -3,27 +3,99 @@
   "name": "국민취업지원제도",
   "applicationSubject": "individual",
   "statusConditions": {
-    "requires": ["unemployed"],
+    "requires": [
+      "unemployed"
+    ],
     "excludes": [],
     "definitionClear": false,
     "quotes": [
-      { "text": "II유형: 15세~69세 구직자 중 I유형에 해당하지 않는 가구단위 중위소득 100% 이하(청년은 소득 무관)", "source": "api" }
+      {
+        "text": "II유형: 15세~69세 구직자 중 I유형에 해당하지 않는 가구단위 중위소득 100% 이하(청년은 소득 무관)",
+        "source": "api"
+      }
     ]
   },
-  "referenceDate": { "status": null, "residence": null },
+  "referenceDate": {
+    "status": null,
+    "residence": null
+  },
   "lookback": null,
   "tenure": null,
-  "age": { "min": 15, "max": 69, "referenceRule": null, "referenceDate": null, "quote": null },
-  "regionScope": { "sigunguLabels": null, "quote": null },
-  "incomeQuote": { "text": "Ⅰ유형 중위소득60%이하, 중위소득120%이하", "source": "api" },
+  "age": {
+    "min": 15,
+    "max": 69,
+    "referenceRule": null,
+    "referenceDate": null,
+    "quote": null
+  },
+  "regionScope": {
+    "sigunguLabels": null,
+    "quote": null
+  },
+  "incomeQuote": {
+    "text": "Ⅰ유형 중위소득60%이하, 중위소득120%이하",
+    "source": "api"
+  },
   "restrictionQuotes": [],
   "confirmedRelations": [],
-  "apply": { "start": null, "end": null, "endTime": null, "type": "always" },
-  "sources": [{ "url": "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/149200005007", "checkedAt": "2026-11-16" }],
+  "apply": {
+    "start": null,
+    "end": null,
+    "endTime": null,
+    "type": "always"
+  },
+  "sources": [
+    {
+      "url": "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/149200005007",
+      "checkedAt": "2026-11-16"
+    }
+  ],
   "verificationStatus": "human_verified",
   "guidance": [
-    { "transition": "none", "checkOrder": ["Ⅰ유형과 Ⅱ유형 중 어디에 해당하는지 확인(청년은 Ⅱ유형 소득 무관)", "가구 소득과 재산 확인", "고용센터 또는 고용24에서 신청"], "rationale": "Ⅰ유형은 가구 소득·재산 조건이 있고, Ⅱ유형 청년은 소득과 무관하다." },
-    { "transition": "get_employed", "checkOrder": ["참여 중이라면 담당 상담사에게 취업 시 처리(수당 중단, 취업성공수당) 문의"], "rationale": "구직자의 정의와 참여 중 취업 시 처리는 공식 안내(정부24)에 나와 있지 않다." }
+    {
+      "transition": "none",
+      "checkOrder": [
+        "Ⅰ유형과 Ⅱ유형 중 어디에 해당하는지 확인(청년은 Ⅱ유형 소득 무관)",
+        "가구 소득과 재산 확인",
+        "고용센터 또는 고용24에서 신청"
+      ],
+      "rationale": "Ⅰ유형은 가구 소득·재산 조건이 있고, Ⅱ유형 청년은 소득과 무관하다."
+    },
+    {
+      "transition": "get_employed",
+      "checkOrder": [
+        "참여 중이라면 담당 상담사에게 취업 시 처리(수당 중단, 취업성공수당) 문의"
+      ],
+      "rationale": "구직자의 정의와 참여 중 취업 시 처리는 공식 안내(정부24)에 나와 있지 않다."
+    }
   ],
-  "notes": "고용노동부 정책 페이지는 2026-11-16 접속 오류로 읽지 못했다. 구직자 정의와 중복 제한은 운영 지침 확인 필요."
+  "notes": "고용노동부 정책 페이지는 2026-11-16 접속 오류로 읽지 못했다. 구직자 정의와 중복 제한은 운영 지침 확인 필요. 2026-11-18: 회차별 규칙(rounds)으로 옮김. 조건별 사람 재확인(supportsConfirmed) 대기.",
+  "rounds": [
+    {
+      "id": "2026",
+      "notice": {
+        "year": 2026,
+        "round": "2026년",
+        "title": "국민취업지원제도(정부24 안내, 상시)",
+        "url": "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/149200005007",
+        "applyStart": null,
+        "applyEnd": null,
+        "checkedAt": "2026-11-16"
+      },
+      "status": "approved",
+      "conditions": [
+        {
+          "key": "unemployed",
+          "kind": "requires",
+          "basis": "apply_date",
+          "definitionClear": false,
+          "quote": {
+            "text": "II유형: 15세~69세 구직자 중 I유형에 해당하지 않는 가구단위 중위소득 100% 이하(청년은 소득 무관)",
+            "source": "api"
+          },
+          "supportsConfirmed": null
+        }
+      ]
+    }
+  ]
 }

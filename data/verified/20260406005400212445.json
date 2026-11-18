@@ -3,35 +3,144 @@
   "name": "청년 자격증 응시료 지원(인천)",
   "applicationSubject": "individual",
   "statusConditions": {
-    "requires": ["unemployed"],
-    "excludes": ["health_insured_employee", "business_registered"],
+    "requires": [
+      "unemployed"
+    ],
+    "excludes": [
+      "health_insured_employee",
+      "business_registered"
+    ],
     "definitionClear": true,
     "quotes": [
-      { "text": "건강보험 직장가입자 및 개인사업자는 제외", "source": "api" },
-      { "text": "응시일 현재 미취업자 (2025.12.1. 이후 응시한 시험)", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412" }
+      {
+        "text": "건강보험 직장가입자 및 개인사업자는 제외",
+        "source": "api"
+      },
+      {
+        "text": "응시일 현재 미취업자 (2025.12.1. 이후 응시한 시험)",
+        "source": "official",
+        "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412"
+      }
     ]
   },
-  "referenceDate": { "status": "응시일 현재(미취업). 직장가입자·개인사업자 여부의 기준 시점은 원문에 없음", "residence": "신청일 현재 주민등록상 인천시 거주" },
+  "referenceDate": {
+    "status": "응시일 현재(미취업). 직장가입자·개인사업자 여부의 기준 시점은 원문에 없음",
+    "residence": "신청일 현재 주민등록상 인천시 거주"
+  },
   "lookback": null,
   "tenure": null,
   "age": {
-    "min": 18, "max": 39, "referenceRule": null, "referenceDate": null,
-    "quote": { "text": "18세~39세 청년(1986.1.1. ~ 2008.12.31.출생)", "source": "official", "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412" }
+    "min": 18,
+    "max": 39,
+    "referenceRule": null,
+    "referenceDate": null,
+    "quote": {
+      "text": "18세~39세 청년(1986.1.1. ~ 2008.12.31.출생)",
+      "source": "official",
+      "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412"
+    }
   },
-  "regionScope": { "sigunguLabels": null, "quote": null },
+  "regionScope": {
+    "sigunguLabels": null,
+    "quote": null
+  },
   "incomeQuote": null,
   "restrictionQuotes": [],
   "confirmedRelations": [],
-  "apply": { "start": "2026-02-01", "end": "2026-11-30", "endTime": "18:00", "type": "period" },
+  "apply": {
+    "start": "2026-02-01",
+    "end": "2026-11-30",
+    "endTime": "18:00",
+    "type": "period"
+  },
   "sources": [
-    { "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412", "checkedAt": "2026-11-16" },
-    { "url": "https://youth.incheon.go.kr/bbs/bbsMsgDetail.do?msg_seq=40&bcd=notice", "checkedAt": "2026-11-16" }
+    {
+      "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412",
+      "checkedAt": "2026-11-16"
+    },
+    {
+      "url": "https://youth.incheon.go.kr/bbs/bbsMsgDetail.do?msg_seq=40&bcd=notice",
+      "checkedAt": "2026-11-16"
+    }
   ],
   "verificationStatus": "human_verified",
   "guidance": [
-    { "transition": "none", "checkOrder": ["11월 30일 18시 마감 전에 신청", "응시일 현재 미취업이었는지 확인(건강보험자격득실확인서)", "사업자등록여부 사실증명 준비"], "rationale": "원문이 미취업 여부를 신청일이 아니라 응시일 기준으로 본다." },
-    { "transition": "get_employed", "checkOrder": ["취업 전에 응시한 시험인지 확인", "직장가입자 제외 조건의 기준 시점을 담당 기관에 문의", "11월 30일 18시 마감 확인"], "rationale": "미취업은 응시일 기준이지만, 직장가입자 제외 조건이 어느 시점을 보는지는 원문에 없다." },
-    { "transition": "register_business", "checkOrder": ["개인사업자 제외 조건의 기준 시점을 담당 기관에 문의"], "rationale": "원문은 개인사업자를 제외하지만 기준 시점을 밝히지 않는다." }
+    {
+      "transition": "none",
+      "checkOrder": [
+        "11월 30일 18시 마감 전에 신청",
+        "응시일 현재 미취업이었는지 확인(건강보험자격득실확인서)",
+        "사업자등록여부 사실증명 준비"
+      ],
+      "rationale": "원문이 미취업 여부를 신청일이 아니라 응시일 기준으로 본다."
+    },
+    {
+      "transition": "get_employed",
+      "checkOrder": [
+        "취업 전에 응시한 시험인지 확인",
+        "직장가입자 제외 조건의 기준 시점을 담당 기관에 문의",
+        "11월 30일 18시 마감 확인"
+      ],
+      "rationale": "미취업은 응시일 기준이지만, 직장가입자 제외 조건이 어느 시점을 보는지는 원문에 없다."
+    },
+    {
+      "transition": "register_business",
+      "checkOrder": [
+        "개인사업자 제외 조건의 기준 시점을 담당 기관에 문의"
+      ],
+      "rationale": "원문은 개인사업자를 제외하지만 기준 시점을 밝히지 않는다."
+    }
   ],
-  "notes": "API 본문에는 '응시일 현재'가 없고 공식 안내에만 있다(2026-11-16 대조)."
+  "notes": "API 본문에는 '응시일 현재'가 없고 공식 안내에만 있다(2026-11-16 대조). 2026-11-18: 회차별 규칙(rounds)으로 옮김. 조건별 사람 재확인(supportsConfirmed) 대기.",
+  "rounds": [
+    {
+      "id": "2026",
+      "notice": {
+        "year": 2026,
+        "round": "2026년",
+        "title": "2026년 청년 자격증 응시료 지원(인천)",
+        "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412",
+        "applyStart": "2026-02-01",
+        "applyEnd": "2026-11-30",
+        "checkedAt": "2026-11-16"
+      },
+      "status": "approved",
+      "conditions": [
+        {
+          "key": "unemployed",
+          "kind": "requires",
+          "basis": "exam_date",
+          "definitionClear": true,
+          "quote": {
+            "text": "응시일 현재 미취업자 (2025.12.1. 이후 응시한 시험)",
+            "source": "official",
+            "url": "https://youth.incheon.go.kr/youthpolicy/youthPolicyInfoDetail.do?poly_seq=412"
+          },
+          "supportsConfirmed": null
+        },
+        {
+          "key": "health_insured_employee",
+          "kind": "excludes",
+          "basis": "unspecified",
+          "definitionClear": true,
+          "quote": {
+            "text": "건강보험 직장가입자 및 개인사업자는 제외",
+            "source": "api"
+          },
+          "supportsConfirmed": null
+        },
+        {
+          "key": "business_registered",
+          "kind": "excludes",
+          "basis": "unspecified",
+          "definitionClear": true,
+          "quote": {
+            "text": "건강보험 직장가입자 및 개인사업자는 제외",
+            "source": "api"
+          },
+          "supportsConfirmed": null
+        }
+      ]
+    }
+  ]
 }
