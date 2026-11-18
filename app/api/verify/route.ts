@@ -1,11 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { makeAiClient } from "@/lib/ai/client";
 import { NextResponse } from "next/server";
 import saved from "@/data/verify-results/index.json";
 import { handleVerify } from "@/lib/verify/handler";
-import type { AnthropicLike, VerifyResult } from "@/lib/verify/run";
+import type { VerifyResult } from "@/lib/verify/run";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     env: process.env,
     ip,
     now: new Date(),
-    makeClient: () => new Anthropic() as unknown as AnthropicLike,
+    makeClient: () => makeAiClient(process.env),
     saved: saved as unknown as Record<string, VerifyResult>,
   });
   return NextResponse.json(out.body, { status: out.status });

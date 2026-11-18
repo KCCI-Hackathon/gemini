@@ -1,4 +1,5 @@
 // /api/verify 처리. 요청은 정책 번호 하나만 받는다(설계 7장 서버 격리).
+import { aiConfigured, isGemini } from "@/lib/ai/client";
 import { toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
@@ -45,7 +46,7 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
   if (v?.rounds?.length && pickRound(v.rounds, toKstDate(ctx.now)).state === "approved") {
     return { status: 409, body: { error: "승인된 공고 규칙이 있는 정책은 실시간 AI 대조를 하지 않습니다." } };
   }
-  if (ctx.env.EXTERNAL_AI_ENABLED !== "true" || !ctx.env.ANTHROPIC_API_KEY) {
+  if (!aiConfigured(ctx.env)) {
     return { status: 503, body: { error: "AI 검증이 꺼져 있습니다. 저장된 결과가 있는 정책만 볼 수 있습니다." } };
   }
 
@@ -59,7 +60,10 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
     client: ctx.makeClient(),
     web: createWeb({ fetchFn: ctx.fetchFn, extraHosts: policyHosts(policy) }),
     now: ctx.now,
-    enableSearch: true,
+    // Gemini는 함수 호출과 웹 검색을 함께 쓸 수 없어 검색 없이 공식 링크로만 탐색한다
+    enableSearch: !isGemini(ctx.env),
+    // Gemini는 한 번 부르는 데 오래 걸려(실측 1건 195초) 시간 한도를 환경 변수로 늘릴 수 있게 한다
+    deadlineMs: Number(ctx.env.VERIFY_DEADLINE_MS) || undefined,
   });
   inflight.set(policyId, p);
   try {

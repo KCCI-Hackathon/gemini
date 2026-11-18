@@ -5,6 +5,7 @@
 // - 서버에 상태를 남기지 않는다. 같은 요약·같은 모드면 같은 날 결과를 다시 쓴다(기타 글이 있으면 다시 쓰지 않음).
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { aiConfigured } from "@/lib/ai/client";
 import { monthsBetween, toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
 import { guardResponse } from "@/lib/agent/guard";
@@ -130,7 +131,7 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
     if (ctx.env.PLAN_AI_FOR_USERS !== "true" || !req.consent) return { status: 403, body: { disabled: true, error: "실제 사용자 정보로는 AI 계획 정리를 쓰지 않습니다." } };
     if (req.otherText) return { status: 400, body: { error: "실제 사용자의 자유 입력은 외부 AI로 보내지 않습니다." } };
   }
-  if (ctx.env.EXTERNAL_AI_ENABLED !== "true" || !ctx.env.ANTHROPIC_API_KEY) return { status: 503, body: { error: "AI가 꺼져 있습니다." } };
+  if (!aiConfigured(ctx.env)) return { status: 503, body: { error: "AI가 꺼져 있습니다." } };
 
   const session = req.session as PlanSession;
   const judged = handleJudge({ profile: session.profile, plan: session.plan, answers: session.answers }, ctx.now);

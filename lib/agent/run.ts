@@ -1,5 +1,6 @@
 // 상담 에이전트(가상 인물 시연 전용, 설계 5장 ⑤). 요청은 가상 인물 번호와 선택지만 받는다.
 import type Anthropic from "@anthropic-ai/sdk";
+import { aiConfigured } from "@/lib/ai/client";
 import { toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
 import { takeQuota } from "@/lib/limits";
@@ -65,7 +66,7 @@ export async function handleAgent(body: unknown, ctx: { env: Record<string, stri
   const pre = precheck(body);
   if ("status" in pre) return pre;
   const pid = pre.pid;
-  if (ctx.env.EXTERNAL_AI_ENABLED !== "true" || !ctx.env.ANTHROPIC_API_KEY) {
+  if (!aiConfigured(ctx.env)) {
     return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log: [] } };
   }
   const key = `${pid}:${toKstDate(ctx.now)}`;
