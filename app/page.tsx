@@ -5,6 +5,7 @@ import { regionLabel, regionOptions } from "@/lib/data/regions";
 import type { Roadmap, RoadmapCat } from "@/lib/route/roadmap";
 import { ChatPanel, DetailPanel, PlanModal, type PlanDraft } from "./planner/Panels";
 import { isChanging, RoadmapGrid } from "./planner/Roadmap";
+import { StageBoard } from "./planner/StageBoard";
 import s from "./planner/planner.module.css";
 import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
 
@@ -163,7 +164,7 @@ export default function Page() {
   const [filterCats, setFilterCats] = useState<Record<RoadmapCat, boolean>>(ALL_CATS);
   const [onlyMine, setOnlyMine] = useState(false);
   const [onlyChanging, setOnlyChanging] = useState(false);
-  const [groupBy, setGroupBy] = useState<"time" | "cat">("time");
+  const [view, setView] = useState<"stage" | "gantt">("stage");
   const [aiPicks, setAiPicks] = useState<AiPicks>({});
   const [onlyAi, setOnlyAi] = useState(false);
   const [mine, setMine] = useState<Set<string>>(new Set());
@@ -425,12 +426,12 @@ export default function Page() {
             </div>
           </div>
           <div className={s.filters} aria-label="분류 필터">
-            <span className={s.segment} role="group" aria-label="묶는 방법">
-              <button type="button" aria-pressed={groupBy === "time"} onClick={() => setGroupBy("time")}>
-                시점별
+            <span className={s.segment} role="group" aria-label="보기">
+              <button type="button" aria-pressed={view === "stage"} onClick={() => setView("stage")}>
+                단계별
               </button>
-              <button type="button" aria-pressed={groupBy === "cat"} onClick={() => setGroupBy("cat")}>
-                분류별
+              <button type="button" aria-pressed={view === "gantt"} onClick={() => setView("gantt")}>
+                기간표
               </button>
             </span>
             {CAT_ORDER.map((k) => (
@@ -469,6 +470,16 @@ export default function Page() {
           </div>
           {error && <p className={s.error}>{error}</p>}
           <div className={s.mainBody}>
+            {view === "stage" ? (
+              <StageBoard
+                roadmap={roadmap}
+                pass={(r) => filterCats[r.cat] && (!onlyMine || mine.has(r.policyId)) && (!onlyChanging || isChanging(r, roadmap.months)) && (!onlyAi || !!aiPicks[r.policyId])}
+                aiPicks={aiPicks}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onPlanEdit={() => setModal(true)}
+              />
+            ) : (
             <RoadmapGrid
               roadmap={roadmap}
               filterCats={filterCats}
@@ -479,10 +490,11 @@ export default function Page() {
               mine={mine}
               collapsed={collapsed}
               selectedId={selectedId}
-              groupBy={groupBy}
+              groupBy="cat"
               onToggleGroup={(key, open) => setCollapsed({ ...collapsed, [key]: !open })}
               onSelect={setSelectedId}
             />
+            )}
             {selected && <DetailPanel row={selected} mine={mine.has(selected.policyId)} pick={aiPicks[selected.policyId]} onClose={() => setSelectedId(null)} onToggleMine={() => toggleMine(selected.policyId)} />}
           </div>
           <p className={s.notice}>{roadmap.notice}</p>

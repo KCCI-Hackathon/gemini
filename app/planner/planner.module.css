@@ -245,3 +245,32 @@
 .segment { display: inline-flex; border: 1px solid var(--p-line); border-radius: 999px; overflow: hidden; }
 .segment button { border: none; background: #fff; padding: 0 12px; min-height: 32px; font-size: 13px; color: #4a4d63; }
 .segment button[aria-pressed="true"] { background: var(--p-accent); color: #fff; font-weight: 600; }
+
+/* ---------- 단계별 보기(열) ---------- */
+.board { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+.stageWrap { display: flex; align-items: flex-start; flex: 0 0 auto; }
+.stage { width: 236px; background: var(--p-surface); border: 1px solid var(--p-line); border-radius: 14px; display: flex; flex-direction: column; max-height: calc(100vh - 230px); }
+.stageHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 14px 14px 0 0; color: #fff; }
+.stageHead > div:first-child { display: grid; gap: 2px; }
+.stageHead strong { font-size: 16px; }
+.stageHead span { font-size: 12px; opacity: 0.9; }
+.stageCounts { display: grid; justify-items: end; gap: 2px; font-weight: 700; }
+.tone_now { background: #d93d42; }
+.tone_event { background: #6846e8; }
+.tone_startup { background: #a9561a; }
+.tone_later { background: #3a74cc; }
+.stageBody { padding: 10px; display: grid; gap: 8px; overflow-y: auto; align-content: start; }
+.stageArrow { align-self: center; margin: 0 6px; margin-top: 18px; font-size: 22px; color: #a3a6b6; }
+.card { text-align: left; background: #fff; border: 1px solid var(--p-line); border-left: 4px solid; border-radius: 10px; padding: 8px 10px; display: grid; gap: 5px; }
+.card:hover { box-shadow: 0 2px 8px rgba(23, 23, 47, 0.1); }
+.cardSelected { outline: 2px solid var(--p-accent); }
+.cardAi { background: #fbfaff; }
+.cardDim { opacity: 0.5; }
+.cardName { font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--p-ink); }
+.cardWhy { font-size: 12px; color: #4a4d63; line-height: 1.5; }
+@media (max-width: 900px) {
+  .board { flex-direction: column; overflow-x: visible; }
+  .stageWrap { flex-direction: column; width: 100%; }
+  .stage { width: 100%; max-height: none; }
+  .stageArrow { transform: rotate(90deg); margin: 4px auto; }
+}
