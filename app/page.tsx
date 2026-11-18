@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { regionLabel, regionOptions } from "@/lib/data/regions";
 import type { Roadmap, RoadmapCat } from "@/lib/route/roadmap";
 import { ChatPanel, DetailPanel, PlanModal, type PlanDraft } from "./planner/Panels";
-import { RoadmapGrid } from "./planner/Roadmap";
+import { isChanging, RoadmapGrid } from "./planner/Roadmap";
 import s from "./planner/planner.module.css";
 import { CAT_ORDER, CATS, DEMO, SCHOOLS, addMonthsYmd, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
 
@@ -162,6 +162,7 @@ export default function Page() {
 
   const [filterCats, setFilterCats] = useState<Record<RoadmapCat, boolean>>(ALL_CATS);
   const [onlyMine, setOnlyMine] = useState(false);
+  const [onlyChanging, setOnlyChanging] = useState(false);
   const [mine, setMine] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -363,7 +364,7 @@ export default function Page() {
   const selected = roadmap.rows.find((r) => r.policyId === selectedId) ?? null;
   const st = new Set(sess.profile.currentStatus);
   const chips = Object.entries(asked).map(([key, label]) => ({ key, label }));
-  const offCount = CAT_ORDER.filter((k) => !filterCats[k]).length + (onlyMine ? 1 : 0);
+  const offCount = CAT_ORDER.filter((k) => !filterCats[k]).length + (onlyMine ? 1 : 0) + (onlyChanging ? 1 : 0);
 
   return (
     <div className={s.page}>
@@ -420,6 +421,9 @@ export default function Page() {
                 {CATS[k].label}
               </button>
             ))}
+            <button type="button" aria-pressed={onlyChanging} className={onlyChanging ? s.optionOn : s.option} onClick={() => setOnlyChanging(!onlyChanging)} title="가정한 수료·취업·창업·이사로 신청 구간이 열리거나 닫히거나 판정이 바뀌는 정책">
+              가정으로 바뀌는 정책만 ({roadmap.rows.filter((r) => isChanging(r, roadmap.months)).length})
+            </button>
             <button type="button" aria-pressed={onlyMine} className={onlyMine ? s.optionOn : s.option} onClick={() => setOnlyMine(!onlyMine)}>
               내 계획만 ({mine.size})
             </button>
@@ -430,6 +434,7 @@ export default function Page() {
                 onClick={() => {
                   setFilterCats(ALL_CATS);
                   setOnlyMine(false);
+                  setOnlyChanging(false);
                 }}
               >
                 필터 초기화
@@ -445,6 +450,7 @@ export default function Page() {
               roadmap={roadmap}
               filterCats={filterCats}
               onlyMine={onlyMine}
+              onlyChanging={onlyChanging}
               mine={mine}
               collapsed={collapsed}
               selectedId={selectedId}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Roadmap, RoadmapCat, RoadmapRow } from "@/lib/route/roadmap";
 import s from "./planner.module.css";
 import { CAT_ORDER, CATS, STATUS_STYLE, addMonthsYmd, columnOf, periodLabel } from "./shared";
@@ -8,6 +9,8 @@ type Props = {
   roadmap: Roadmap;
   filterCats: Record<RoadmapCat, boolean>;
   onlyMine: boolean;
+  /** 가정한 상태 변화로 구간이 열리거나 닫히거나 판정이 바뀌는 정책만 */
+  onlyChanging: boolean;
   mine: Set<string>;
   collapsed: Record<string, boolean>;
   selectedId: string | null;
@@ -22,7 +25,16 @@ const nextDay = (ymd: string) => {
   return d.toISOString().slice(0, 10);
 };
 
-export function RoadmapGrid({ roadmap, filterCats, onlyMine, mine, collapsed, selectedId, onToggleCat, onSelect, onGoalClick }: Props) {
+const PAGE = 6;
+
+/** 가정 때문에 달라지는 줄: 오늘이 아닌 날 열림, 기간 안에 끝남, 경계 달이 있음 */
+export function isChanging(r: RoadmapRow, months: string[]): boolean {
+  const w = r.windows;
+  return r.boundaries.length > 0 || (w.length > 0 && (w[0].from > 0 || w[w.length - 1].to < months.length - 1)) || r.status === "wait";
+}
+
+export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, mine, collapsed, selectedId, onToggleCat, onSelect, onGoalClick }: Props) {
+  const [more, setMore] = useState<Record<string, boolean>>({});
   const N = roadmap.months.length;
   const pct = (col: number) => `${(Math.max(0, Math.min(N, col)) / N) * 100}%`;
 
@@ -34,7 +46,7 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, mine, collapsed, se
   }
 
   const groups = CAT_ORDER.filter((c) => filterCats[c])
-    .map((c) => ({ cat: c, rows: roadmap.rows.filter((r) => r.cat === c && (!onlyMine || mine.has(r.policyId))) }))
+    .map((c) => ({ cat: c, rows: roadmap.rows.filter((r) => r.cat === c && (!onlyMine || mine.has(r.policyId)) && (!onlyChanging || isChanging(r, roadmap.months))) }))
     .filter((g) => g.rows.length > 0);
 
   return (
@@ -120,7 +132,15 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, mine, collapsed, se
                     <span className={s.count}>{g.rows.length}</span>
                   </button>
                 </div>
-                {open && g.rows.map((r) => <PolicyRow key={r.policyId} r={r} months={roadmap.months} selected={selectedId === r.policyId} mine={mine.has(r.policyId)} onSelect={onSelect} pct={pct} />)}
+                {open &&
+                  (more[g.cat] ? g.rows : g.rows.slice(0, PAGE)).map((r) => <PolicyRow key={r.policyId} r={r} months={roadmap.months} selected={selectedId === r.policyId} mine={mine.has(r.policyId)} onSelect={onSelect} pct={pct} />)}
+                {open && g.rows.length > PAGE && (
+                  <div className={s.moreRow}>
+                    <button type="button" className={s.linkButton} onClick={() => setMore({ ...more, [g.cat]: !more[g.cat] })}>
+                      {more[g.cat] ? "접기" : `${c.label} ${g.rows.length - PAGE}개 더 보기`}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

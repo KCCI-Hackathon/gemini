@@ -56,7 +56,6 @@ export type Timeline = {
 };
 
 const HORIZON = 12;
-const EXTRA_ROWS = 6;
 const EVENT_LABEL: Record<EventType, string> = { training_completion: "수료", employment: "취업", business_registration: "사업자등록", relocation: "이사" };
 
 const NOTICE =
@@ -243,20 +242,17 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
     });
   }
 
-  // 줄: 사람이 확인한 정책은 모두, 나머지는 본문 미확인 '확인 필요'를 빼고 점수가 높은 것만
-  // 오늘부터 열려 있는 것과, 가정한 상태 변화로 새로 구간이 시작되는 것을 나눠 뽑는다
-  const candidates = drafts
-    .filter((d) => !d.verified && d.personalAtStart === "code_met_unreviewed")
-    .sort((a, b) => b.score - a.score || a.policyId.localeCompare(b.policyId));
-  const half = EXTRA_ROWS / 2;
-  const extra = [...candidates.filter((d) => d.firstAvailable === today).slice(0, half), ...candidates.filter((d) => d.firstAvailable !== today).slice(0, half)];
-  const chosen = [...drafts.filter((d) => d.verified), ...extra].sort(
-    (a, b) =>
-      (a.firstAvailable ?? "9999").localeCompare(b.firstAvailable ?? "9999") ||
-      Number(b.verified) - Number(a.verified) ||
-      (a.lastAvailable ?? "9999").localeCompare(b.lastAvailable ?? "9999") ||
-      a.policyId.localeCompare(b.policyId),
-  );
+  // 줄: 사람이 확인한 정책은 모두, 나머지는 이 기간에 신청 구간이 있는 정책 모두.
+  // 구간이 시작되는 순서, 같은 날이면 사람 확인 → "먼저 확인할 순서" 점수 순
+  const chosen = drafts
+    .filter((d) => d.verified || d.firstAvailable)
+    .sort(
+      (a, b) =>
+        (a.firstAvailable ?? "9999").localeCompare(b.firstAvailable ?? "9999") ||
+        Number(b.verified) - Number(a.verified) ||
+        b.score - a.score ||
+        a.policyId.localeCompare(b.policyId),
+    );
   let order = 1;
   const rows: TimelineRow[] = chosen.map((d) => ({
     order: d.firstAvailable ? order++ : null,

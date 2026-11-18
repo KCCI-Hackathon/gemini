@@ -218,3 +218,4 @@
 .evidence blockquote { margin: 0; font-size: 12px; color: #33354a; border-left: 3px solid var(--p-accent); padding-left: 8px; }
 .inputRow select { min-width: 0; flex: 1; height: 40px; border: 1px solid var(--p-line); border-radius: 10px; padding: 0 8px; background: #fff; font-size: 13px; }
 .qBox .inputRow { flex-wrap: wrap; }
+.moreRow { display: flex; align-items: center; height: 36px; padding-left: 16px; position: relative; z-index: 2; border-bottom: 1px solid #f0f1f5; background: var(--p-surface); }

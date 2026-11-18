@@ -145,3 +145,15 @@ describe("판정 요청의 plan", () => {
     expect(handleJudge({ profile: PERSONA_A, plan: { employAfterMonths: -1 } }, NOW).status).toBe(400);
   });
 });
+
+describe("로드맵에는 신청 구간이 있는 정책이 모두 오른다", () => {
+  test("오늘 모집 중·상시이고 비해당이 아닌 정책은 모두 줄에 있다", async () => {
+    const { judgeAll } = await import("@/lib/judge");
+    const now = new Date("2026-11-18T12:00:00+09:00");
+    const open = judgeAll(PERSONA_A, now).filter((r) => r.layer !== "history" && (r.axes.recruitment === "open" || r.axes.recruitment === "always") && r.axes.personal.value !== "ineligible" && r.axes.time.value !== "unmet");
+    const ids = new Set(buildTimeline(PERSONA_A, now, {}).rows.map((r) => r.policyId));
+    const missing = open.filter((r) => !ids.has(r.policy.id));
+    expect(missing.map((r) => r.policy.name)).toEqual([]);
+    expect(open.length).toBeGreaterThan(100);
+  });
+});
