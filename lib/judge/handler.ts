@@ -7,6 +7,8 @@ import { assembleCards, type ActionCard } from "@/lib/agent/assemble";
 import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
 import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, type Transition, type TransitionResult } from "@/lib/sim/transition";
 import { buildRoute, type Route } from "@/lib/route/build";
+import { allRelations } from "@/lib/route/build";
+import { buildPipeline, type Pipeline } from "@/lib/route/pipeline";
 import { buildRoadmap, type Roadmap } from "@/lib/route/roadmap";
 import { buildTimeline, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
@@ -79,6 +81,7 @@ export type JudgeBody =
       route: Route;
       timeline: Timeline;
       roadmap: Roadmap;
+      pipeline: Pipeline;
       needsVerification: string[];
     };
 
@@ -106,6 +109,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
     results = judgeAll(profile, now);
   }
   const timeline = buildTimeline(origin, now, parsed.data.plan ?? {});
+  const roadmap = buildRoadmap(timeline);
   const answered = new Set(Object.entries(parsed.data.answers ?? {}).filter(([, v]) => v && v !== "모름").map(([k]) => k));
   const changeById = new Map(changes.map((c) => [c.policyId, c]));
   const verified = loadVerified();
@@ -150,7 +154,8 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       questions: rankOpenQuestions(results).filter((q) => !answered.has(q.key)),
       route: buildRoute(origin, now),
       timeline,
-      roadmap: buildRoadmap(timeline),
+      roadmap,
+      pipeline: buildPipeline(roadmap, allRelations()),
       needsVerification: last ? needsVerification(changes, new Set()) : [],
     },
   };

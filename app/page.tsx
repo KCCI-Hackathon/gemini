@@ -5,7 +5,7 @@ import { regionLabel, regionOptions } from "@/lib/data/regions";
 import type { Roadmap, RoadmapCat } from "@/lib/route/roadmap";
 import { ChatPanel, DetailPanel, PlanModal, type PlanDraft } from "./planner/Panels";
 import { isChanging, RoadmapGrid } from "./planner/Roadmap";
-import { StageBoard } from "./planner/StageBoard";
+import { PipelineBoard } from "./planner/PipelineBoard";
 import s from "./planner/planner.module.css";
 import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
 
@@ -428,7 +428,7 @@ export default function Page() {
           <div className={s.filters} aria-label="분류 필터">
             <span className={s.segment} role="group" aria-label="보기">
               <button type="button" aria-pressed={view === "stage"} onClick={() => setView("stage")}>
-                단계별
+                파이프라인
               </button>
               <button type="button" aria-pressed={view === "gantt"} onClick={() => setView("gantt")}>
                 기간표
@@ -471,12 +471,12 @@ export default function Page() {
           {error && <p className={s.error}>{error}</p>}
           <div className={s.mainBody}>
             {view === "stage" ? (
-              <StageBoard
-                roadmap={roadmap}
-                pass={(r) => filterCats[r.cat] && (!onlyMine || mine.has(r.policyId)) && (!onlyChanging || isChanging(r, roadmap.months)) && (!onlyAi || !!aiPicks[r.policyId])}
+              <PipelineBoard
+                pipeline={data.pipeline}
                 aiPicks={aiPicks}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
+                onShowAll={() => setView("gantt")}
                 onPlanEdit={() => setModal(true)}
               />
             ) : (

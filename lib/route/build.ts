@@ -73,6 +73,11 @@ function nameOf(id: string): string {
   return loadVerified().get(id)?.name ?? loadSnapshot().policies.find((p) => p.id === id)?.name ?? id;
 }
 
+/** 정책 사이 관계 전체(공고 인용이 있는 것만): 연계(leads_to), 참여 중이면 제한(blocks) */
+export function allRelations(): RouteLink[] {
+  return links();
+}
+
 function links(): RouteLink[] {
   const out: RouteLink[] = routeLinks.map((l) => ({ from: l.from, fromName: nameOf(l.from), to: l.to, toName: nameOf(l.to), kind: "leads_to" as const, quote: l.quote, source: "official" as const, sourceUrl: l.sourceUrl, checkedAt: l.checkedAt }));
   // 참여 중이면 제한된다고 공고가 적은 관계

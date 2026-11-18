@@ -34,6 +34,8 @@ export type RoadmapRow = {
   windows: { from: number; to: number; state: "ok" | "check"; note?: string }[];
   /** 가정한 사건이 있는 달 중 판정이 바뀌는 칸: 그 달은 선후 확인 필요(통합 설계 5.2) */
   boundaries: { col: number; date: string; text: string }[];
+  /** 중복·유사사업 제한 일반 문구 */
+  restrictionQuote: string | null;
   /** 신청 구간이 시작되는 날. 가정한 사건 날이면 openedBy에 그 사건 이름 */
   firstAvailable: string | null;
   openedBy: string | null;
@@ -142,6 +144,7 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
         return { col: monthIndexOf(timeline.months, d), date: d, text: `신청일과 ${DATE_NAME[type]}의 선후 확인 필요` };
       }),
       firstAvailable: r.firstAvailable,
+      restrictionQuote: r.restrictionQuote,
       openedBy: (() => {
         const e = timeline.events.find((x) => x.date === r.firstAvailable && x.date > timeline.months[0]);
         return e ? GOAL_LABEL[e.type] : null;

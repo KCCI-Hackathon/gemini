@@ -35,6 +35,8 @@ export type TimelineRow = {
   boundaries: string[];
   /** 신청 구간이 시작되는 시점의 조건별 근거(회차별 규칙이 있는 정책만) */
   evidence: Evidence[];
+  /** 중복·유사사업 제한 문구(API 또는 공고). 상대 정책을 특정할 수 없는 일반 문구 */
+  restrictionQuote: string | null;
   /** 신청 구간이 시작되는 시점의 판정 사유. 구간이 없으면 없는 이유 하나 */
   reasons: string[];
   summary: string;
@@ -235,6 +237,7 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
       personalAtStart: startRow?.axes.personal.value ?? null,
       breaks,
       boundaries,
+      restrictionQuote: (startRow ?? r0).axes.restriction.quotes[0] ?? null,
       evidence: (startRow ?? r0).axes.personal.evidence ?? [],
       reasons: startRow ? startRow.axes.personal.reasons : [whyNot(perSample[perSample.length - 1].get(id) ?? r0)],
       summary,
@@ -265,6 +268,7 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
     personalAtStart: d.personalAtStart,
     breaks: d.breaks,
     boundaries: d.boundaries,
+    restrictionQuote: d.restrictionQuote,
     evidence: d.evidence,
     reasons: d.reasons,
     summary: d.summary,
