@@ -235,3 +235,13 @@
 .newDot { background: #17643f; color: #fff; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 0 4px; }
 .changeDot { background: #c48a12; color: #fff; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 0 5px; }
 .winNew { box-shadow: 0 0 0 2px #17643f; font-weight: 700; }
+.section { scroll-margin-top: 64px; }
+.groupTitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.groupSub { position: sticky; left: 280px; align-self: center; padding-left: 12px; font-size: 12px; color: var(--p-muted); white-space: nowrap; }
+.tagNew, .tagChanged, .tagLater { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.tagNew { background: #17643f; color: #fff; }
+.tagChanged { background: #fdf1dc; color: #8a5a00; border: 1px solid #e3b65a; }
+.tagLater { background: #e6f0fd; color: #1c4f9c; }
+.segment { display: inline-flex; border: 1px solid var(--p-line); border-radius: 999px; overflow: hidden; }
+.segment button { border: none; background: #fff; padding: 0 12px; min-height: 32px; font-size: 13px; color: #4a4d63; }
+.segment button[aria-pressed="true"] { background: var(--p-accent); color: #fff; font-weight: 600; }

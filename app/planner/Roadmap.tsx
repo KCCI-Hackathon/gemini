@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { Roadmap, RoadmapCat, RoadmapRow } from "@/lib/route/roadmap";
 import s from "./planner.module.css";
 import { CAT_ORDER, CATS, CIRCLED, STATUS_STYLE, addMonthsYmd, columnOf, periodLabel, type AiPick, type AiPicks } from "./shared";
@@ -17,9 +17,10 @@ type Props = {
   mine: Set<string>;
   collapsed: Record<string, boolean>;
   selectedId: string | null;
-  onToggleCat: (c: RoadmapCat) => void;
+  /** time: 지금·수료·취업·창업 시점별 묶음, cat: 분류별 묶음 */
+  groupBy: "time" | "cat";
+  onToggleGroup: (key: string, open: boolean) => void;
   onSelect: (id: string) => void;
-  onGoalClick: () => void;
 };
 
 const nextDay = (ymd: string) => {
@@ -44,30 +45,27 @@ export function isChanging(r: RoadmapRow, months: string[]): boolean {
   return r.boundaries.length > 0 || (w.length > 0 && (w[0].from > 0 || w[w.length - 1].to < months.length - 1)) || r.status === "wait";
 }
 
-export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, aiPicks, onlyAi, mine, collapsed, selectedId, onToggleCat, onSelect, onGoalClick }: Props) {
+type RowTag = { kind: "new" | "changed" | "later"; text: string };
+type Group = { key: string; title: string; sub?: string; dot: { fill: string; stroke: string }; rows: { r: RoadmapRow; tag?: RowTag }[]; defaultClosed?: boolean };
+
+const EVENT_DOT: Record<string, { fill: string; stroke: string }> = {
+  now: { fill: "#FDECEC", stroke: "#D93D42" },
+  training_completion: { fill: "#ECE7FD", stroke: "#6846E8" },
+  employment: { fill: "#ECE7FD", stroke: "#6846E8" },
+  business_registration: { fill: "#FCEADB", stroke: "#A9561A" },
+  relocation: { fill: "#DCF2EA", stroke: "#2A8F73" },
+  later: { fill: "#E0EBFB", stroke: "#3A74CC" },
+  none: { fill: "#F1F2F6", stroke: "#A3A6B6" },
+};
+
+export function RoadmapGrid({ roadmap, groupBy, filterCats, onlyMine, onlyChanging, aiPicks, onlyAi, mine, collapsed, selectedId, onToggleGroup, onSelect }: Props) {
   const [more, setMore] = useState<Record<string, boolean>>({});
-  const [openGoal, setOpenGoal] = useState<string | null>(null);
-  const laneRef = useRef<HTMLDivElement>(null);
-  // 펼친 목록 밖을 누르거나 Esc를 누르면 닫는다
-  useEffect(() => {
-    if (!openGoal) return;
-    const onDown = (e: MouseEvent) => {
-      if (laneRef.current && !laneRef.current.contains(e.target as Node)) setOpenGoal(null);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenGoal(null);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [openGoal]);
-  // 가까운 가정 표시는 위아래 두 줄로 엇갈려 놓는다
+  // 가까운 가정 표시는 위아래 두 줄로 엇갈려 놓는다(그래프 위에 목록을 겹쳐 띄우지 않는다)
   const goalRow = roadmap.goals.map((g, i) => (i > 0 && columnOf(roadmap.months, g.date) - columnOf(roadmap.months, roadmap.goals[i - 1].date) < 2.5 ? 1 : 0));
   for (let i = 1; i < goalRow.length; i++) if (goalRow[i] === 1 && goalRow[i - 1] === 1) goalRow[i] = 0;
-  const nameOf = (id: string) => roadmap.rows.find((r) => r.policyId === id)?.name ?? id;
   const N = roadmap.months.length;
   const pct = (col: number) => `${(Math.max(0, Math.min(N, col)) / N) * 100}%`;
+  const today = roadmap.months[0];
 
   const years: { y: string; n: number }[] = [];
   for (const m of roadmap.months) {
@@ -76,15 +74,60 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, aiPic
     else years.push({ y, n: 1 });
   }
 
-  const groups = CAT_ORDER.filter((c) => filterCats[c])
-    .map((c) => ({
-      cat: c,
-      rows: roadmap.rows
-        .filter((r) => r.cat === c && (!onlyMine || mine.has(r.policyId)) && (!onlyChanging || isChanging(r, roadmap.months)) && (!onlyAi || aiPicks[r.policyId]))
-        // AI가 고른 정책을 분류 맨 위로(AI 순번 순). 나머지는 원래 순서
-        .sort((a, b) => (aiPicks[a.policyId]?.rank ?? 999) - (aiPicks[b.policyId]?.rank ?? 999)),
-    }))
-    .filter((g) => g.rows.length > 0);
+  const pass = (r: RoadmapRow) => filterCats[r.cat] && (!onlyMine || mine.has(r.policyId)) && (!onlyChanging || isChanging(r, roadmap.months)) && (!onlyAi || !!aiPicks[r.policyId]);
+  const byAi = (a: { r: RoadmapRow }, b: { r: RoadmapRow }) => (aiPicks[a.r.policyId]?.rank ?? 999) - (aiPicks[b.r.policyId]?.rank ?? 999);
+  const byId = new Map(roadmap.rows.map((r) => [r.policyId, r]));
+
+  let groups: Group[];
+  if (groupBy === "time") {
+    const goalDates = new Set(roadmap.goals.map((g) => g.date));
+    const name = (t: string) => (t === "training_completion" ? "수료" : t === "employment" ? "취업" : t === "business_registration" ? "창업" : "이사");
+    groups = [
+      {
+        key: "now",
+        title: "지금 신청할 수 있는 정책",
+        sub: `오늘(${today}) 기준`,
+        dot: EVENT_DOT.now,
+        rows: roadmap.rows.filter((r) => r.firstAvailable === today && r.status !== "none" && pass(r)).map((r) => ({ r })),
+      },
+      ...roadmap.goals.map((g) => {
+        const ev = name(g.type);
+        const opened = g.opened.map((id) => byId.get(id)!).filter(pass).map((r) => ({ r, tag: { kind: "new" as const, text: `${ev}${josa(ev)} 새로 열림` } }));
+        const changed = g.changed.map((id) => byId.get(id)!).filter(pass).map((r) => ({ r, tag: { kind: "changed" as const, text: `${ev} 후 다시 확인` } }));
+        return {
+          key: g.type,
+          title: `${g.label} 이후`,
+          sub: `새로 열림 ${g.opened.length} · 다시 확인 ${g.changed.length}`,
+          dot: EVENT_DOT[g.type],
+          rows: [...opened, ...changed],
+        };
+      }),
+      {
+        key: "later",
+        title: "기간이 지나 열리는 정책",
+        sub: "최근 이력·대기 기간 조건이 풀리는 때",
+        dot: EVENT_DOT.later,
+        rows: roadmap.rows
+          .filter((r) => r.firstAvailable && r.firstAvailable > today && !goalDates.has(r.firstAvailable) && pass(r))
+          .map((r) => ({ r, tag: { kind: "later" as const, text: `${r.firstAvailable!.slice(0, 7).replace("-", ".")}부터 열림` } })),
+      },
+      { key: "none", title: "이 기간 신청 구간 없음", dot: EVENT_DOT.none, rows: roadmap.rows.filter((r) => !r.firstAvailable && pass(r)).map((r) => ({ r })), defaultClosed: true },
+    ];
+  } else {
+    groups = CAT_ORDER.filter((c) => filterCats[c]).map((c) => ({
+      key: c,
+      title: CATS[c].label,
+      dot: CATS[c],
+      rows: roadmap.rows.filter((r) => r.cat === c && pass(r)).map((r) => ({ r })),
+    }));
+  }
+  groups = groups.map((g) => ({ ...g, rows: [...g.rows].sort(byAi) })).filter((g) => g.rows.length > 0 || roadmap.goals.some((x) => x.type === g.key));
+
+  const isOpen = (g: Group) => (g.defaultClosed ? collapsed[g.key] === false : !collapsed[g.key]);
+  const jump = (key: string) => {
+    if (collapsed[key]) onToggleGroup(key, true);
+    requestAnimationFrame(() => document.getElementById(`sec-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   return (
     <div className={s.gridScroll}>
@@ -128,8 +171,8 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, aiPic
             </div>
           </div>
 
-          {/* 내 상태 줄 */}
-          <div className={s.goalLane} ref={laneRef}>
+          {/* 내 상태 줄: 표시를 누르면 그 시점의 묶음으로 내려간다 */}
+          <div className={s.goalLane}>
             <div className={s.labelCell}>
               <strong>내 상태 · 가정</strong>
               <span className={s.muted}>지금: {roadmap.stateLabels[0]}</span>
@@ -143,47 +186,18 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, aiPic
                   <button
                     type="button"
                     className={g.type === "business_registration" ? s.goalChipStartup : s.goalChip}
-                    onClick={() => setOpenGoal(openGoal === g.type ? null : g.type)}
-                    aria-expanded={openGoal === g.type}
+                    onClick={() => groupBy === "time" && jump(g.type)}
                     aria-label={`${g.label}, 새로 열림 ${g.opened.length}개, 다시 확인 ${g.changed.length}개`}
                   >
                     {g.label}
                     {g.opened.length + g.changed.length > 0 && (
                       <span className={s.goalCount}>
-                        {g.opened.length > 0 && `새로 열림 ${g.opened.length}`}
+                        {g.opened.length > 0 && `+${g.opened.length}`}
                         {g.opened.length > 0 && g.changed.length > 0 && " · "}
-                        {g.changed.length > 0 && `다시 확인 ${g.changed.length}`}
+                        {g.changed.length > 0 && `!${g.changed.length}`}
                       </span>
                     )}
                   </button>
-                  {openGoal === g.type && (
-                    <div className={s.goalPop} role="dialog" aria-label={`${g.label}에 바뀌는 정책`}>
-                      <div className={s.goalPopHead}>
-                        <button type="button" className={s.ghost} aria-label="닫기" onClick={() => setOpenGoal(null)} style={{ position: "absolute", right: 6, top: 6 }}>
-                          ✕
-                        </button>
-                        <strong>{g.label}</strong>
-                        <span className={s.muted}>{g.date}에 일어난다고 가정</span>
-                      </div>
-                      <div className={s.goalPopSec}>새로 열리는 정책 {g.opened.length}개</div>
-                      {g.opened.length === 0 && <div className={s.muted}>없음</div>}
-                      {g.opened.map((id) => (
-                        <button key={id} type="button" className={s.goalPopItem} onClick={() => { onSelect(id); setOpenGoal(null); }}>
-                          <span className={s.newDot}>NEW</span> {nameOf(id)}
-                        </button>
-                      ))}
-                      <div className={s.goalPopSec}>판정이 바뀌어 다시 확인할 정책 {g.changed.length}개</div>
-                      {g.changed.length === 0 && <div className={s.muted}>없음</div>}
-                      {g.changed.map((id) => (
-                        <button key={id} type="button" className={s.goalPopItem} onClick={() => { onSelect(id); setOpenGoal(null); }}>
-                          <span className={s.changeDot}>!</span> {nameOf(id)}
-                        </button>
-                      ))}
-                      <button type="button" className={s.linkButton} onClick={onGoalClick}>
-                        시점 바꾸기(계획 수정)
-                      </button>
-                    </div>
-                  )}
                 </div>
               ))}
               {roadmap.goals.length === 0 && <span className={s.muted}>가정한 수료·취업·창업이 없어요. 채팅이나 계획 수정에서 정할 수 있어요.</span>}
@@ -191,35 +205,36 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, aiPic
           </div>
 
           {groups.map((g) => {
-            const c = CATS[g.cat];
-            const open = !collapsed[g.cat];
+            const open = isOpen(g);
             return (
-              <div key={g.cat}>
+              <div key={g.key} id={`sec-${g.key}`} className={s.section}>
                 <div className={s.catRow}>
-                  <button type="button" className={s.catButton} aria-expanded={open} onClick={() => onToggleCat(g.cat)}>
+                  <button type="button" className={s.catButton} aria-expanded={open} onClick={() => onToggleGroup(g.key, !open)}>
                     <span className={s.chev} style={{ transform: `rotate(${open ? 0 : -90}deg)` }}>
                       ▾
                     </span>
-                    <span className={s.catDot} style={{ background: c.fill, borderColor: c.stroke }} />
-                    {c.label}
+                    <span className={s.catDot} style={{ background: g.dot.fill, borderColor: g.dot.stroke }} />
+                    <span className={s.groupTitle}>{g.title}</span>
                     <span className={s.count}>{g.rows.length}</span>
                   </button>
+                  {g.sub && <span className={s.groupSub}>{g.sub}</span>}
                 </div>
+                {open && g.rows.length === 0 && <div className={s.moreRow}><span className={s.muted}>이 시점에 새로 열리거나 바뀌는 정책이 없어요.</span></div>}
                 {open &&
-                  (more[g.cat] ? g.rows : g.rows.slice(0, PAGE)).map((r) => (
-                    <PolicyRow key={r.policyId} r={r} months={roadmap.months} selected={selectedId === r.policyId} mine={mine.has(r.policyId)} pick={aiPicks[r.policyId]} dim={Object.keys(aiPicks).length > 0 && !aiPicks[r.policyId]} onSelect={onSelect} pct={pct} />
+                  (more[g.key] ? g.rows : g.rows.slice(0, PAGE)).map(({ r, tag }) => (
+                    <PolicyRow key={r.policyId} r={r} tag={tag} months={roadmap.months} selected={selectedId === r.policyId} mine={mine.has(r.policyId)} pick={aiPicks[r.policyId]} dim={Object.keys(aiPicks).length > 0 && !aiPicks[r.policyId]} onSelect={onSelect} pct={pct} />
                   ))}
                 {open && g.rows.length > PAGE && (
                   <div className={s.moreRow}>
-                    <button type="button" className={s.linkButton} onClick={() => setMore({ ...more, [g.cat]: !more[g.cat] })}>
-                      {more[g.cat] ? "접기" : `${c.label} ${g.rows.length - PAGE}개 더 보기`}
+                    <button type="button" className={s.linkButton} onClick={() => setMore({ ...more, [g.key]: !more[g.key] })}>
+                      {more[g.key] ? "접기" : `${g.rows.length - PAGE}개 더 보기`}
                     </button>
                   </div>
                 )}
               </div>
             );
           })}
-          {groups.length === 0 && (
+          {groups.every((g) => g.rows.length === 0) && (
             <div className={s.empty}>
               <strong>조건에 맞는 정책이 없어요</strong>
               <span className={s.muted}>필터를 바꾸거나 채팅 질문에 답해 보세요.</span>
@@ -231,7 +246,7 @@ export function RoadmapGrid({ roadmap, filterCats, onlyMine, onlyChanging, aiPic
   );
 }
 
-function PolicyRow({ r, months, selected, mine, pick, dim, onSelect, pct }: { r: RoadmapRow; months: string[]; selected: boolean; mine: boolean; pick?: AiPick; dim: boolean; onSelect: (id: string) => void; pct: (c: number) => string }) {
+function PolicyRow({ r, tag, months, selected, mine, pick, dim, onSelect, pct }: { r: RoadmapRow; tag?: RowTag; months: string[]; selected: boolean; mine: boolean; pick?: AiPick; dim: boolean; onSelect: (id: string) => void; pct: (c: number) => string }) {
   const c = CATS[r.cat];
   const st = STATUS_STYLE[r.status];
   const N = months.length;
@@ -251,6 +266,7 @@ function PolicyRow({ r, months, selected, mine, pick, dim, onSelect, pct }: { r:
           {r.name}
         </button>
         <span className={s.chips}>
+          {tag && <span className={tag.kind === "new" ? s.tagNew : tag.kind === "changed" ? s.tagChanged : s.tagLater}>{tag.kind === "new" ? "NEW · " : tag.kind === "changed" ? "! " : ""}{tag.text}</span>}
           {pick && (
             <span className={s.aiChip} title={`AI가 고른 이유: ${pick.why}`}>
               AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank} · {pick.station}

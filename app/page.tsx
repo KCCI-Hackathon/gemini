@@ -163,6 +163,7 @@ export default function Page() {
   const [filterCats, setFilterCats] = useState<Record<RoadmapCat, boolean>>(ALL_CATS);
   const [onlyMine, setOnlyMine] = useState(false);
   const [onlyChanging, setOnlyChanging] = useState(false);
+  const [groupBy, setGroupBy] = useState<"time" | "cat">("time");
   const [aiPicks, setAiPicks] = useState<AiPicks>({});
   const [onlyAi, setOnlyAi] = useState(false);
   const [mine, setMine] = useState<Set<string>>(new Set());
@@ -424,6 +425,14 @@ export default function Page() {
             </div>
           </div>
           <div className={s.filters} aria-label="분류 필터">
+            <span className={s.segment} role="group" aria-label="묶는 방법">
+              <button type="button" aria-pressed={groupBy === "time"} onClick={() => setGroupBy("time")}>
+                시점별
+              </button>
+              <button type="button" aria-pressed={groupBy === "cat"} onClick={() => setGroupBy("cat")}>
+                분류별
+              </button>
+            </span>
             {CAT_ORDER.map((k) => (
               <button key={k} type="button" aria-pressed={filterCats[k]} className={filterCats[k] ? s.optionOn : s.option} onClick={() => setFilterCats({ ...filterCats, [k]: !filterCats[k] })}>
                 <span className={s.catDot} style={{ background: CATS[k].fill, borderColor: CATS[k].stroke }} />
@@ -470,9 +479,9 @@ export default function Page() {
               mine={mine}
               collapsed={collapsed}
               selectedId={selectedId}
-              onToggleCat={(c) => setCollapsed({ ...collapsed, [c]: !collapsed[c] })}
+              groupBy={groupBy}
+              onToggleGroup={(key, open) => setCollapsed({ ...collapsed, [key]: !open })}
               onSelect={setSelectedId}
-              onGoalClick={() => setModal(true)}
             />
             {selected && <DetailPanel row={selected} mine={mine.has(selected.policyId)} pick={aiPicks[selected.policyId]} onClose={() => setSelectedId(null)} onToggleMine={() => toggleMine(selected.policyId)} />}
           </div>
