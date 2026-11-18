@@ -17,7 +17,7 @@ import { VERIFY_MODEL, type AnthropicLike } from "@/lib/verify/run";
 import { summarizeForAI, type PlanSession } from "./summary";
 
 const SYSTEM = `당신은 청년 정책 계획 에이전트입니다. 사용자의 요약 정보와 코드가 계산한 정책 길(정거장별 정책)을 보고 다음 중 하나를 합니다.
-- 계획 정리(finish_plan): 정거장(지금, 수료 후, 취업 후 등)마다 확인할 정책과 그 이유를 정리합니다. 정책은 get_route에 나온 것만 씁니다.
+- 계획 정리(finish_plan): 정거장(지금, 수료 후, 취업 후 등)마다 그 정거장의 정책(지금은 policies, 이후는 new_policies·changed_policies) 중 먼저 볼 1~3개를 고릅니다. why에는 그 시점에 무엇이 새로 열리거나 바뀌는지를 판정 사유(reasons)에 근거해 한 문장으로 씁니다("확인" 같은 한 단어는 쓰지 않습니다). 정책이 없는 정거장은 items를 비웁니다. 정거장 label은 get_route의 label을 그대로 씁니다. 정책은 get_route에 나온 것만 씁니다.
 - 다음 질문(ask_user): rank_open_questions의 질문 후보 중 하나를 골라 문장만 씁니다. 선택지는 코드가 붙입니다.
 - 기타 글 해석(parse_other_answer): 사용자가 직접 쓴 답을 정해진 형식의 값으로 바꿉니다. 확실하지 않으면 해석하지 말고 no_more_questions로 끝냅니다.
 규칙
@@ -107,19 +107,28 @@ export function resetPlanState() {
 const GOAL_STATION: Record<string, string> = { training_completion: "수료 후", employment: "취업 후", business_registration: "창업 후", relocation: "이사 후" };
 
 /** AI에 줄 길: 날짜 대신 "N개월 뒤", 정책은 코드가 판정한 줄만 */
+/** AI에 줄 길: 정거장마다 그 시점에 볼 정책(지금은 열려 있는 것, 이후는 새로 열리는 것·판정이 바뀌는 것). 날짜 대신 "N개월 뒤" */
 function routeForAI(r: Roadmap) {
   const today = r.months[0];
+  const byId = new Map(r.rows.map((x) => [x.policyId, x]));
+  const brief = (id: string) => {
+    const x = byId.get(id)!;
+    return { policy_id: x.policyId, name: x.name, status: x.statusLabel, reasons: x.reasons.slice(0, 2), verify: x.verifyLabel };
+  };
+  const nowIds = r.rows
+    .filter((x) => x.firstAvailable === today && x.status !== "none")
+    .sort((a, b) => Number(b.verifyLabel !== "미검증(API)") - Number(a.verifyLabel !== "미검증(API)"))
+    .slice(0, 8)
+    .map((x) => x.policyId);
   return {
-    stations: ["지금", ...r.goals.map((g) => `${GOAL_STATION[g.type]}(${Math.max(0, monthsBetween(today, g.date))}개월 뒤)`)],
-    policies: r.rows.slice(0, 15).map((x) => ({
-      policy_id: x.policyId,
-      name: x.name,
-      status: x.statusLabel,
-      opens: x.windows[0] ? (x.windows[0].from === 0 ? "지금" : `${x.windows[0].from}개월 뒤`) : "이 기간 없음",
-      boundary_month: x.boundaries.length > 0,
-      reasons: x.reasons,
-      verify: x.verifyLabel,
-    })),
+    stations: [
+      { label: "지금", policies: nowIds.map(brief) },
+      ...r.goals.map((g) => ({
+        label: `${GOAL_STATION[g.type]}(${Math.max(0, monthsBetween(today, g.date))}개월 뒤)`,
+        new_policies: g.opened.slice(0, 6).map(brief),
+        changed_policies: g.changed.slice(0, 6).map(brief),
+      })),
+    ],
   };
 }
 
@@ -159,7 +168,7 @@ async function runPlan(
   ctx: Ctx,
 ): Promise<PlanBody> {
   const known = new Map(roadmap.rows.map((r) => [r.policyId, r.name]));
-  const stationNames = new Set(route.stations);
+  const stationNames = new Set(route.stations.map((st) => st.label));
   const verified = loadVerified();
   const log: { tool: string; summary: string }[] = [];
   const task = mode === "answer" ? (otherText ? `사용자가 직접 쓴 답을 해석하세요: """${otherText}"""` : "다음에 물을 질문을 고르세요.") : "정거장별 계획을 정리하세요.";
@@ -192,7 +201,7 @@ async function runPlan(
       const input = u.input as Record<string, unknown>;
       const reply = (content: string, isError = false) => results.push({ type: "tool_result", tool_use_id: u.id, content, ...(isError ? { is_error: true } : {}) });
       if (u.name === "get_route") {
-        log.push({ tool: u.name, summary: `정거장 ${route.stations.length}개, 정책 ${route.policies.length}개` });
+        log.push({ tool: u.name, summary: `정거장 ${route.stations.length}개` });
         reply(JSON.stringify(route));
       } else if (u.name === "rank_open_questions") {
         log.push({ tool: u.name, summary: `질문 후보 ${questions.length}개` });

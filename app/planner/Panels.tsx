@@ -5,7 +5,7 @@ import { regionOptions } from "@/lib/data/regions";
 import type { RoadmapCat, RoadmapRow } from "@/lib/route/roadmap";
 import s from "./planner.module.css";
 import { STATUS_NAME } from "@/lib/judge/rules";
-import { CAT_ORDER, CATS, STATUS_STYLE, periodLabel, type ChatMessage, type ChatQuestion } from "./shared";
+import { CAT_ORDER, CATS, CIRCLED, STATUS_STYLE, periodLabel, type AiPick, type ChatMessage, type ChatQuestion } from "./shared";
 
 const OUTCOME = { met: "충족", unmet: "어긋남", check: "확인 필요" } as const;
 
@@ -177,7 +177,7 @@ function DateAnswer({ disabled, onPick }: { disabled: boolean; onPick: (ymd: str
 
 /* ---------------- 정책 상세 ---------------- */
 
-export function DetailPanel({ row, mine, onClose, onToggleMine }: { row: RoadmapRow; mine: boolean; onClose: () => void; onToggleMine: () => void }) {
+export function DetailPanel({ row, mine, pick, onClose, onToggleMine }: { row: RoadmapRow; mine: boolean; pick?: AiPick; onClose: () => void; onToggleMine: () => void }) {
   const c = CATS[row.cat];
   const st = STATUS_STYLE[row.status];
   return (
@@ -199,6 +199,15 @@ export function DetailPanel({ row, mine, onClose, onToggleMine }: { row: Roadmap
         {row.org && <p className={s.muted}>{row.org}</p>}
       </div>
       <div className={s.detailBody}>
+        {pick && (
+          <div className={s.aiReason}>
+            <strong>
+              AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank} · {pick.station}
+            </strong>
+            <p>{pick.why}</p>
+            <span className={s.muted}>AI가 확인 순서를 고르고 이유를 쓴 것이에요. 자격 판정(아래)은 코드가 공고 근거로 계산한 결과 그대로예요.</span>
+          </div>
+        )}
         <dl className={s.dl}>
           <dt>공식 신청 기간</dt>
           <dd>{periodLabel(row.official)}</dd>

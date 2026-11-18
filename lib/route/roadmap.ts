@@ -34,6 +34,9 @@ export type RoadmapRow = {
   windows: { from: number; to: number; state: "ok" | "check"; note?: string }[];
   /** 가정한 사건이 있는 달 중 판정이 바뀌는 칸: 그 달은 선후 확인 필요(통합 설계 5.2) */
   boundaries: { col: number; date: string; text: string }[];
+  /** 신청 구간이 시작되는 날. 가정한 사건 날이면 openedBy에 그 사건 이름 */
+  firstAvailable: string | null;
+  openedBy: string | null;
   status: RoadmapStatus;
   statusLabel: string;
   summary: string;
@@ -42,7 +45,8 @@ export type RoadmapRow = {
   link: { url: string; kind: "official" | "api" } | null;
 };
 
-export type RoadmapGoal = { type: EventType; date: string; monthIndex: number; label: string };
+/** opened: 이 사건으로 신청 구간이 새로 열리는 정책 · changed: 이미 열려 있지만 이 사건으로 판정이 바뀌는 정책 */
+export type RoadmapGoal = { type: EventType; date: string; monthIndex: number; label: string; opened: string[]; changed: string[] };
 
 export type Roadmap = {
   months: string[];
@@ -136,6 +140,11 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
         const type = timeline.events.find((e) => e.date === d)?.type ?? "employment";
         return { col: monthIndexOf(timeline.months, d), date: d, text: `신청일과 ${DATE_NAME[type]}의 선후 확인 필요` };
       }),
+      firstAvailable: r.firstAvailable,
+      openedBy: (() => {
+        const e = timeline.events.find((x) => x.date === r.firstAvailable && x.date > timeline.months[0]);
+        return e ? GOAL_LABEL[e.type] : null;
+      })(),
       status,
       statusLabel: label,
       summary: r.summary,
@@ -150,6 +159,8 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
     date: e.date,
     monthIndex: monthIndexOf(timeline.months, e.date),
     label: `${GOAL_LABEL[e.type]} 가정 · ${e.date.slice(0, 7).replace("-", ".")}`,
+    opened: rows.filter((r) => r.firstAvailable === e.date).map((r) => r.policyId),
+    changed: rows.filter((r) => r.firstAvailable !== e.date && r.boundaries.some((b) => b.date === e.date)).map((r) => r.policyId),
   }));
 
   return { months: timeline.months, stateLabels: timeline.stateLabels, baseLabel: timeline.baseLabel, goals, rows, notice: timeline.notice };

@@ -136,11 +136,11 @@
 .todayLine { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--p-today); }
 .goalLine, .goalLineStartup { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--p-accent); }
 .goalLineStartup { border-left-color: #a9561a; }
-.goalLane { display: flex; height: 52px; position: relative; z-index: 2; border-bottom: 1px solid var(--p-line); background: rgba(248, 249, 252, 0.6); }
+.goalLane { display: flex; height: 70px; position: relative; z-index: 4; border-bottom: 1px solid var(--p-line); background: rgba(248, 249, 252, 0.6); }
 .goalLane > .labelCell { font-size: 13px; }
 .goalLane > .track { display: flex; align-items: center; padding-left: 40px; }
 .todayPill { position: absolute; top: 18px; transform: translateX(-50%); margin-left: 12px; height: 16px; padding: 0 5px; border-radius: 4px; background: var(--p-today); color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; }
-.goalChip, .goalChipStartup { position: absolute; top: 13px; transform: translateX(-9px); height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; color: #fff; background: var(--p-accent); border: 1.5px solid var(--p-accent); z-index: 2; }
+.goalChip, .goalChipStartup { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; color: #fff; background: var(--p-accent); border: 1.5px solid var(--p-accent); z-index: 2; }
 .goalChipStartup { background: #a9561a; border-color: #a9561a; }
 .catRow { display: flex; height: 40px; position: relative; z-index: 2; border-bottom: 1px solid var(--p-line-soft); background: #fafbfd; }
 .catRow > .catButton { flex: 0 0 280px; position: sticky; left: 0; background: #fafbfd; }
@@ -219,3 +219,19 @@
 .inputRow select { min-width: 0; flex: 1; height: 40px; border: 1px solid var(--p-line); border-radius: 10px; padding: 0 8px; background: #fff; font-size: 13px; }
 .qBox .inputRow { flex-wrap: wrap; }
 .moreRow { display: flex; align-items: center; height: 36px; padding-left: 16px; position: relative; z-index: 2; border-bottom: 1px solid #f0f1f5; background: var(--p-surface); }
+.aiChip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; background: #6846e8; color: #fff; }
+.polRowAi > .labelCell { box-shadow: inset 4px 0 0 #6846e8; }
+.polRowDim .offBar, .polRowDim .winOk, .polRowDim .winCheck, .polRowDim .polName { opacity: 0.45; }
+.aiReason { border: 1.5px solid #6846e8; background: #fbfaff; border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; font-size: 13px; }
+.aiReason p { margin: 0; line-height: 1.6; }
+.goalWrap { position: absolute; transform: translateX(-9px); z-index: 4; }
+.goalWrap:has(.goalPop) { z-index: 40; }
+.goalCount { background: rgba(255, 255, 255, 0.22); border-radius: 999px; padding: 0 6px; font-size: 11px; font-weight: 700; }
+.goalPop { position: absolute; top: 32px; left: 0; width: 300px; max-height: 360px; overflow-y: auto; background: var(--p-surface); border: 1px solid var(--p-line); border-radius: 12px; box-shadow: 0 12px 32px rgba(23, 23, 47, 0.18); padding: 12px; display: grid; gap: 6px; z-index: 30; }
+.goalPopHead { position: relative; display: grid; gap: 2px; font-size: 13px; padding-right: 32px; }
+.goalPopSec { font-size: 12px; font-weight: 700; color: #4a4d63; margin-top: 4px; }
+.goalPopItem { text-align: left; border: 1px solid var(--p-line); background: #fff; border-radius: 8px; padding: 6px 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.goalPopItem:hover { border-color: var(--p-accent); color: var(--p-accent-strong); }
+.newDot { background: #17643f; color: #fff; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 0 4px; }
+.changeDot { background: #c48a12; color: #fff; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 0 5px; }
+.winNew { box-shadow: 0 0 0 2px #17643f; font-weight: 700; }

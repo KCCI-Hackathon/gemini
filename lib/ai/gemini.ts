@@ -63,7 +63,8 @@ export function geminiClient(opts: { apiKey: string; model: string; fetchFn?: ty
     const tools = ((params.tools as Record<string, unknown>[] | undefined) ?? []).filter((t) => t.input_schema);
     const body: Record<string, unknown> = {
       contents: toContents((params.messages as Msg[]) ?? []),
-      generationConfig: { maxOutputTokens: Number(params.max_tokens ?? 8000) },
+      // Gemini 3은 기본으로 오래 생각해 한 번에 1~5분이 걸린다. 에이전트 단계마다 생각을 짧게 한다
+      generationConfig: { maxOutputTokens: Number(params.max_tokens ?? 8000), thinkingConfig: { thinkingLevel: "low" } },
     };
     if (typeof params.system === "string") body.systemInstruction = { parts: [{ text: params.system }] };
     if (tools.length) body.tools = [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description ?? "", parameters: toGeminiSchema(t.input_schema) })) }];

@@ -78,3 +78,8 @@ export type ChatQuestion = { key: string; text: string; options: ChatOption[]; d
 export type ChatMessage =
   | { id: number; role: "ai"; text: string; question?: ChatQuestion; answered?: string }
   | { id: number; role: "user"; text: string };
+
+/** AI 계획 정리 결과: 정책 번호 → 순번·정거장·이유. 판정은 바꾸지 않고 표시와 순서에만 쓴다 */
+export type AiPick = { rank: number; station: string; why: string };
+export type AiPicks = Record<string, AiPick>;
+export const CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮"];

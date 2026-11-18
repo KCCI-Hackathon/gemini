@@ -6,7 +6,7 @@ import type { Roadmap, RoadmapCat } from "@/lib/route/roadmap";
 import { ChatPanel, DetailPanel, PlanModal, type PlanDraft } from "./planner/Panels";
 import { isChanging, RoadmapGrid } from "./planner/Roadmap";
 import s from "./planner/planner.module.css";
-import { CAT_ORDER, CATS, DEMO, SCHOOLS, addMonthsYmd, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
+import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
 
 type Answers = Record<string, string>;
 type Session = { profile: Profile; plan: TimelinePlan; answers: Answers };
@@ -163,6 +163,8 @@ export default function Page() {
   const [filterCats, setFilterCats] = useState<Record<RoadmapCat, boolean>>(ALL_CATS);
   const [onlyMine, setOnlyMine] = useState(false);
   const [onlyChanging, setOnlyChanging] = useState(false);
+  const [aiPicks, setAiPicks] = useState<AiPicks>({});
+  const [onlyAi, setOnlyAi] = useState(false);
   const [mine, setMine] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -262,7 +264,14 @@ export default function Page() {
       else if (!res.ok) push({ role: "ai", text: body.error ?? "AI 계획 정리에 실패했어요." });
       else if (body.fallback || !body.plan) push({ role: "ai", text: "AI가 만든 계획에 확인할 수 없는 내용이 있어 쓰지 않았어요. 로드맵을 그대로 봐 주세요." });
       else {
-        const lines = (body.plan.stations as { label: string; items: { name: string; why: string }[] }[]).flatMap((st) => [`■ ${st.label}`, ...st.items.map((i) => `· ${i.name} — ${i.why}`)]);
+        const stations = body.plan.stations as { label: string; items: { policyId: string; name: string; why: string }[] }[];
+        const picks: AiPicks = {};
+        let rank = 0;
+        for (const st of stations) for (const i of st.items) if (!picks[i.policyId]) picks[i.policyId] = { rank: ++rank, station: st.label, why: i.why };
+        setAiPicks(picks);
+        setOnlyAi(true);
+        showToast(`AI가 정책 ${rank}개를 골라 로드맵에 표시했어요`);
+        const lines = stations.flatMap((st) => [`■ ${st.label}`, ...st.items.map((i) => `${CIRCLED[picks[i.policyId].rank - 1] ?? ""} ${i.name} — ${i.why}`)]);
         push({ role: "ai", text: ["[AI 계획 정리 · 판정은 코드 결과 그대로]", body.plan.summary, ...lines].join("\n") });
       }
     } catch {
@@ -421,6 +430,11 @@ export default function Page() {
                 {CATS[k].label}
               </button>
             ))}
+            {Object.keys(aiPicks).length > 0 && (
+              <button type="button" aria-pressed={onlyAi} className={onlyAi ? s.optionOn : s.option} onClick={() => setOnlyAi(!onlyAi)}>
+                AI 추천만 ({Object.keys(aiPicks).length})
+              </button>
+            )}
             <button type="button" aria-pressed={onlyChanging} className={onlyChanging ? s.optionOn : s.option} onClick={() => setOnlyChanging(!onlyChanging)} title="가정한 수료·취업·창업·이사로 신청 구간이 열리거나 닫히거나 판정이 바뀌는 정책">
               가정으로 바뀌는 정책만 ({roadmap.rows.filter((r) => isChanging(r, roadmap.months)).length})
             </button>
@@ -451,6 +465,8 @@ export default function Page() {
               filterCats={filterCats}
               onlyMine={onlyMine}
               onlyChanging={onlyChanging}
+              aiPicks={aiPicks}
+              onlyAi={onlyAi}
               mine={mine}
               collapsed={collapsed}
               selectedId={selectedId}
@@ -458,7 +474,7 @@ export default function Page() {
               onSelect={setSelectedId}
               onGoalClick={() => setModal(true)}
             />
-            {selected && <DetailPanel row={selected} mine={mine.has(selected.policyId)} onClose={() => setSelectedId(null)} onToggleMine={() => toggleMine(selected.policyId)} />}
+            {selected && <DetailPanel row={selected} mine={mine.has(selected.policyId)} pick={aiPicks[selected.policyId]} onClose={() => setSelectedId(null)} onToggleMine={() => toggleMine(selected.policyId)} />}
           </div>
           <p className={s.notice}>{roadmap.notice}</p>
           {toast && (

@@ -110,3 +110,19 @@ describe("검증 표시 네 가지(통합 설계 7.3)", () => {
     }
   });
 });
+
+describe("가정한 시점마다 새로 열리는 정책과 다시 확인할 정책", () => {
+  test("취업(수료 1개월 뒤 = 2027-01-19)으로 새로 열리는 정책이 그 가정 표시에 모인다", () => {
+    const r = roadmap({ employAfterMonths: 1 });
+    const job = r.goals.find((g) => g.type === "employment")!;
+    expect(job.opened.length).toBeGreaterThan(0);
+    for (const id of job.opened) expect(row(r, id).firstAvailable).toBe("2027-01-19");
+    expect(row(r, job.opened[0]).openedBy).toBe("취업");
+  });
+
+  test("수료(2026-12-19)로 판정이 바뀌는 K-뉴딜은 수료 표시의 '다시 확인'에 들어간다", () => {
+    const done = roadmap().goals.find((g) => g.type === "training_completion")!;
+    expect(done.changed).toContain(KNEWDEAL);
+    expect(done.opened).not.toContain(KNEWDEAL);
+  });
+});
