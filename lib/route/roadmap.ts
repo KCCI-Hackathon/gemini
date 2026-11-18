@@ -46,7 +46,8 @@ export type RoadmapRow = {
 };
 
 /** opened: 이 사건으로 신청 구간이 새로 열리는 정책 · changed: 이미 열려 있지만 이 사건으로 판정이 바뀌는 정책 */
-export type RoadmapGoal = { type: EventType; date: string; monthIndex: number; label: string; opened: string[]; changed: string[] };
+/** openedAfter: 이 시점부터 다음 시점 전까지 새로 신청 구간이 열리는 정책(오늘 이미 열린 것 제외) */
+export type RoadmapGoal = { type: EventType; date: string; monthIndex: number; label: string; opened: string[]; changed: string[]; openedAfter: string[] };
 
 export type Roadmap = {
   months: string[];
@@ -161,6 +162,14 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
     label: `${GOAL_LABEL[e.type]} 가정 · ${e.date.slice(0, 7).replace("-", ".")}`,
     opened: rows.filter((r) => r.firstAvailable === e.date).map((r) => r.policyId),
     changed: rows.filter((r) => r.firstAvailable !== e.date && r.boundaries.some((b) => b.date === e.date)).map((r) => r.policyId),
+    openedAfter: rows
+      .filter((r) => {
+        const fa = r.firstAvailable;
+        const next = timeline.events.find((x) => x.date > e.date)?.date ?? "9999";
+        return !!fa && fa > timeline.months[0] && fa >= e.date && fa < next;
+      })
+      .sort((a, b) => a.firstAvailable!.localeCompare(b.firstAvailable!))
+      .map((r) => r.policyId),
   }));
 
   return { months: timeline.months, stateLabels: timeline.stateLabels, baseLabel: timeline.baseLabel, goals, rows, notice: timeline.notice };

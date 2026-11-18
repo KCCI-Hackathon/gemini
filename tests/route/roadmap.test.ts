@@ -126,3 +126,26 @@ describe("가정한 시점마다 새로 열리는 정책과 다시 확인할 정
     expect(done.opened).not.toContain(KNEWDEAL);
   });
 });
+
+describe("가정한 시점 뒤에 새로 열리는 정책(다음 시점 전까지)", () => {
+  test("열리는 날이 그 시점 이후 다음 시점 전이면 그 시점에 모인다", () => {
+    const r = roadmap({ employAfterMonths: 3, businessAfterMonths: 6 });
+    const today = r.months[0];
+    const goals = r.goals;
+    for (let i = 0; i < goals.length; i++) {
+      const next = goals[i + 1]?.date ?? "9999";
+      for (const id of goals[i].openedAfter) {
+        const fa = row(r, id).firstAvailable!;
+        expect(fa >= goals[i].date && fa < next && fa > today).toBe(true);
+      }
+    }
+    // 취업을 가정하지 않으면 청년도전(수료 6개월 뒤 열림)은 수료 시점 뒤에 새로 열리는 정책이다
+    const done = roadmap({}).goals.find((g) => g.type === "training_completion")!;
+    expect(done.openedAfter).toContain(CHALLENGE);
+  });
+
+  test("오늘 이미 열려 있는 정책은 어느 시점에도 들어가지 않는다", () => {
+    const r = roadmap({ employAfterMonths: 3 });
+    for (const g of r.goals) for (const id of g.openedAfter) expect(row(r, id).firstAvailable).not.toBe(r.months[0]);
+  });
+});

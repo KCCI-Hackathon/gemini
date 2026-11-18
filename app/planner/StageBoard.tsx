@@ -20,11 +20,13 @@ function josa(word: string): string {
   return jong === 0 || jong === 8 ? "로" : "으로";
 }
 
-/** 열 만들기: 지금(오늘 열려 있음) · 가정한 사건마다(새로 열림 + 다시 확인) · 기간이 지나 열림 */
+/** 열 만들기: 지금(오늘 열려 있음) · 가정한 시점마다 "그 뒤 다음 시점 전까지 새로 열리는 정책"만.
+ *  지금 판정은 첫 열에서 이미 봤으므로, 뒤 열에는 판정이 바뀐 정책(다시 확인)을 다시 싣지 않는다 */
 export function buildColumns(roadmap: Roadmap, pass: (r: RoadmapRow) => boolean): Column[] {
   const today = roadmap.months[0];
   const byId = new Map(roadmap.rows.map((r) => [r.policyId, r]));
-  const goalDates = new Set(roadmap.goals.map((g) => g.date));
+  const firstGoal = roadmap.goals[0]?.date ?? "9999";
+  const ym = (d: string) => d.slice(0, 7).replace("-", ".");
   const cols: Column[] = [
     {
       key: "now",
@@ -33,30 +35,26 @@ export function buildColumns(roadmap: Roadmap, pass: (r: RoadmapRow) => boolean)
       tone: "now",
       rows: roadmap.rows.filter((r) => r.firstAvailable === today && r.status !== "none" && pass(r)).map((r) => ({ r })),
     },
-    ...roadmap.goals.map((g) => {
-      const ev = EVENT_NAME[g.type];
-      return {
-        key: g.type,
-        title: `${ev} 가정`,
-        when: g.date.slice(0, 7).replace("-", "."),
-        tone: g.type === "business_registration" ? ("startup" as const) : ("event" as const),
-        rows: [
-          ...g.opened.map((id) => byId.get(id)!).filter(pass).map((r) => ({ r, tag: { kind: "new" as const, text: `${ev}${josa(ev)} 새로 열림` } })),
-          ...g.changed.map((id) => byId.get(id)!).filter(pass).map((r) => ({ r, tag: { kind: "changed" as const, text: `${ev} 후 다시 확인` } })),
-        ],
-        note: g.opened.length === 0 && g.changed.length === 0 ? "이 시점에 새로 열리거나 바뀌는 정책이 없어요" : undefined,
-      };
-    }),
   ];
-  const later = roadmap.rows.filter((r) => r.firstAvailable && r.firstAvailable > today && !goalDates.has(r.firstAvailable) && pass(r));
-  if (later.length)
+  // 오늘과 첫 가정 시점 사이에 열리는 정책(모집 시작 등)
+  const soon = roadmap.rows.filter((r) => r.firstAvailable && r.firstAvailable > today && r.firstAvailable < firstGoal && pass(r));
+  if (soon.length)
+    cols.push({ key: "soon", title: roadmap.goals.length ? "곧 열림" : "앞으로 열림", when: roadmap.goals.length ? `${ym(firstGoal)} 전` : "12개월 안", tone: "later", rows: soon.map((r) => ({ r, tag: { kind: "later" as const, text: `${ym(r.firstAvailable!)}부터 열림` } })) });
+  for (const g of roadmap.goals) {
+    const ev = EVENT_NAME[g.type];
+    const rows = g.openedAfter
+      .map((id) => byId.get(id)!)
+      .filter(pass)
+      .map((r) => ({ r, tag: r.firstAvailable === g.date ? { kind: "new" as const, text: `${ev}${josa(ev)} 바로 열림` } : { kind: "later" as const, text: `${ym(r.firstAvailable!)}부터 열림` } }));
     cols.push({
-      key: "later",
-      title: "기간이 지나 열림",
-      when: "이력·대기 조건이 풀릴 때",
-      tone: "later",
-      rows: later.map((r) => ({ r, tag: { kind: "later" as const, text: `${r.firstAvailable!.slice(0, 7).replace("-", ".")}부터` } })),
+      key: g.type,
+      title: `${ev} 후`,
+      when: `${ev} 가정 ${ym(g.date)}`,
+      tone: g.type === "business_registration" ? "startup" : "event",
+      rows,
+      note: rows.length === 0 ? "이 시점 뒤에 새로 열리는 정책이 없어요" : undefined,
     });
+  }
   return cols;
 }
 
@@ -77,14 +75,7 @@ export function StageBoard({ roadmap, pass, aiPicks, selectedId, onSelect, onPla
                 <span>{c.when}</span>
               </div>
               <div className={s.stageCounts}>
-                {c.key === "now" ? (
-                  <span>{c.rows.length}개</span>
-                ) : (
-                  <>
-                    <span>새로 {c.rows.filter((x) => x.tag?.kind === "new").length}</span>
-                    {c.key !== "later" && <span>다시 확인 {c.rows.filter((x) => x.tag?.kind === "changed").length}</span>}
-                  </>
-                )}
+                <span>{c.key === "now" ? `${c.rows.length}개` : `새로 열림 ${c.rows.length}`}</span>
               </div>
             </header>
             <div className={s.stageBody}>

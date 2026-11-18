@@ -187,16 +187,10 @@ export function RoadmapGrid({ roadmap, groupBy, filterCats, onlyMine, onlyChangi
                     type="button"
                     className={g.type === "business_registration" ? s.goalChipStartup : s.goalChip}
                     onClick={() => groupBy === "time" && jump(g.type)}
-                    aria-label={`${g.label}, 새로 열림 ${g.opened.length}개, 다시 확인 ${g.changed.length}개`}
+                    aria-label={`${g.label}, 그 뒤 새로 열림 ${g.openedAfter.length}개`}
                   >
                     {g.label}
-                    {g.opened.length + g.changed.length > 0 && (
-                      <span className={s.goalCount}>
-                        {g.opened.length > 0 && `+${g.opened.length}`}
-                        {g.opened.length > 0 && g.changed.length > 0 && " · "}
-                        {g.changed.length > 0 && `!${g.changed.length}`}
-                      </span>
-                    )}
+                    {g.openedAfter.length > 0 && <span className={s.goalCount}>새로 {g.openedAfter.length}</span>}
                   </button>
                 </div>
               ))}
