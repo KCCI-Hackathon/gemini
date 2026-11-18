@@ -484,7 +484,7 @@ function Header({ onReset }: { onReset?: () => void }) {
           ⑂
         </span>
         <span>
-          <strong>갈림길</strong>
+          <strong>PathFinder</strong>
           <small>청년 정책 플래너</small>
         </span>
       </div>

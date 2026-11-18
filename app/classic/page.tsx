@@ -252,7 +252,7 @@ export default function Page() {
     <main className={styles.main}>
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>갈림길</h1>
+          <h1 className={styles.title}>PathFinder</h1>
           <p className={styles.tagline}>취업·수료·창업이라는 갈림길에서, 내 정책 자격이 실제로 어떻게 바뀌는지 공식 공고 근거로 확인합니다.</p>
         </div>
         <span className={`${styles.mode} ${profile.source === "demo_persona" ? styles.modeDemo : ""}`}>

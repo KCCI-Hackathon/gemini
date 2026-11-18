@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "갈림길",
+  title: "PathFinder",
   description: "취업·수료·창업이라는 갈림길에서 달라지는 청년 정책 자격을 공식 공고 근거로 보여주는 서비스",
 };
 
