@@ -28,7 +28,8 @@ export type PipelineCard = {
   dupNote: string | null;
 };
 export type PipelineColumn = {
-  /** "2026-11" 같은 마감월, 12개월 뒤보다 늦으면 "beyond", 기한이 없으면 "always" */
+  /** "2026-11" 같은 마감월, 12개월 뒤보다 늦으면 "beyond", 기한이 없으면 "always",
+   *  지금 신청할 수 있고 마감이 첫 상태 변화 뒤면 "now_rest"(첫 표시 바로 앞에 한 열로) */
   key: string;
   title: string;
   cards: PipelineCard[];
@@ -82,14 +83,24 @@ export function buildPipeline(roadmap: Roadmap, relations: RouteLink[]): Pipelin
   });
 
   const horizon = roadmap.months[roadmap.months.length - 1].slice(0, 7);
+  // 첫 상태 변화 뒤의 열에는 상태 변화로 열린 정책만 싣는다.
+  // 지금 신청할 수 있는데 마감이 그 뒤인 정책은 첫 표시 바로 앞 한 열(now_rest)에 모은다
+  const firstEvent = roadmap.goals[0]?.date.slice(0, 7) ?? null;
   const groups = new Map<string, RoadmapRow[]>();
   for (const r of rows) {
     const close = closeOf(r);
-    const key = !close ? "always" : close.slice(0, 7) > horizon ? "beyond" : close.slice(0, 7);
+    const src = card(r).source;
+    const month = close?.slice(0, 7) ?? null;
+    let key = !month ? "always" : month > horizon ? "beyond" : month;
+    if (firstEvent && (src === "now" || src === "later") && (!month || month >= firstEvent)) key = "now_rest";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(r);
   }
-  const order = (k: string) => (k === "always" ? "9999-99" : k === "beyond" ? "9999-98" : k);
+  const prevMonth = (ym: string) => {
+    const [y, m] = ym.split("-").map(Number);
+    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  };
+  const order = (k: string) => (k === "always" ? "9999-99" : k === "beyond" ? "9999-98" : k === "now_rest" ? `${prevMonth(firstEvent!)}~` : k);
   const keys = [...groups.keys()].sort((a, b) => order(a).localeCompare(order(b)));
 
   const columns: PipelineColumn[] = keys.map((key) => {
@@ -118,7 +129,7 @@ export function buildPipeline(roadmap: Roadmap, relations: RouteLink[]): Pipelin
     const [y, m] = key.split("-");
     return {
       key,
-      title: key === "always" ? "상시 · 기한 없음" : key === "beyond" ? `${horizon.slice(0, 4)}년 ${Number(horizon.slice(5))}월 이후 마감` : `${y === thisYear ? "" : `${y}년 `}${Number(m)}월 마감`,
+      title: key === "now_rest" ? "지금 신청 · 마감 여유" : key === "always" ? (firstEvent ? "상시 · 기한 없음(상태 변화로 열림)" : "상시 · 기한 없음") : key === "beyond" ? `${horizon.slice(0, 4)}년 ${Number(horizon.slice(5))}월 이후 마감` : `${y === thisYear ? "" : `${y}년 `}${Number(m)}월 마감`,
       cards,
       allIds: all.map((r) => r.policyId),
       total: all.length,
@@ -130,7 +141,7 @@ export function buildPipeline(roadmap: Roadmap, relations: RouteLink[]): Pipelin
 
   const markers: PipelineMarker[] = roadmap.goals.map((g) => {
     const month = g.date.slice(0, 7);
-    const before = keys.find((k) => order(k) >= month) ?? "always";
+    const before = keys.find((k) => k !== "now_rest" && order(k) >= month) ?? keys.at(-1) ?? "always";
     return { type: g.type, date: g.date, label: `${EVENT_NAME[g.type]} 가정 ${g.date.slice(5).replace("-", ".")}`, beforeKey: before };
   });
 
