@@ -1,25 +1,41 @@
 "use client";
 
-// 파이프라인 보기: 기간(지금 → 수료 후 → 취업 후 → 창업 후)마다 먼저 볼 정책 몇 장,
-// 그리고 정책 사이의 중복 수혜 제한(공고 인용)·연계를 따로 그린다. 판정은 코드 결과 그대로.
-import type { Pipeline, PipelineCard } from "@/lib/route/pipeline";
+// 파이프라인 보기: 신청 마감월로 열을 자른다(11월 마감 → 12월 마감 → … → 상시).
+// 카드 색은 출처(지금 열려 있음 = 빨강, 수료 뒤 = 보라, 취업 뒤 = 초록, 창업 뒤 = 주황),
+// 가정한 사건은 열 사이 표시. 정책 사이 중복 수혜 제한·연계는 카드 안에. 판정은 코드 결과 그대로.
+import type { CardSource, Pipeline, PipelineCard, PipelineColumn } from "@/lib/route/pipeline";
 import s from "./planner.module.css";
-import { CATS, CIRCLED, STATUS_STYLE, type AiPicks } from "./shared";
+import { CIRCLED, STATUS_STYLE, type AiPicks } from "./shared";
 
-const TONE: Record<string, string> = { now: "tone_now", training_completion: "tone_event", employment: "tone_event", business_registration: "tone_startup", relocation: "tone_later" };
+export const SOURCE: Record<CardSource, { label: string; color: string; bg: string }> = {
+  now: { label: "지금 신청 가능", color: "#D93D42", bg: "#FDECEC" },
+  later: { label: "곧 열림", color: "#3A74CC", bg: "#E6F0FD" },
+  training_completion: { label: "수료 후 열림", color: "#6846E8", bg: "#F1EDFF" },
+  employment: { label: "취업 후 열림", color: "#17643F", bg: "#E3F5EC" },
+  business_registration: { label: "창업 후 열림", color: "#A9561A", bg: "#FCEADB" },
+  relocation: { label: "이사 후 열림", color: "#2A8F73", bg: "#DCF2EA" },
+};
 
-export function PipelineBoard({ pipeline, aiPicks, selectedId, onSelect, onShowAll, onPlanEdit }: { pipeline: Pipeline; aiPicks: AiPicks; selectedId: string | null; onSelect: (id: string) => void; onShowAll: () => void; onPlanEdit: () => void }) {
+const md = (d: string) => `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`;
+
+export function PipelineBoard({ pipeline, aiPicks, selectedId, onSelect, onShowAll }: { pipeline: Pipeline; aiPicks: AiPicks; selectedId: string | null; onSelect: (id: string) => void; onShowAll: () => void }) {
   const hasAi = Object.keys(aiPicks).length > 0;
   const byAi = (a: PipelineCard, b: PipelineCard) => (aiPicks[a.policyId]?.rank ?? 999) - (aiPicks[b.policyId]?.rank ?? 999);
+  const sourcesUsed = [...new Set(pipeline.columns.flatMap((c) => Object.keys(c.bySource) as CardSource[]))];
 
   const renderCard = (c: PipelineCard) => {
     const pick = aiPicks[c.policyId];
     const st = STATUS_STYLE[c.status];
+    const src = SOURCE[c.source];
     return (
-      <div key={c.policyId} className={`${s.card} ${selectedId === c.policyId ? s.cardSelected : ""} ${pick ? s.cardAi : ""} ${hasAi && !pick ? s.cardDim : ""}`} style={{ borderLeftColor: CATS[c.cat].stroke }}>
+      <div key={c.policyId} className={`${s.card} ${selectedId === c.policyId ? s.cardSelected : ""} ${pick ? s.cardAi : ""} ${hasAi && !pick ? s.cardDim : ""}`} style={{ borderLeftColor: src.color, background: c.source === "now" ? undefined : src.bg }}>
         <button type="button" className={s.cardMain} onClick={() => onSelect(c.policyId)}>
           <span className={s.chips}>
-            {c.opensAt && <span className={s.tagLater}>{c.opensAt.slice(0, 7).replace("-", ".")}부터 열림</span>}
+            <span className={s.srcChip} style={{ background: src.color }}>
+              {src.label}
+              {c.opensAt ? ` · ${md(c.opensAt)}~` : ""}
+            </span>
+            {c.closesAt && <span className={s.dueChip}>{md(c.closesAt)} 마감</span>}
             {pick && <span className={s.aiChip}>AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank}</span>}
           </span>
           <span className={s.cardName}>{c.name}</span>
@@ -59,54 +75,74 @@ export function PipelineBoard({ pipeline, aiPicks, selectedId, onSelect, onShowA
     );
   };
 
+  const renderColumn = (col: PipelineColumn) => {
+    const cards = [...col.cards].sort(byAi);
+    const grouped = new Set(col.exclusiveGroups.flat());
+    return (
+      <section className={s.stage} aria-label={col.title}>
+        <header className={s.dueHead}>
+          <div>
+            <strong>{col.title}</strong>
+            <span>{col.total}개</span>
+          </div>
+          <div className={s.srcDots}>
+            {(Object.entries(col.bySource) as [CardSource, number][]).map(([k, n]) => (
+              <span key={k} title={SOURCE[k].label}>
+                <i style={{ background: SOURCE[k].color }} />
+                {n}
+              </span>
+            ))}
+          </div>
+        </header>
+        <div className={s.stageBody}>
+          {col.exclusiveGroups.map((g) => (
+            <div key={g.join(":")} className={s.exclusive}>
+              <span className={s.exclusiveHead}>중복 수혜 불가 · 둘 중 하나</span>
+              {g.map((id) => cards.find((c) => c.policyId === id)).filter(Boolean).map((c) => renderCard(c!))}
+            </div>
+          ))}
+          {cards.filter((c) => !grouped.has(c.policyId)).map(renderCard)}
+          {col.hidden > 0 && (
+            <button type="button" className={s.linkButton} onClick={onShowAll}>
+              그 외 {col.hidden}개는 기간표에서 보기
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  };
+
   return (
-    <div className={s.board}>
-      {pipeline.stages.map((st, i) => {
-        const cards = [...st.cards].sort(byAi);
-        const grouped = new Set(st.exclusiveGroups.flat());
-        return (
-          <div key={st.key} className={s.stageWrap}>
-            <section className={s.stage} aria-label={`${st.title} ${st.when}`}>
-              <header className={`${s.stageHead} ${s[TONE[st.key] ?? "tone_event"]}`}>
-                <div>
-                  <strong>{st.title}</strong>
-                  <span>{st.when}</span>
+    <div className={s.pipeWrap}>
+      <div className={s.legendRow}>
+        {sourcesUsed.map((k) => (
+          <span key={k}>
+            <i style={{ background: SOURCE[k].color }} />
+            {SOURCE[k].label}
+          </span>
+        ))}
+        <span className={s.muted}>· 열은 신청 마감월, 카드 색은 언제부터 신청할 수 있는지</span>
+      </div>
+      <div className={s.board}>
+        {pipeline.columns.map((col, i) => (
+          <div key={col.key} className={s.stageWrap}>
+            {pipeline.markers
+              .filter((m) => m.beforeKey === col.key)
+              .map((m) => (
+                <div key={m.type} className={s.eventMarker} style={{ background: SOURCE[m.type].color }} title={`${m.date}에 ${m.label.split(" ")[0]}한다고 가정`}>
+                  <span>▼</span>
+                  {m.label}
                 </div>
-                <div className={s.stageCounts}>
-                  <span>{st.key === "now" ? `${st.total}개 중 ${st.cards.length}` : `새로 열림 ${st.total}`}</span>
-                </div>
-              </header>
-              <div className={s.stageBody}>
-                {st.total === 0 && (
-                  <p className={s.muted}>
-                    이 시점 뒤에 새로 열리는 정책이 없어요.{" "}
-                    <button type="button" className={s.linkButton} onClick={onPlanEdit}>
-                      시점 바꾸기
-                    </button>
-                  </p>
-                )}
-                {st.exclusiveGroups.map((g) => (
-                  <div key={g.join(":")} className={s.exclusive}>
-                    <span className={s.exclusiveHead}>중복 수혜 불가 · 둘 중 하나</span>
-                    {g.map((id) => cards.find((c) => c.policyId === id)).filter(Boolean).map((c) => renderCard(c!))}
-                  </div>
-                ))}
-                {cards.filter((c) => !grouped.has(c.policyId)).map(renderCard)}
-                {st.hidden > 0 && (
-                  <button type="button" className={s.linkButton} onClick={onShowAll}>
-                    그 외 {st.hidden}개는 기간표에서 보기
-                  </button>
-                )}
-              </div>
-            </section>
-            {i < pipeline.stages.length - 1 && (
+              ))}
+            {renderColumn(col)}
+            {i < pipeline.columns.length - 1 && (
               <span className={s.stageArrow} aria-hidden="true">
                 →
               </span>
             )}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }

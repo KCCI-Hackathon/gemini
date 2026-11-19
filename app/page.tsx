@@ -477,7 +477,6 @@ export default function Page() {
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 onShowAll={() => setView("gantt")}
-                onPlanEdit={() => setModal(true)}
               />
             ) : (
             <RoadmapGrid

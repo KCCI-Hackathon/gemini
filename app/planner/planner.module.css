@@ -286,3 +286,20 @@
 .relDup { font-size: 11px; color: #8a5a00; background: #fdf1dc; padding: 3px 6px; border-radius: 6px; }
 .exclusive { border: 1.5px dashed #d93d42; border-radius: 12px; padding: 6px; display: grid; gap: 6px; background: #fff7f7; }
 .exclusiveHead { font-size: 11px; font-weight: 700; color: #a3262b; }
+
+/* ---------- 파이프라인: 마감월 열 ---------- */
+.pipeWrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.legendRow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: #4a4d63; }
+.legendRow span { display: inline-flex; align-items: center; gap: 5px; }
+.legendRow i, .srcDots i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.stageWrap { flex-direction: row; align-items: flex-start; }
+.dueHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--p-line); background: #f8f9fc; border-radius: 14px 14px 0 0; }
+.dueHead > div:first-child { display: grid; gap: 2px; }
+.dueHead strong { font-size: 15px; }
+.dueHead span { font-size: 12px; color: var(--p-muted); }
+.srcDots { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 110px; }
+.srcDots span { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; color: #4a4d63; }
+.srcChip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap; }
+.dueChip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #4a4d63; background: #f1f2f6; white-space: nowrap; }
+.eventMarker { align-self: stretch; writing-mode: vertical-rl; display: flex; align-items: center; gap: 6px; color: #fff; font-size: 12px; font-weight: 700; padding: 10px 4px; border-radius: 8px; margin-right: 8px; white-space: nowrap; }
+.eventMarker span { writing-mode: horizontal-tb; font-size: 10px; }

@@ -38,6 +38,8 @@ export type RoadmapRow = {
   restrictionQuote: string | null;
   /** 신청 구간이 시작되는 날. 가정한 사건 날이면 openedBy에 그 사건 이름 */
   firstAvailable: string | null;
+  /** 신청 구간이 끝나는 날(모집 마감 또는 상태가 바뀌어 끝남). 기간 끝까지 이어지면 null */
+  lastAvailable: string | null;
   openedBy: string | null;
   status: RoadmapStatus;
   statusLabel: string;
@@ -144,6 +146,7 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
         return { col: monthIndexOf(timeline.months, d), date: d, text: `신청일과 ${DATE_NAME[type]}의 선후 확인 필요` };
       }),
       firstAvailable: r.firstAvailable,
+      lastAvailable: r.lastAvailable,
       restrictionQuote: r.restrictionQuote,
       openedBy: (() => {
         const e = timeline.events.find((x) => x.date === r.firstAvailable && x.date > timeline.months[0]);
