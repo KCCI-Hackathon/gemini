@@ -271,6 +271,11 @@ export default function Page() {
       if (id !== seq.current) return;
       if (res.status === 503) push({ role: "ai", text: "AI가 꺼져 있어 계획 정리를 할 수 없어요(서버에 API 키가 필요해요). 로드맵과 코드 질문은 그대로 쓸 수 있어요." });
       else if (!res.ok) push({ role: "ai", text: body.error ?? "AI 계획 정리에 실패했어요." });
+      else if (body.timedOut) {
+        setAiPicks({});
+        setOnlyAi(false);
+        push({ role: "ai", text: "AI 계획 정리 제한 시간을 넘겼어요. 기본 로드맵을 계속 볼 수 있어요." });
+      }
       else if (body.fallback || !body.plan) push({ role: "ai", text: "AI가 만든 계획에 확인할 수 없는 내용이 있어 쓰지 않았어요. 로드맵을 그대로 봐 주세요." });
       else {
         const stations = body.plan.stations as { label: string; items: { policyId: string; name: string; why: string }[] }[];

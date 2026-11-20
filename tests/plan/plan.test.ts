@@ -1,5 +1,5 @@
 // 통합 설계 6장: 계획 에이전트
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { PERSONA_A } from "@/lib/judge/personas";
 import { loadVerified } from "@/lib/data/verified";
 import type { Profile } from "@/lib/judge/types";
@@ -16,6 +16,32 @@ const ctx = (env: Record<string, string>, client: ReturnType<typeof scriptedClie
 
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
 
+test.each([54_999, 55_001])("계획의 전체 제한 직전·직후 응답 (%i ms)", async (delay) => {
+  vi.useFakeTimers();
+  resetPlanState();
+  const client = scriptedClient([[{ name: "finish_plan", input: { summary: "계획 안내", stations: [] } }]]);
+  const create = client.beta.messages.create;
+  let signal: AbortSignal | undefined;
+  client.beta.messages.create = async (params, options?: { signal?: AbortSignal }) => {
+    signal = options?.signal;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    return create(params);
+  };
+  try {
+    const pending = handlePlan({ mode: "replan", persona: true, session: session(PERSONA_A) }, ctx(ON, client));
+    await vi.advanceTimersByTimeAsync(55_000);
+    const out = await Promise.race([pending, Promise.resolve("pending")]);
+    expect(out).toMatchObject({ status: 200, body: delay < 55_000 ? { fallback: false } : { fallback: true, timedOut: true } });
+    expect(signal?.aborted).toBe(delay > 55_000);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signal?.aborted).toBe(delay > 55_000);
+  } finally {
+    vi.useRealTimers();
+    resetPlanState();
+  }
+});
+
+test("이미 종료된 회차의 확인 근거는 지금 정거장의 AI 근거로 전달하지 않는다", async () => {
   resetPlanState();
   const policyId = "20260406005400212442";
   const v = loadVerified().get(policyId)!;

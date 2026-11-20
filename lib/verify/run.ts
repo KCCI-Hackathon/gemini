@@ -2,6 +2,7 @@
 // 요청에는 정책 번호와 공개 데이터만 들어간다. 사용자 정보는 이 모듈에 들어오지 않는다.
 
 import type Anthropic from "@anthropic-ai/sdk";
+import { withDeadline, type Deadline } from "@/lib/ai/deadline";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified, type Round } from "@/lib/data/verified";
 import { containsNoticeDate, supportsComparedValue, supportsEvidence } from "./evidence";
@@ -51,8 +52,10 @@ function toFieldCheck(f: Record<string, unknown>, p: Policy, quoted: (q: string)
   return [{ field, status, apiValue, noticeValue: supported ? noticeValue : "", quote: supported ? quote : "" }];
 }
 
+export type AiRequestOptions = { signal?: AbortSignal; timeout?: number; maxRetries?: number };
+
 export type AnthropicLike = {
-  beta: { messages: { create(params: Record<string, unknown>): Promise<Anthropic.Beta.BetaMessage> } };
+  beta: { messages: { create(params: Record<string, unknown>, options?: AiRequestOptions): Promise<Anthropic.Beta.BetaMessage> } };
 };
 
 export const VERIFY_MODEL = process.env.VERIFY_MODEL ?? "claude-opus-5-5";
@@ -109,7 +112,7 @@ export type VerifyResult = {
   producedBy?: "claude_code_session";
 };
 
-type Deps = { client: AnthropicLike; web: Web; now: Date; enableSearch?: boolean; deadlineMs?: number; clock?: () => number };
+type Deps = { client: AnthropicLike; web: Web; now: Date; enableSearch?: boolean; deadlineMs?: number; startedAt?: number; clock?: () => number };
 
 const SYSTEM = `당신은 청년 정책 데이터를 공식 공고와 대조하는 검증 에이전트입니다.
 목표: 주어진 정책의 공식 공고를 찾아, 상태 변화(교육 수료, 취업, 사업자등록)와 관련된 자격 조건과 그 기준 시점을 확인하고, API 데이터와 다른 점을 기록합니다.
@@ -275,14 +278,15 @@ function asObjects(x: unknown): Record<string, unknown>[] {
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: { policy: Policy; rounds: Round[]; activeRound: Round | null; version: VerifyVersion; web: Web; state: State; mode: "agent" | "fixed"; openedUrls: string[]; now: Date },
+  ctx: { policy: Policy; rounds: Round[]; activeRound: Round | null; version: VerifyVersion; web: Web; state: State; mode: "agent" | "fixed"; openedUrls: string[]; now: Date; signal: AbortSignal },
 ): Promise<{ content: string; isError?: boolean }> {
   const { web, state } = ctx;
   const step = state.trail.length + 1;
   if (name === "open_page") {
     const url = String(input.url ?? "");
     if (state.limitHit) return { content: LIMIT_MESSAGE, isError: true };
-    const r = await web.openPage(url);
+    const r = await web.openPage(url, ctx.signal);
+    ctx.signal.throwIfAborted();
     state.trail.push({ step, action: "open", target: url, reason: r.ok ? "열림" : r.text });
     if (r.ok) ctx.openedUrls.push(url);
     if (!r.ok && r.text.includes("한도")) state.limitHit = true;
@@ -384,12 +388,9 @@ async function executeTool(
   return { content: `알 수 없는 도구: ${name}`, isError: true };
 }
 
-async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMessage: string, maxTurns: number): Promise<VerifyResult> {
+async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMessage: string, maxTurns: number, deadline: Deadline): Promise<VerifyResult> {
   const state: State = { trail: [], judgements: new Map(), usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 }, result: null, limitHit: false };
   const openedUrls: string[] = [];
-  const clock = deps.clock ?? Date.now;
-  const startedAt = clock();
-  const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
   const verified = loadVerified().get(policy.id);
   const rounds = verified?.rounds ?? [];
   const date = toKstDate(deps.now);
@@ -404,7 +405,9 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
     // 고정 처리: 첫 링크를 코드가 열어 둔다
     const first = [policy.links.apply, policy.links.ref, policy.links.ref2].find(Boolean);
     if (first) {
-      const r = await deps.web.openPage(first);
+      deadline.remainingMs();
+      const r = await deps.web.openPage(first, deadline.signal);
+      deadline.remainingMs();
       state.trail.push({ step: 1, action: "open", target: first, reason: r.ok ? "열림" : r.text });
       if (r.ok) openedUrls.push(first);
       messages[0] = { role: "user", content: `${firstMessage}\n\n[첫 링크 본문: ${first}]\n${r.text}\n\n이 페이지를 근거로 finish를 호출하세요.` };
@@ -412,10 +415,6 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
   }
 
   for (let turn = 0; turn < maxTurns && !state.result; turn++) {
-    if (clock() - startedAt > deadlineMs) {
-      stopReason = "시간 한도 도달";
-      break;
-    }
     const response = await deps.client.beta.messages.create({
       model: VERIFY_MODEL,
       max_tokens: 16000,
@@ -425,7 +424,8 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
       system: SYSTEM,
       tools: toolDefs(),
       messages,
-    });
+    }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
+    deadline.remainingMs();
     state.usage.calls++;
     state.usage.inputTokens += response.usage?.input_tokens ?? 0;
     state.usage.outputTokens += response.usage?.output_tokens ?? 0;
@@ -452,7 +452,9 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
     }
     const results = [];
     for (const u of uses) {
-      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policy, rounds, activeRound, version, web: deps.web, state, mode, openedUrls, now: deps.now });
+      deadline.remainingMs();
+      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policy, rounds, activeRound, version, web: deps.web, state, mode, openedUrls, now: deps.now, signal: deadline.signal });
+      deadline.signal.throwIfAborted();
       results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
       if (state.result) break;
     }
@@ -475,12 +477,14 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
 export async function runVerification(policyId: string, deps: Deps): Promise<VerifyResult> {
   const p = loadSnapshot().policies.find((x) => x.id === policyId);
   if (!p) throw new Error(`정책 번호 없음: ${policyId}`);
-  return loop(p, deps, "agent", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, MAX_TURNS);
+  return withDeadline(deps.deadlineMs ?? DEFAULT_DEADLINE_MS,
+    (deadline) => loop(p, deps, "agent", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, MAX_TURNS, deadline), deps.startedAt, deps.clock);
 }
 
 /** 비교 실험용 고정 처리: 첫 링크만 열고, 판단·재탐색 없이 한 번에 끝낸다 */
 export async function runFixedPipeline(policyId: string, deps: Deps): Promise<VerifyResult> {
   const p = loadSnapshot().policies.find((x) => x.id === policyId);
   if (!p) throw new Error(`정책 번호 없음: ${policyId}`);
-  return loop(p, deps, "fixed", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, 2);
+  return withDeadline(deps.deadlineMs ?? DEFAULT_DEADLINE_MS,
+    (deadline) => loop(p, deps, "fixed", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, 2, deadline), deps.startedAt, deps.clock);
 }

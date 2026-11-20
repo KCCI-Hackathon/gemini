@@ -7,6 +7,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { aiConfigured } from "@/lib/ai/client";
+import { DeadlineExceeded, withDeadline, type Deadline } from "@/lib/ai/deadline";
 import { monthsBetween, toKstDate } from "@/lib/date";
 import { guardResponse } from "@/lib/agent/guard";
 import { handleJudge, JudgeRequestSchema } from "@/lib/judge/handler";
@@ -110,6 +111,7 @@ const FinishPlanSchema = z.object({
 type Station = { label: string; items: { policyId: string; name: string; why: string }[] };
 export type PlanBody = {
   fallback?: boolean;
+  timedOut?: boolean;
   disabled?: boolean;
   question?: { key: string; text: string; options: string[] };
   parsed?: { key: string; value: string; label: string; needsConfirm: true };
@@ -182,6 +184,7 @@ function routeForAI(r: Roadmap, stationResults: StationResults) {
 }
 
 export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
+  const startedAt = Date.now();
   const parsed = RequestSchema.safeParse(raw);
   if (!parsed.success) return { status: 400, body: { error: "요청 형식이 잘못됐습니다." } };
   const req = parsed.data;
@@ -212,9 +215,14 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   if (!otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
   if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
-  const out = await runPlan(req.mode, summary, route, roadmap, stationResults, questions, otherText, ctx);
-  if (!req.otherText && !out.fallback) cache.set(key, out);
-  return { status: 200, body: out };
+  try {
+    const out = await withDeadline(55_000, (deadline) => runPlan(req.mode, summary, route, roadmap, stationResults, questions, otherText, ctx, deadline), startedAt);
+    if (!otherText && !out.fallback) cache.set(key, out);
+    return { status: 200, body: out };
+  } catch (error) {
+    if (!(error instanceof DeadlineExceeded)) throw error;
+    return { status: 200, body: { fallback: true, timedOut: true } };
+  }
 }
 
 async function runPlan(
@@ -226,6 +234,7 @@ async function runPlan(
   questions: { key: string; question: string; options: string[] }[],
   otherText: string | undefined,
   ctx: Ctx,
+  deadline: Deadline,
 ): Promise<PlanBody> {
   const known = new Set(roadmap.rows.map((r) => r.policyId));
   const stationCandidates = new Map(route.stations.map((station) => {
@@ -250,8 +259,10 @@ async function runPlan(
         system: SYSTEM,
         tools: TOOLS,
         messages,
-      });
+      }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
+      deadline.remainingMs();
     } catch {
+      deadline.signal.throwIfAborted();
       return { fallback: true, log };
     }
     if (res.stop_reason === "refusal") break;
