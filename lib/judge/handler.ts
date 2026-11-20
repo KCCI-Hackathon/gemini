@@ -10,7 +10,7 @@ import { buildRoute, type Route } from "@/lib/route/build";
 import { allRelations } from "@/lib/route/build";
 import { buildPipeline, type Pipeline } from "@/lib/route/pipeline";
 import { buildRoadmap, type Roadmap } from "@/lib/route/roadmap";
-import { buildTimeline, type Timeline } from "@/lib/route/timeline";
+import { buildTimeline, type StationObserver, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
 import { baselineOpts } from "./personal";
@@ -85,7 +85,7 @@ export type JudgeBody =
       needsVerification: string[];
     };
 
-export function handleJudge(body: unknown, now: Date): { status: number; body: JudgeBody } {
+export function handleJudge(body: unknown, now: Date, onStation?: StationObserver): { status: number; body: JudgeBody } {
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   let profile: Profile = structuredClone(parsed.data.profile);
@@ -108,7 +108,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   } else {
     results = judgeAll(profile, now);
   }
-  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {});
+  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {}, onStation);
   const roadmap = buildRoadmap(timeline);
   const answered = new Set(Object.entries(parsed.data.answers ?? {}).filter(([, v]) => v && v !== "모름").map(([k]) => k));
   const changeById = new Map(changes.map((c) => [c.policyId, c]));

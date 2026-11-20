@@ -66,6 +66,38 @@ describe("handlePlan: 실제 사용자는 스위치와 동의가 있어야", () 
 describe("계획 에이전트(가상 인물)", () => {
   beforeEach(() => resetPlanState());
 
+  test("수강 제한의 근거에 맞춰 날짜 비교와 수료 후의 가정을 안내한다", async () => {
+    const item = { policy_id: KNEWDEAL, why: "신청 자격을 확인하세요." };
+    const client = scriptedClient([[{ name: "finish_plan", input: { summary: "계획", stations: [
+      { label: "지금", items: [item] }, { label: "수료 후(1개월 뒤)", items: [item] },
+    ] } }]]);
+    const out = await handlePlan({ mode: "replan", persona: true, session: session(PERSONA_A) }, {
+      ...ctx(ON, client), now: new Date("2026-11-19T12:00:00+09:00"),
+    });
+    const why = out.body.plan!.stations.map((s) => s.items[0].why);
+    expect(why[0]).toMatch(/수료.*과정 시작일/);
+    expect(why[1]).toMatch(/예정대로 수료하면.*증빙/);
+  });
+
+  test("K-뉴딜은 지금과 수료 후의 판정 및 사유를 따로 전달한다", async () => {
+    const client = scriptedClient([
+      [{ name: "get_route", input: {} }],
+      [{ name: "finish_plan", input: { summary: "정리", stations: [] } }],
+    ]);
+    await handlePlan({ mode: "replan", persona: true, session: session(PERSONA_A) }, {
+      ...ctx(ON, client), now: new Date("2026-11-19T12:00:00+09:00"),
+    });
+    const request = client.requests[1] as { messages: { content: { content: string }[] }[] };
+    const route = JSON.parse(request.messages.at(-1)!.content[0].content);
+    const target = (p: { policy_id: string }) => p.policy_id === KNEWDEAL;
+    const now = route.stations.find((s: { label: string }) => s.label === "지금");
+    const after = route.stations.find((s: { label: string }) => s.label === "수료 후(1개월 뒤)");
+    expect(now.policies.find(target)).toMatchObject({
+      status: "확인 필요", reasons: expect.arrayContaining([expect.stringContaining("개시일 전")]),
+    });
+    expect(after.changed_policies.find(target)).toMatchObject({ status: "조건 충족", reasons: [] });
+  });
+
   test("finish_plan: 아는 정책·정거장이면 계획을 돌려준다", async () => {
     const client = scriptedClient([
       [{ name: "get_route", input: {} }],

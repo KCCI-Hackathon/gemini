@@ -80,6 +80,18 @@ export type ChatMessage =
   | { id: number; role: "user"; text: string };
 
 /** AI 계획 정리 결과: 정책 번호 → 순번·정거장·이유. 판정은 바꾸지 않고 표시와 순서에만 쓴다 */
-export type AiPick = { rank: number; station: string; why: string };
+export type AiPick = { rank: number; reasons: { station: string; why: string }[] };
 export type AiPicks = Record<string, AiPick>;
+
+export function groupPlanPicks(stations: { label: string; items: { policyId: string; why: string }[] }[]): AiPicks {
+  const picks: AiPicks = {};
+  let rank = 0;
+  for (const station of stations) {
+    for (const item of station.items) {
+      const pick = picks[item.policyId] ??= { rank: ++rank, reasons: [] };
+      pick.reasons.push({ station: station.label, why: item.why });
+    }
+  }
+  return picks;
+}
 export const CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮"];

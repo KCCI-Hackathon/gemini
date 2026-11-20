@@ -13,6 +13,8 @@ import { handleJudge } from "@/lib/judge/handler";
 import { BASIS_LABEL } from "@/lib/judge/rules";
 import { takeQuota } from "@/lib/limits";
 import type { Roadmap } from "@/lib/route/roadmap";
+import { stateOf, type CellState } from "@/lib/route/timeline";
+import type { JudgedPolicy } from "@/lib/judge";
 import { VERIFY_MODEL, type AnthropicLike } from "@/lib/verify/run";
 import { summarizeForAI, type PlanSession } from "./summary";
 
@@ -106,14 +108,39 @@ export function resetPlanState() {
 
 const GOAL_STATION: Record<string, string> = { training_completion: "수료 후", employment: "취업 후", business_registration: "창업 후", relocation: "이사 후" };
 
-/** AI에 줄 길: 날짜 대신 "N개월 뒤", 정책은 코드가 판정한 줄만 */
+const STATION_STATUS: Record<CellState, string> = {
+  ok: "조건 충족", check: "확인 필요", wait: "기간 조건 남음", closed: "모집 기간 아님", no: "조건상 비해당",
+};
+type StationResults = Map<string, ReadonlyMap<string, JudgedPolicy>>;
+
+function trainingAction(policy: JudgedPolicy | undefined, station: "now" | "completion" | "other") {
+  const rule = policy?.axes.personal.evidence?.find((e) =>
+    e.key === "in_training" && e.kind === "excludes" && e.basis === "resolvable_before_start");
+  if (station === "now" && rule?.outcome === "check") {
+    return "수료 예정일과 지원할 과정 시작일을 비교해, 시작 전에 교육이 끝나는지 확인하세요.";
+  }
+  if (station === "completion" && rule?.outcome === "met") {
+    const proof = rule.quote.text.includes("증빙") ? "과정 시작일과 수료 증빙을 확인하세요." : "과정 시작일을 확인하세요.";
+    return `예정대로 수료하면 훈련 수강 제한이 해소될 수 있어요. ${proof}`;
+  }
+}
+
 /** AI에 줄 길: 정거장마다 그 시점에 볼 정책(지금은 열려 있는 것, 이후는 새로 열리는 것·판정이 바뀌는 것). 날짜 대신 "N개월 뒤" */
-function routeForAI(r: Roadmap) {
+function routeForAI(r: Roadmap, stationResults: StationResults) {
   const today = r.months[0];
   const byId = new Map(r.rows.map((x) => [x.policyId, x]));
-  const brief = (id: string) => {
+  const brief = (id: string, date: string, station: "now" | "completion" | "other") => {
     const x = byId.get(id)!;
-    return { policy_id: x.policyId, name: x.name, status: x.statusLabel, reasons: x.reasons.slice(0, 2), verify: x.verifyLabel };
+    const judged = stationResults.get(date)?.get(id);
+    let status = "해당 시점 후보에 없음";
+    if (judged) {
+      const state = stateOf(judged);
+      status = STATION_STATUS[state];
+      if (state === "ok" && !x.verified) status = "코드 조건 충족(본문 미검토)";
+      if (state === "closed" && judged.axes.recruitment === "unknown") status = "모집 기간 확인 필요";
+    }
+    return { policy_id: id, name: x.name, status, reasons: judged?.axes.personal.reasons.slice(0, 2) ?? [],
+      next_action: trainingAction(judged, station), verify: x.verifyLabel };
   };
   const nowIds = r.rows
     .filter((x) => x.firstAvailable === today && x.status !== "none")
@@ -122,11 +149,11 @@ function routeForAI(r: Roadmap) {
     .map((x) => x.policyId);
   return {
     stations: [
-      { label: "지금", policies: nowIds.map(brief) },
+      { label: "지금", policies: nowIds.map((id) => brief(id, today, "now")) },
       ...r.goals.map((g) => ({
         label: `${GOAL_STATION[g.type]}(${Math.max(0, monthsBetween(today, g.date))}개월 뒤)`,
-        new_policies: g.opened.slice(0, 6).map(brief),
-        changed_policies: g.changed.slice(0, 6).map(brief),
+        new_policies: g.opened.slice(0, 6).map((id) => brief(id, g.date, g.type === "training_completion" ? "completion" : "other")),
+        changed_policies: g.changed.slice(0, 6).map((id) => brief(id, g.date, g.type === "training_completion" ? "completion" : "other")),
       })),
     ],
   };
@@ -143,7 +170,9 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   if (!aiConfigured(ctx.env)) return { status: 503, body: { error: "AI가 꺼져 있습니다." } };
 
   const session = req.session as PlanSession;
-  const judged = handleJudge({ profile: session.profile, plan: session.plan, answers: session.answers }, ctx.now);
+  const stationResults: StationResults = new Map();
+  const judged = handleJudge({ profile: session.profile, plan: session.plan, answers: session.answers }, ctx.now,
+    (date, policies) => stationResults.set(date, policies));
   if (!("roadmap" in judged.body)) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   const roadmap = judged.body.roadmap;
   const questions = judged.body.questions;
@@ -153,7 +182,7 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   if (!req.otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
   if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
-  const out = await runPlan(req.mode, summary, routeForAI(roadmap), roadmap, questions, req.persona ? req.otherText : undefined, ctx);
+  const out = await runPlan(req.mode, summary, routeForAI(roadmap, stationResults), roadmap, questions, req.persona ? req.otherText : undefined, ctx);
   if (!req.otherText && !out.fallback) cache.set(key, out);
   return { status: 200, body: out };
 }
@@ -169,6 +198,10 @@ async function runPlan(
 ): Promise<PlanBody> {
   const known = new Map(roadmap.rows.map((r) => [r.policyId, r.name]));
   const stationNames = new Set(route.stations.map((st) => st.label));
+  const stationActions = new Map(route.stations.map((station) => {
+    const candidates = "policies" in station ? station.policies : [...station.new_policies, ...station.changed_policies];
+    return [station.label, new Map(candidates.map((p) => [p.policy_id, p.next_action]))];
+  }));
   const verified = loadVerified();
   const log: { tool: string; summary: string }[] = [];
   const task = mode === "answer" ? (otherText ? `사용자가 직접 쓴 답을 해석하세요: """${otherText}"""` : "다음에 물을 질문을 고르세요.") : "정거장별 계획을 정리하세요.";
@@ -245,7 +278,13 @@ async function runPlan(
           fallback: false,
           plan: {
             summary: String(input.summary ?? ""),
-            stations: rawStations.map((st) => ({ label: st.label, items: (st.items ?? []).map((i) => ({ policyId: i.policy_id, name: known.get(i.policy_id)!, why: i.why })) })),
+            stations: rawStations.map((st) => ({
+              label: st.label,
+              items: (st.items ?? []).map((i) => ({
+                policyId: i.policy_id, name: known.get(i.policy_id)!,
+                why: stationActions.get(st.label)?.get(i.policy_id) ?? i.why,
+              })),
+            })),
           },
           log,
         };

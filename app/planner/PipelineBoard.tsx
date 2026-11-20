@@ -45,7 +45,7 @@ export function PipelineBoard({ pipeline, aiPicks, selectedId, onSelect, onShowA
             </span>
             <span className={c.verified ? s.verifyOn : s.verifyOff}>{c.verifyLabel}</span>
           </span>
-          {pick && <span className={s.cardWhy}>{pick.why}</span>}
+          {pick?.reasons.map((reason, index) => <span key={index} className={s.cardWhy}>{reason.station} · {reason.why}</span>)}
         </button>
         {(c.blockedBy.length > 0 || c.blocks.length > 0 || c.leadsTo.length > 0 || c.dupNote) && (
           <div className={s.relations}>

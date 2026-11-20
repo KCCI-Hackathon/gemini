@@ -262,8 +262,8 @@ function PolicyRow({ r, tag, months, selected, mine, pick, dim, onSelect, pct }:
         <span className={s.chips}>
           {tag && <span className={tag.kind === "new" ? s.tagNew : tag.kind === "changed" ? s.tagChanged : s.tagLater}>{tag.kind === "new" ? "NEW · " : tag.kind === "changed" ? "! " : ""}{tag.text}</span>}
           {pick && (
-            <span className={s.aiChip} title={`AI가 고른 이유: ${pick.why}`}>
-              AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank} · {pick.station}
+            <span className={s.aiChip} title={pick.reasons.map((reason) => `${reason.station} · ${reason.why}`).join("\n")}>
+              AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank} · {pick.reasons.map((reason) => reason.station).join(" / ")}
             </span>
           )}
           <span className={s.statusChip} style={{ background: st.bg, color: st.fg }}>

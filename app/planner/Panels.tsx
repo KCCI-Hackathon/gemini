@@ -202,9 +202,9 @@ export function DetailPanel({ row, mine, pick, onClose, onToggleMine }: { row: R
         {pick && (
           <div className={s.aiReason}>
             <strong>
-              AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank} · {pick.station}
+              AI 추천 {CIRCLED[pick.rank - 1] ?? pick.rank}
             </strong>
-            <p>{pick.why}</p>
+            {pick.reasons.map((reason, index) => <p key={index}>{reason.station} · {reason.why}</p>)}
             <span className={s.muted}>AI가 확인 순서를 고르고 이유를 쓴 것이에요. 자격 판정(아래)은 코드가 공고 근거로 계산한 결과 그대로예요.</span>
           </div>
         )}
