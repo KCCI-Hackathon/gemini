@@ -76,6 +76,16 @@ npm run db:verify
 
 `POST /api/judge`에 기존 프로필과 함께 선택 입력인 `benefits`를 보낼 수 있습니다. 예를 들어 구직급여 지급이 종료됐다면 `{"policyId":"20250122005400110369","status":"ended","lastPaymentDate":"2026-07-15"}`를 배열에 담습니다. 정책별 `restrictions`에는 적용 여부·이유·인용 근거가, `planned_conflicts`에는 예정된 충돌이 들어갑니다. 응답의 `dataVersion`으로 사용한 규칙 버전을 식별합니다.
 
+## 정책 스냅샷 변경 확인
+
+기존 배포에 사용한 스냅샷과 새 수집본을 비교합니다. 기본 설정은 기존 배포 규칙을 함께 읽어, 연결 정책의 변경이나 삭제로 재검증이 필요한 규칙을 표시합니다.
+
+```bash
+npm run snapshot:compare -- data/snapshot/current.json <새 스냅샷 JSON>
+```
+
+`added`, `changed`, `removed`는 정책 변경 목록이고, `revalidatePolicyIds`와 `rulesToReview`는 검토할 정책번호와 연결 규칙입니다. 수정일만 바뀐 정책은 변경 목록에 표시하고 재검증 대상에서는 제외합니다. 이 명령은 비교 결과를 출력합니다. 이후 검토를 통과한 규칙만 기존 SQLite 검증과 내보내기 절차로 배포합니다.
+
 ## Vercel Preview 배포
 
 팀 Vercel 프로젝트에 GitHub 저장소를 연결하고 Node.js 22.x를 선택합니다. `backend/vercel-preview` 브랜치를 Preview로 배포합니다. 함수 리전은 `vercel.json`에서 서울(`icn1`)로 설정합니다. 현재 배포용 규칙과 버전은 `data/overlap/approved.json`과 `data/release/manifest.json`에서 가져옵니다.
