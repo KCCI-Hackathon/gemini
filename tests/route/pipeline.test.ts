@@ -15,6 +15,18 @@ const cardsOf = (p: ReturnType<typeof pipe>) => p.columns.flatMap((c) => c.cards
 const colOf = (p: ReturnType<typeof pipe>, id: string) => p.columns.find((c) => c.cards.some((x) => x.policyId === id) || c.allIds.includes(id))!;
 
 describe("buildPipeline: 마감월로 열을 자른다", () => {
+  test("AG-01 오늘과 수료 직후의 K-뉴딜 카드와 상세는 각 시점의 판정을 표시한다", () => {
+    function badges(date: string) {
+      const timeline = buildTimeline(PERSONA_A, new Date(date + "T12:00:00+09:00"), { employAfterMonths: 3 });
+      const roadmap = buildRoadmap(timeline);
+      const detail = roadmap.rows.find((r) => r.policyId === KNEWDEAL)!;
+      const card = cardsOf(buildPipeline(roadmap, allRelations())).find((c) => c.policyId === KNEWDEAL)!;
+      return { card: card.statusLabel, detail: detail.statusLabel };
+    }
+    expect(badges("2026-12-19")).toEqual({ card: "조건 충족", detail: "조건 충족" });
+    expect(badges("2026-11-20")).toEqual({ card: "확인 필요", detail: "확인 필요" });
+  });
+
   test("열은 마감월 순서이고 기한 없는(상시) 정책은 마지막 열", () => {
     const keys = pipe().columns.map((c) => c.key);
     const months = keys.filter((k) => k !== "always" && k !== "beyond" && k !== "now_rest");

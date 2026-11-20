@@ -89,9 +89,11 @@ function windowsOf(cells: CellState[], breakCols: Map<number, string>): RoadmapR
   return out;
 }
 
-function statusOf(cells: CellState[], verified: boolean): { status: RoadmapStatus; label: string } {
-  if (cells.includes("ok")) return { status: "ok", label: verified ? "조건 충족" : "코드 조건 충족(본문 미검토)" };
-  if (cells.includes("check")) return { status: "check", label: "확인 필요" };
+function statusOf({ personalAtStart, verified, cells }: Timeline["rows"][number]): { status: RoadmapStatus; label: string } {
+  if (personalAtStart === "needs_check") return { status: "check", label: "확인 필요" };
+  if (personalAtStart === "eligible" || personalAtStart === "code_met_unreviewed") {
+    return { status: "ok", label: verified ? "조건 충족" : "코드 조건 충족(본문 미검토)" };
+  }
   if (cells.includes("wait")) return { status: "wait", label: "기간 조건 남음" };
   return { status: "none", label: "이 기간 신청 구간 없음" };
 }
@@ -125,7 +127,7 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
   const rows: RoadmapRow[] = timeline.rows.map((r) => {
     const p = policies.get(r.policyId);
     const v = verified.get(r.policyId);
-    const { status, label } = statusOf(r.cells, r.verified);
+    const { status, label } = statusOf(r);
     const apiLink = p?.links.apply ?? p?.links.ref ?? null;
     return {
       order: r.order,
