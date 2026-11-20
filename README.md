@@ -93,6 +93,10 @@ npm run smoke:preview -- <Preview URL>
 
 스모크 명령은 첫 화면과 세 시연 지역의 `/api/judge` 요청 8건을 확인합니다. 응답에서 배포 데이터 버전, 적용 상태, 근거 인용을 검사합니다.
 
+2026-11-21에 `Path-Finder` 팀의 `path-finder` 프로젝트에 [Preview](https://path-finder-bp79t76sc-path-finder10.vercel.app)를 배포했습니다. 기준 커밋은 `c70d768`, 데이터 버전은 `dd9153edea47`입니다. 서울 리전과 첫 화면 및 가상 요청 8건을 확인했습니다. Preview는 Vercel 로그인이 필요합니다. 보호된 Preview의 자동 검증에는 팀에서 승인한 인증 방법을 사용합니다.
+
+CLI 배포에서는 `vercel deploy --environment preview`로 환경을 명시하고, 완료 출력에서 `environment: preview`를 확인합니다.
+
 ## Credits / Licenses
 
 | 구분 | 이름 | 출처·라이선스 | 사용 위치 |
