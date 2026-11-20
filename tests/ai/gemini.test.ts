@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { aiConfigured } from "@/lib/ai/client";
 import { geminiClient, toGeminiSchema } from "@/lib/ai/gemini";
 
-type Call = { url: string; headers: Record<string, string>; body: Record<string, any> };
+type Call = { url: string; headers: Record<string, string>; body: { systemInstruction: unknown; tools: { functionDeclarations: { name: string }[] }[]; contents: unknown[]; generationConfig: { maxOutputTokens: number } } };
 
 function fakeGemini(responses: Record<string, unknown>[]) {
   const calls: Call[] = [];

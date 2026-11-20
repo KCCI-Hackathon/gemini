@@ -1,0 +1,21 @@
+# Implementation ledger — plan: 2026-11-21-pathfinder-ui.md
+
+- Scope: user-requested front-end branch, supplied specification is the implementation authority.
+- Decision: implement in the branch explicitly created for this work, retaining legacy UI at /legacy.
+- Decision: keep authentication optional per §9.2, expose browser storage truthfully.
+- Decision: no implementation commits/push/deployment are necessary for the requested local implementation.
+- Pre-flight: Tasks 2 and 3 consume Task 1's shared serializable types and Evaluation. Calendar/agent share event mutations; board/detail/roadmap share server card instances. No conflicting interfaces.
+- Reference preview could not be retrieved (web and browser host unavailable); use §3's explicit design tokens and layouts.
+- Task 1: date/stage engine and compatible API implemented. Initial 11 tests RED→GREEN, API compatibility and invalid-date cases added.
+- Task 2: immutable event undo, browser records, corrupted storage, named schedule commands and legacy record discovery implemented.
+- Task 3: new responsive workspace, board/grid/detail/calendar, compare/move, independent recommendation snapshots, roadmap and local agent implemented. Legacy preserved at /legacy.
+- Baseline verification: initial unrestricted parallel run produced 42 test timeouts at 5 seconds before implementation. Final suite uses 2 workers and 60-second per-test limit.
+- Final review: one fresh read-only reviewer identified cross-plan recheck race, dimension-muting bug, deleted offering save crash, missing disjoint windows, stale retry, profile answer loss, dangling references, command context and modal history issues. Regression tests cover server/state fixes; UI routing and guard fixes applied.
+- Resolution: known actual participation continues to restrict candidates even if its display keyword is muted; §6.2 requires actual facts to always apply. Actual facts can be corrected through profile editing. Unknown participation defers recommendations.
+- Legacy site v1 records are surfaced for explicit reselection; unknown original offering/stage IDs are never fabricated and old storage keys are retained.
+- Browser visual/interaction QA is unavailable because the browser host cannot be reached; SSR rendering, type/lint/build checks and HTTP/API smoke checks are used instead.
+- Final suite: `npm test -- --maxWorkers=4 --testTimeout=60000` → 36 files, 320 tests passed. The earlier final run with 2 workers also passed all 319 tests present before the last repeated-command regression was added.
+- Final lint: `npm run lint` passed. A pre-existing explicit-any annotation in the Gemini request test was replaced with its actual body shape so the repository lint gate passes.
+- Final TypeScript check: `npx tsc --noEmit` passed. Vitest uses automatic JSX transformation for the new server-rendered component tests.
+- Production HTTP smoke: `/` and `/legacy` returned 200 with expected entry content; three `/api/judge` requests returned 61 days, 85 days, then blocked with its warning, preserving the official 2027-02-26 close date. The temporary local server was stopped afterward.
+- All implementation changes remain uncommitted on frontend/ui-development; no hosting, branch merge or implementation push performed.
