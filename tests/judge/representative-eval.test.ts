@@ -57,7 +57,7 @@ describe("예전 회차로는 비해당, 새 회차는 검토 중", () => {
     v.rounds = original;
   });
 
-  test("새 회차가 검토 중이면 '올해 공고 기준 확인 중' (예전 규칙으로 비해당을 고정하지 않음)", () => {
+  test("새 회차가 검토 중이면 '이번 공고 기준 확인 중' (예전 규칙으로 비해당을 고정하지 않음)", () => {
     const strictOld: Round = { ...original[0], conditions: original[0].conditions.map((c) => ({ ...c, basis: "apply_date" as const })) };
     const next: Round = { ...original[0], id: "2027", notice: { ...original[0].notice, year: 2027, round: "2027년", title: "2027년 공고", applyStart: "2027-01-01", applyEnd: "2027-12-31" }, status: "under_review" };
     v.rounds = [strictOld, next];

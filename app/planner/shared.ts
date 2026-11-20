@@ -2,6 +2,7 @@ import type { JudgeBody } from "@/lib/judge/handler";
 import type { Profile } from "@/lib/judge/types";
 import type { RoadmapCat, RoadmapStatus } from "@/lib/route/roadmap";
 import type { TimelinePlan } from "@/lib/route/timeline";
+import { PERSONA_A } from "@/lib/judge/personas";
 
 export type Ok = Extract<JudgeBody, { items: unknown }>;
 export type { Profile, TimelinePlan };
@@ -31,16 +32,7 @@ export const SCHOOLS: [string, string][] = [
 ];
 
 /** 가상 인물: 만 27세, 인천 연수구, 대학 졸업, 국비 교육 수강 중(12/19 수료 예정) */
-export const DEMO: Profile = {
-  birthYm: "1999-03",
-  sigungu: "28185",
-  school: "0049007",
-  currentStatus: ["in_training", "unemployed"],
-  interest: "job",
-  events: [{ type: "training_completion", date: "2026-12-19", status: "scheduled" }],
-  participating: [],
-  source: "demo_persona",
-};
+export const DEMO = PERSONA_A;
 
 /** "2026-11-24" → "2026.11.24" */
 export const dot = (ymd: string) => ymd.replaceAll("-", ".");
@@ -80,6 +72,18 @@ export type ChatMessage =
   | { id: number; role: "user"; text: string };
 
 /** AI 계획 정리 결과: 정책 번호 → 순번·정거장·이유. 판정은 바꾸지 않고 표시와 순서에만 쓴다 */
-export type AiPick = { rank: number; station: string; why: string };
+export type AiPick = { rank: number; reasons: { station: string; why: string }[] };
 export type AiPicks = Record<string, AiPick>;
+
+export function groupPlanPicks(stations: { label: string; items: { policyId: string; why: string }[] }[]): AiPicks {
+  const picks: AiPicks = {};
+  let rank = 0;
+  for (const station of stations) {
+    for (const item of station.items) {
+      const pick = picks[item.policyId] ??= { rank: ++rank, reasons: [] };
+      pick.reasons.push({ station: station.label, why: item.why });
+    }
+  }
+  return picks;
+}
 export const CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮"];

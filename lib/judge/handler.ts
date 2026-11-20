@@ -11,8 +11,8 @@ import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, t
 import { buildRoute, type Route } from "@/lib/route/build";
 import { allRelations } from "@/lib/route/build";
 import { buildPipeline, type Pipeline } from "@/lib/route/pipeline";
-import { buildRoadmap, type Roadmap } from "@/lib/route/roadmap";
-import { buildTimeline, type Timeline } from "@/lib/route/timeline";
+import { buildRoadmap, policyNotice, type Roadmap, type VerifyLabel } from "@/lib/route/roadmap";
+import { buildTimeline, type StationObserver, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
 import { baselineOpts } from "./personal";
@@ -32,7 +32,7 @@ const ProfileSchema = z.object({
   source: z.enum(["demo_persona", "user"]),
 });
 
-const RequestSchema = z.object({
+export const JudgeRequestSchema = z.object({
   profile: ProfileSchema,
   benefits: BenefitsSchema.optional(),
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
@@ -57,6 +57,7 @@ export type JudgeItem = {
   name: string;
   org: string;
   verified: boolean;
+  verifyLabel: VerifyLabel;
   personal: PersonalValue;
   reasons: string[];
   recruitment: string;
@@ -91,8 +92,8 @@ export type JudgeBody =
       needsVerification: string[];
     };
 
-export function handleJudge(body: unknown, now: Date): { status: number; body: JudgeBody } {
-  const parsed = RequestSchema.safeParse(body);
+export function handleJudge(body: unknown, now: Date, onStation?: StationObserver): { status: number; body: JudgeBody } {
+  const parsed = JudgeRequestSchema.safeParse(body);
   if (!parsed.success) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   let profile: Profile = structuredClone(parsed.data.profile);
   if (parsed.data.benefits) profile.benefits = parsed.data.benefits;
@@ -115,32 +116,34 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   } else {
     results = judgeAll(profile, now);
   }
-  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {});
+  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {}, onStation);
   const roadmap = buildRoadmap(timeline);
   const answered = new Set(Object.entries(parsed.data.answers ?? {}).filter(([, v]) => v && v !== "모름").map(([k]) => k));
   const changeById = new Map(changes.map((c) => [c.policyId, c]));
   const verified = loadVerified();
 
   const current = results.filter((r) => r.layer !== "history");
+  const today = toKstDate(now);
   const items: JudgeItem[] = current.map((r) => {
     const v = verified.get(r.policy.id);
     const c = changeById.get(r.policy.id);
-    const end = v ? v.apply.end : r.policy.applyEnd;
+    const notice = policyNotice(r.policy, v, today);
     return {
       id: r.policy.id,
       name: v?.name ?? r.policy.name,
       org: r.policy.supervisingOrg,
       verified: r.verified,
+      verifyLabel: notice.verifyLabel,
       personal: r.axes.personal.value,
       reasons: r.axes.personal.reasons,
       recruitment: r.axes.recruitment,
-      deadline: r.axes.recruitment === "open" ? end : null,
+      deadline: r.axes.recruitment === "open" ? notice.official.end : null,
       timeNote: r.axes.time.note ?? null,
       restriction: r.axes.restriction.value,
       restrictionQuotes: r.axes.restriction.quotes,
       restrictions: r.axes.restriction.current_restrictions ?? [],
       planned_conflicts: r.axes.restriction.planned_conflicts ?? [],
-      link: v?.sources[0]?.url ?? r.policy.links.apply ?? r.policy.links.ref,
+      link: notice.link?.url ?? null,
       change: c && c.change !== "unchanged" ? CHANGE_LABEL[c.change] : null,
       changeKey: c && c.change !== "unchanged" ? c.change : null,
     };
@@ -153,7 +156,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
     body: {
       asOf: loadSnapshot().asOf,
       dataVersion: overlapDataVersion(),
-      today: toKstDate(now),
+      today,
       lastTransition: last,
       summary,
       items,

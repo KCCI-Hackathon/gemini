@@ -1,5 +1,5 @@
 import { fieldCheckEffect } from "@/lib/verify/downgrade";
-import { savedResult } from "@/lib/verify/saved";
+import { savedResult, VERIFY_RECHECK } from "@/lib/verify/saved";
 import { isOpenAt, monthsBetween, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadOverlap, loadOverlapNotices } from "@/lib/data/overlap";
@@ -7,12 +7,26 @@ import type { Policy } from "@/lib/data/types";
 import { loadVerified, type VerifiedPolicy } from "@/lib/data/verified";
 import { effectiveStatus, judgePersonal } from "./personal";
 import { blocksParticipation, evaluateRules } from "./overlap";
+import { pickRound } from "./rules";
 import { REASON, type Axes, type JudgeOpts, type Layer, type Profile } from "./types";
 
 export * from "./types";
 
 function recruitment(p: Policy, v: VerifiedPolicy | undefined, now: Date): Axes["recruitment"] {
   if (v) {
+    if (v.rounds?.length) {
+      const today = toKstDate(now);
+      const pick = pickRound(v.rounds, today);
+      if (pick.state === "under_review" && !pick.round) return "unknown";
+      if (pick.state !== "outside" && pick.round) {
+        const { applyStart, applyEnd } = pick.round.notice;
+        if (v.apply.type === "always" && !applyStart && !applyEnd) return "always";
+        // 정책의 마감 시각은 동일 신청 기간에만 적용한다.
+        const endTime = v.apply.start === applyStart && v.apply.end === applyEnd ? v.apply.endTime : null;
+        return isOpenAt(now, applyStart, applyEnd, endTime ?? undefined);
+      }
+      return v.rounds.some(({ notice }) => notice.applyStart && notice.applyStart > today) ? "upcoming" : "closed";
+    }
     if (v.apply.type === "always") return "always";
     return isOpenAt(now, v.apply.start, v.apply.end, v.apply.endTime ?? undefined);
   }
@@ -118,14 +132,18 @@ const RANK_V = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible
 
 /** 준비 단계 저장 결과의 항목별 대조를 반영한다. 낮추기만 한다(통합 설계 5.3-4) */
 function applySavedFieldChecks(axes: Axes, p: Policy, v: VerifiedPolicy | undefined, now: Date): Axes {
-  const saved = savedResult(p.id);
+  const { result: saved, needsReview } = savedResult(p, v, toKstDate(now));
+  if (needsReview) axes.fieldNotes = [...(axes.fieldNotes ?? []), VERIFY_RECHECK];
   if (!saved || saved.outcome !== "verified_against_notice") return axes;
   const e = fieldCheckEffect(saved, p, v, toKstDate(now));
   const lower = (reason: string) => {
     if (RANK_V[axes.personal.value] < RANK_V.needs_check) axes.personal.value = "needs_check";
     if (!axes.personal.reasons.includes(reason)) axes.personal.reasons.push(reason);
   };
-  if (e.newRound) lower(REASON.roundReview);
+  if (e.newRound) {
+    lower(REASON.roundReview);
+    delete axes.personal.evidence;
+  }
   for (const r of e.personal) lower(r);
   const notes = [...(e.recruitment ? [e.recruitment] : []), ...e.notes];
   if (e.recruitment && axes.recruitment !== "closed") axes.recruitment = "unknown";

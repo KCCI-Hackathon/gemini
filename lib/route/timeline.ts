@@ -70,7 +70,7 @@ function addDays(ymd: string, n: number): string {
 }
 const at = (ymd: string) => new Date(`${ymd}T12:00:00+09:00`);
 
-function stateOf(r: JudgedPolicy): CellState {
+export function stateOf(r: JudgedPolicy): CellState {
   if (r.axes.personal.value === "ineligible") return "no";
   if (r.axes.recruitment !== "open" && r.axes.recruitment !== "always") return "closed";
   if (r.axes.time.value === "unmet") return "wait";
@@ -123,7 +123,9 @@ function profileAt(origin: Profile, events: TimelineEvent[], ymd: string, upto =
   return p;
 }
 
-export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): Timeline {
+export type StationObserver = (date: string, policies: ReadonlyMap<string, JudgedPolicy>) => void;
+
+export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan, onStation?: StationObserver): Timeline {
   const origin = structuredClone(profile);
   const today = toKstDate(now);
   const { base, baseLabel, events } = plannedEvents(origin, today, plan);
@@ -154,6 +156,13 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
       points.add(addDays(v.apply.end, 1));
     }
     if (v.apply.start) points.add(v.apply.start);
+    for (const { notice } of v.rounds ?? []) {
+      if (notice.applyStart) points.add(notice.applyStart);
+      if (notice.applyEnd) {
+        points.add(notice.applyEnd);
+        points.add(addDays(notice.applyEnd, 1));
+      }
+    }
   }
   const samples = [...points].filter((d) => d >= today && d <= end).sort();
 
@@ -162,7 +171,9 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
     const applied = events.filter((e) => e.date <= ymd).length;
     const p = profileAt(origin, events, ymd);
     const opts = applied ? baselineOpts(origin, profileAt(origin, events, ymd, applied - 1)) : {};
-    return new Map(judgeAll(p, at(ymd), opts).map((r) => [r.policy.id, r]));
+    const policies = new Map(judgeAll(p, at(ymd), opts).map((r) => [r.policy.id, r] as const));
+    if (onStation && (ymd === today || events.some((e) => e.date === ymd))) onStation(ymd, policies);
+    return policies;
   });
   const stateAt = (id: string, i: number): CellState | undefined => {
     const r = perSample[i].get(id);
