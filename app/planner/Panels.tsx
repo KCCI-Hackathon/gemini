@@ -190,7 +190,7 @@ export function DetailPanel({ row, mine, pick, onClose, onToggleMine }: { row: R
           <span className={s.statusChip} style={{ background: st.bg, color: st.fg }}>
             {row.statusLabel}
           </span>
-          <span className={row.verified ? s.verifyOn : s.verifyOff}>{row.verifyLabel}</span>
+          <span className={row.verifyLabel === "근거 확인됨" || row.verifyLabel === "공고 항목 확인됨" ? s.verifyOn : s.verifyOff}>{row.verifyLabel}</span>
           <button type="button" className={s.ghost} aria-label="상세 닫기" onClick={onClose} style={{ marginLeft: "auto" }}>
             ✕
           </button>
@@ -251,7 +251,7 @@ export function DetailPanel({ row, mine, pick, onClose, onToggleMine }: { row: R
           <dd>{row.support || <span className={s.muted}>API에 적힌 내용이 없어요.</span>}</dd>
           {row.evidence.length > 0 && (
             <>
-              <dt>조건별 근거</dt>
+              <dt>{row.verifyLabel === "다음 회차 공고 전" ? "지난 회차 조건별 근거(참고)" : "조건별 근거"}</dt>
               <dd>
                 <ul className={s.evidence}>
                   {row.evidence.map((e) => (
@@ -261,12 +261,12 @@ export function DetailPanel({ row, mine, pick, onClose, onToggleMine }: { row: R
                           {STATUS_NAME[e.key] ?? e.key} {e.kind === "requires" ? "필요" : "제외"}
                         </strong>
                         <span>{e.basisLabel}</span>
-                        <span>{OUTCOME[e.outcome]}</span>
+                        {row.verifyLabel !== "다음 회차 공고 전" && <span>{OUTCOME[e.outcome]}</span>}
                       </div>
-                      <blockquote>“{e.quote.text}”</blockquote>
+                      {e.confirmed && <blockquote>“{e.quote.text}”</blockquote>}
                       <div className={s.muted}>
                         {e.round} · {e.confirmed ? "사람이 조건과 근거 연결을 확인함" : "조건별 사람 확인 대기"}
-                        {e.quote.url && (
+                        {e.confirmed && e.quote.url && (
                           <>
                             {" · "}
                             <a href={e.quote.url} target="_blank" rel="noreferrer">
@@ -283,12 +283,12 @@ export function DetailPanel({ row, mine, pick, onClose, onToggleMine }: { row: R
           )}
           <dt>근거</dt>
           <dd>
-            {row.verifyLabel === "근거 확인 대기" ? "회차별 규칙으로 판정했어요. 조건마다 사람이 근거를 다시 확인하는 중이에요." : row.verified ? "사람이 공식 공고와 대조해 확인한 정책이에요." : "온통청년 API 값만으로 판정했어요. 공고 본문은 아직 확인하지 않았어요."}
+            {row.verifyLabel === "근거 확인 대기" ? "조건마다 사람이 근거를 다시 확인하는 중이에요." : row.verifyLabel === "미검증(API)" ? "온통청년 API 값으로 판정했어요." : row.verifyLabel}
             {row.link && (
               <>
                 {" "}
                 <a href={row.link.url} target="_blank" rel="noreferrer">
-                  {row.link.kind === "official" ? "공식 출처 열기" : "온통청년 등록 링크(미검증)"}
+                  {row.link.kind === "official" ? row.verifyLabel === "다음 회차 공고 전" ? "지난 회차 공식 출처 열기" : "공식 출처 열기" : "온통청년 등록 링크(미검증)"}
                 </a>
               </>
             )}

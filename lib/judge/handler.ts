@@ -9,7 +9,7 @@ import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, t
 import { buildRoute, type Route } from "@/lib/route/build";
 import { allRelations } from "@/lib/route/build";
 import { buildPipeline, type Pipeline } from "@/lib/route/pipeline";
-import { buildRoadmap, type Roadmap } from "@/lib/route/roadmap";
+import { buildRoadmap, policyNotice, type Roadmap, type VerifyLabel } from "@/lib/route/roadmap";
 import { buildTimeline, type StationObserver, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
@@ -30,7 +30,7 @@ const ProfileSchema = z.object({
   source: z.enum(["demo_persona", "user"]),
 });
 
-const RequestSchema = z.object({
+const JudgeRequestSchema = z.object({
   profile: ProfileSchema,
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
   answers: z
@@ -54,6 +54,7 @@ export type JudgeItem = {
   name: string;
   org: string;
   verified: boolean;
+  verifyLabel: VerifyLabel;
   personal: PersonalValue;
   reasons: string[];
   recruitment: string;
@@ -86,7 +87,7 @@ export type JudgeBody =
     };
 
 export function handleJudge(body: unknown, now: Date, onStation?: StationObserver): { status: number; body: JudgeBody } {
-  const parsed = RequestSchema.safeParse(body);
+  const parsed = JudgeRequestSchema.safeParse(body);
   if (!parsed.success) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   let profile: Profile = structuredClone(parsed.data.profile);
   if (parsed.data.answers?.participating_national_employment_support === "예" && !profile.participating.includes(NATIONAL)) {
@@ -115,23 +116,25 @@ export function handleJudge(body: unknown, now: Date, onStation?: StationObserve
   const verified = loadVerified();
 
   const current = results.filter((r) => r.layer !== "history");
+  const today = toKstDate(now);
   const items: JudgeItem[] = current.map((r) => {
     const v = verified.get(r.policy.id);
     const c = changeById.get(r.policy.id);
-    const end = v ? v.apply.end : r.policy.applyEnd;
+    const notice = policyNotice(r.policy, v, today);
     return {
       id: r.policy.id,
       name: v?.name ?? r.policy.name,
       org: r.policy.supervisingOrg,
       verified: r.verified,
+      verifyLabel: notice.verifyLabel,
       personal: r.axes.personal.value,
       reasons: r.axes.personal.reasons,
       recruitment: r.axes.recruitment,
-      deadline: r.axes.recruitment === "open" ? end : null,
+      deadline: r.axes.recruitment === "open" ? notice.official.end : null,
       timeNote: r.axes.time.note ?? null,
       restriction: r.axes.restriction.value,
       restrictionQuotes: r.axes.restriction.quotes,
-      link: v?.sources[0]?.url ?? r.policy.links.apply ?? r.policy.links.ref,
+      link: notice.link?.url ?? null,
       change: c && c.change !== "unchanged" ? CHANGE_LABEL[c.change] : null,
       changeKey: c && c.change !== "unchanged" ? c.change : null,
     };
@@ -143,7 +146,7 @@ export function handleJudge(body: unknown, now: Date, onStation?: StationObserve
     status: 200,
     body: {
       asOf: loadSnapshot().asOf,
-      today: toKstDate(now),
+      today,
       lastTransition: last,
       summary,
       items,

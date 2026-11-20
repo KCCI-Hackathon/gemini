@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { applyTransition, needsVerification, simulateTransition, CHANGE_LABEL } from "@/lib/sim/transition";
 import { PERSONA_A } from "@/lib/judge/personas";
+import { REASON } from "@/lib/judge";
 
 const NOW = new Date("2026-11-24T12:00:00+09:00");
 const INCHEON = "20260406005400212445";
@@ -28,13 +29,21 @@ describe("simulateTransition", () => {
     expect(change(rs, INCHEON)).toBe("unchanged");
   });
 
-  test("취업 상태로 변경: 인천 응시료는 기준일(응시일) 확인, 국취는 대상 정의 확인, 드림For는 조건 충족 시 검토(모집 종료)", () => {
+  test("취업 상태로 변경: 인천 응시료는 응시일 확인, 국취는 대상 정의 확인, 종료된 드림For는 다음 공고 대기", () => {
     const rs = simulateTransition(PERSONA_A, "get_employed", NOW);
     expect(change(rs, INCHEON)).toBe("reference_date_needed");
     expect(change(rs, NATIONAL)).toBe("definition_check");
     const d = rs.find((r) => r.policyId === DREAMFOR)!;
-    expect(d.change).toBe("eligible_if_conditions");
+    expect(d.change).toBe("unchanged");
     expect(d.after.recruitment).toBe("closed");
+    expect(d.after.personal).toMatchObject({ value: "needs_check", reasons: expect.arrayContaining([REASON.nextRound]) });
+  });
+
+  test("모집 기간 중인 드림For는 취업 시 조건 충족을 검토한다", () => {
+    const rs = simulateTransition(PERSONA_A, "get_employed", new Date("2026-05-06T12:00:00+09:00"));
+    const d = rs.find((r) => r.policyId === DREAMFOR)!;
+    expect(d.change).toBe("eligible_if_conditions");
+    expect(d.after.recruitment).toBe("open");
   });
 
   test("이어서 적용: 수료 → 취업이면 k-뉴딜은 '개시일 전 해소' 기준일 확인", () => {

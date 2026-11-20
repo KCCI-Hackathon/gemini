@@ -1,6 +1,7 @@
 // 통합 설계 6장: 계획 에이전트
 import { beforeEach, describe, expect, test } from "vitest";
 import { PERSONA_A } from "@/lib/judge/personas";
+import { loadVerified } from "@/lib/data/verified";
 import type { Profile } from "@/lib/judge/types";
 import { handlePlan, resetPlanState } from "@/lib/plan/handler";
 import { summarizeForAI } from "@/lib/plan/summary";
@@ -14,6 +15,24 @@ const ON = { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k" };
 const ctx = (env: Record<string, string>, client: ReturnType<typeof scriptedClient>) => ({ env, ip: "1.1.1.1", now: NOW, makeClient: () => client });
 
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
+
+  resetPlanState();
+  const policyId = "20260406005400212442";
+  const v = loadVerified().get(policyId)!;
+  const original = v.rounds!;
+  const round = original[0];
+  const condition = round.conditions[0];
+  const client = scriptedClient([[{ name: "get_policy_evidence", input: { policy_id: policyId, station: "지금" } }], [{ name: "no_more_questions", input: {} }]]);
+  try {
+    v.rounds = [{ ...round, conditions: [{ ...condition, supportsConfirmed: { by: "human", at: "2026-05-10" } }] }];
+    await handlePlan({ mode: "replan", persona: true, session: session(PERSONA_A) }, ctx(ON, client));
+    expect(JSON.stringify(client.requests[1])).toContain("이 정거장에서 사람이 확인한 조건별 근거가 없습니다.");
+    expect(JSON.stringify(client.requests[1])).not.toContain(condition.quote.text);
+  } finally {
+    v.rounds = original;
+    resetPlanState();
+  }
+});
 
 describe("summarizeForAI: AI로 가는 것은 요약뿐", () => {
   test("생년월일·시군구 코드·날짜·응시일이 없고 만 나이·시군구 이름·N개월 뒤만 있다", () => {

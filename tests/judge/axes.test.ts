@@ -18,6 +18,7 @@ const NATIONAL = "20260710005400113256";
 const CHALLENGE = "20250122005400110346";
 const DREAMFOR = "20260406005400212442";
 const LUNCH = "20260921005400113480";
+const DREAMFOR_OPEN = new Date("2026-05-06T12:00:00+09:00");
 
 describe("ageRange", () => {
   test("생일 달이 아니면 만 나이가 하나로 정해진다", () => {
@@ -48,32 +49,51 @@ describe("judgePolicy: 시연 인물 가(수강 중, 미취업)의 현재 판정
     expect(a.time.value).toBe("unmet");
     expect(a.restriction.value).toBe("official_quote");
   });
-  test("드림For: 재직자 대상이라 비해당, 모집 종료, 확인된 중복 관계", () => {
-    const a = j(DREAMFOR);
-    expect(a.personal.value).toBe("ineligible");
-    expect(a.recruitment).toBe("closed");
-    expect(a.restriction.value).toBe("confirmed_relation");
-  });
   test("든든한 점심밥: 인천은 시범 지역이 아니라 비해당", () => {
     expect(j(LUNCH).personal.value).toBe("ineligible");
   });
 });
 
 describe("judgePolicy 규칙", () => {
-  test("모집 종료와 자격은 따로 나온다(12/7의 인천 응시료)", () => {
-    const a = judgePolicy(P(INCHEON), V(INCHEON), PERSONA_A, new Date("2026-12-07T12:00:00+09:00"));
+  test("드림For 모집 회차: 재직자 대상이라 비해당, 모집 중, 확인된 중복 관계", () => {
+    const a = judgePolicy(P(DREAMFOR), V(DREAMFOR), PERSONA_A, DREAMFOR_OPEN);
+    expect(a.personal.value).toBe("ineligible");
+    expect(a.recruitment).toBe("open");
+    expect(a.restriction.value).toBe("confirmed_relation");
+  });
+
+  test("인천 응시료 마감일 18시 이후에도 같은 회차의 자격은 유지된다", () => {
+    const a = judgePolicy(P(INCHEON), V(INCHEON), PERSONA_A, new Date("2026-11-30T18:10:00+09:00"));
     expect(a.personal.value).toBe("eligible");
     expect(a.recruitment).toBe("closed");
   });
 
+  test("인천 응시료 12/7은 모집 종료이며 지난 회차 근거는 참고로 보관한다", () => {
+    const a = judgePolicy(P(INCHEON), V(INCHEON), PERSONA_A, new Date("2026-12-07T12:00:00+09:00"));
+    expect(a.recruitment).toBe("closed");
+    expect(a.personal.value).toBe("needs_check");
+    expect(a.personal.reasons).toContain(REASON.nextRound);
+    expect(a.personal.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ round: V(INCHEON)!.rounds![0].notice.title })]));
+  });
+
+  test("등록 회차가 하나여도 모집 기간은 회차 날짜로 판정한다", () => {
+    const v = V(INCHEON)!;
+    const round = v.rounds![0];
+    const currentOnly = { ...v, rounds: [{ ...round, notice: { ...round.notice, applyStart: "2026-11-25", applyEnd: "2026-11-28" } }] };
+    const j = (date: string) => judgePolicy(P(INCHEON), currentOnly, PERSONA_A, new Date(`${date}T12:00:00+09:00`));
+    expect(j("2026-11-24").recruitment).toBe("upcoming");
+    expect(j("2026-11-25").recruitment).toBe("open");
+    expect(j("2026-11-29").recruitment).toBe("closed");
+  });
+
   test("드림For 나이: 2026-01-01 기준 1986-01생은 경계라 확인 필요, 1985-11생은 만 40세로 비해당", () => {
     const employed = { ...PERSONA_A, currentStatus: ["employed" as const] };
-    const edge = judgePolicy(P(DREAMFOR), V(DREAMFOR), { ...employed, birthYm: "1986-01" }, NOW);
+    const edge = judgePolicy(P(DREAMFOR), V(DREAMFOR), { ...employed, birthYm: "1986-01" }, DREAMFOR_OPEN);
     expect(edge.personal.value).toBe("needs_check");
     expect(edge.personal.reasons).toContain(REASON.ageBoundary);
-    const ok = judgePolicy(P(DREAMFOR), V(DREAMFOR), { ...employed, birthYm: "1995-06" }, NOW);
+    const ok = judgePolicy(P(DREAMFOR), V(DREAMFOR), { ...employed, birthYm: "1995-06" }, DREAMFOR_OPEN);
     expect(ok.personal.reasons).not.toContain(REASON.ageBoundary);
-    const over = judgePolicy(P(DREAMFOR), V(DREAMFOR), { ...employed, birthYm: "1985-11" }, NOW);
+    const over = judgePolicy(P(DREAMFOR), V(DREAMFOR), { ...employed, birthYm: "1985-11" }, DREAMFOR_OPEN);
     expect(over.personal.value).toBe("ineligible");
   });
 

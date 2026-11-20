@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { handleAgent, resetAgentState } from "@/lib/agent/run";
+import { loadVerified } from "@/lib/data/verified";
 import { resetLimits } from "@/lib/limits";
 import { scriptedClient } from "../verify/helpers";
 
@@ -36,6 +37,16 @@ describe("handleAgent (상담 에이전트, 가상 인물 전용)", () => {
     expect(r.body.fallback).toBe(false);
     expect(r.body.log?.map((l) => l.tool)).toEqual(["rank_open_questions", "get_policy_evidence", "finish_cards"]);
     expect(r.body.cards?.[0].policyId).toBe(CHALLENGE);
+  });
+
+  test("12/1에는 지난 인천 응시료 공고의 조건 근거를 모델에 보내지 않는다", async () => {
+    const id = "20260406005400212445";
+    const v = loadVerified().get(id)!;
+    const client = scriptedClient([[{ name: "get_policy_evidence", input: { policy_id: id } }], textTurn("정리했습니다.")]);
+    await handleAgent({ personaId: "demo-1" }, { env, now: new Date("2026-12-01T12:00:00+09:00"), makeClient: () => client });
+    const sent = JSON.stringify(client.requests[1]);
+    expect(sent).toContain("이번 신청 시점에 사람이 확인한 조건별 근거가 없습니다.");
+    for (const quote of v.statusConditions.quotes) expect(sent).not.toContain(quote.text);
   });
 
   test("금지 표현이 나오면 버리고 코드가 조립한 카드로 대체한다", async () => {

@@ -145,6 +145,13 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan, o
       points.add(addDays(v.apply.end, 1));
     }
     if (v.apply.start) points.add(v.apply.start);
+    for (const { notice } of v.rounds ?? []) {
+      if (notice.applyStart) points.add(notice.applyStart);
+      if (notice.applyEnd) {
+        points.add(notice.applyEnd);
+        points.add(addDays(notice.applyEnd, 1));
+      }
+    }
   }
   const samples = [...points].filter((d) => d >= today && d <= end).sort();
 

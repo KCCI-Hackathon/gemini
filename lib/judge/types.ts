@@ -57,7 +57,8 @@ export const REASON = {
   history: "최근 취업·훈련 이력 확인 필요",
   period: "기간 경과 후 재검토",
   statusUnknown: "현재 취업 상태 확인 필요",
-  roundReview: "올해 공고 기준 확인 중",
+  roundReview: "이번 공고 기준 확인 중",
+  nextRound: "다음 회차 공고 전",
 } as const;
 
 /** 상태 전이 비교의 기준. 전이 전 프로필들(원래 프로필, 이전 가정 상태)에서 계산한다 */

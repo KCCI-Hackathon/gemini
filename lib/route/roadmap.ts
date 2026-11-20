@@ -7,11 +7,11 @@ import type { VerifyResult } from "@/lib/verify/run";
 import { savedResult } from "@/lib/verify/saved";
 import type { Policy } from "@/lib/data/types";
 import type { EventType } from "@/lib/judge";
-import type { Evidence } from "@/lib/judge/rules";
+import { pickRound, type Evidence } from "@/lib/judge/rules";
 import type { CellState, Timeline } from "./timeline";
 
 /** 근거 확인됨 / 근거 확인 대기(회차별 규칙, 조건별 사람 확인 전) / 공고 항목 확인됨 / AI 대조(사람 미확인) / 미검증 */
-export type VerifyLabel = "근거 확인됨" | "근거 확인 대기" | "공고 항목 확인됨" | "AI 대조(사람 미확인)" | "미검증(API)";
+export type VerifyLabel = "근거 확인됨" | "근거 확인 대기" | "이번 공고 기준 확인 중" | "다음 회차 공고 전" | "공고 항목 확인됨" | "AI 대조(사람 미확인)" | "미검증(API)" | "공고 재확인 필요";
 
 export type RoadmapCat = "job" | "startup" | "housing" | "edu" | "life";
 export type RoadmapStatus = "ok" | "check" | "wait" | "none";
@@ -98,10 +98,13 @@ function statusOf({ personalAtStart, verified, cells }: Timeline["rows"][number]
   return { status: "none", label: "이 기간 신청 구간 없음" };
 }
 
-function labelOf(v: VerifiedPolicy | undefined, saved: VerifyResult | undefined): VerifyLabel {
-  if (v?.rounds?.length) return v.rounds.every((x) => x.status !== "approved" || x.conditions.every((c) => c.supportsConfirmed)) ? "근거 확인됨" : "근거 확인 대기";
+function labelOf(v: VerifiedPolicy | undefined, saved: VerifyResult | undefined, pick: ReturnType<typeof pickRound> | null, effect: FieldEffect | null, needsReview: boolean): VerifyLabel {
+  if (effect?.newRound || pick?.state === "under_review") return "이번 공고 기준 확인 중";
+  if (pick?.state === "outside") return "다음 회차 공고 전";
+  if (pick?.round?.conditions.length && pick.round.conditions.every((c) => c.supportsConfirmed)) return "근거 확인됨";
   if (v) return "근거 확인 대기";
-  if (saved?.fieldChecks?.length) return saved.fieldChecksConfirmed ? "공고 항목 확인됨" : "AI 대조(사람 미확인)";
+  if (needsReview) return "공고 재확인 필요";
+  if (saved?.fieldChecks?.some((field) => field.status === "match" || field.status === "differs")) return saved.fieldChecksConfirmed ? "공고 항목 확인됨" : "AI 대조(사람 미확인)";
   return "미검증(API)";
 }
 
@@ -120,6 +123,36 @@ function shorten(s: string): string {
   return t.length > SUPPORT_MAX ? `${t.slice(0, SUPPORT_MAX - 1)}…` : t;
 }
 
+export function policyNotice(p: Policy | undefined, v: VerifiedPolicy | undefined, date: string) {
+  const apiLink = p?.links.apply ?? p?.links.ref ?? null;
+  const saved = p ? savedResult(p.id) : undefined;
+
+  const pick = v?.rounds?.length ? pickRound(v.rounds, date) : null;
+  const effect = p && saved?.outcome === "verified_against_notice" ? fieldCheckEffect(saved, p, v, date) : null;
+  const notice = effect?.newRound ? saved?.notice : pick?.round?.notice;
+  const officialUrl = (effect?.newRound ? effect.newRound.url : pick?.round?.notice.url) ?? (pick ? null : v?.sources[0].url);
+  let official: RoadmapRow["official"];
+  if (notice) {
+    const always = v?.apply.type === "always" && !notice.applyStart && !notice.applyEnd;
+    official = { type: always ? "always" : "period", start: notice.applyStart, end: notice.applyEnd };
+  } else if (pick) {
+    official = { type: "period", start: null, end: null };
+  } else if (v) {
+    official = { type: v.apply.type, start: v.apply.start, end: v.apply.end };
+  } else {
+    official = { type: p?.applyPeriodType ?? "closed", start: p?.applyStart ?? null, end: p?.applyEnd ?? null };
+  }
+  const link: RoadmapRow["link"] = officialUrl ? { url: officialUrl, kind: "official" }
+    : apiLink && !pick ? { url: apiLink, kind: "api" } : null;
+  return {
+    verifyLabel: labelOf(v, saved, pick, effect, false),
+    fieldNotes: effect ? notesOf(effect) : [],
+    newRound: Boolean(effect?.newRound),
+    official,
+    link,
+  };
+}
+
 export function buildRoadmap(timeline: Timeline): Roadmap {
   const policies = new Map<string, Policy>(loadSnapshot().policies.map((p) => [p.id, p]));
   const verified = loadVerified();
@@ -128,7 +161,7 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
     const p = policies.get(r.policyId);
     const v = verified.get(r.policyId);
     const { status, label } = statusOf(r);
-    const apiLink = p?.links.apply ?? p?.links.ref ?? null;
+    const notice = policyNotice(p, v, r.firstAvailable ?? timeline.months[0]);
     return {
       order: r.order,
       policyId: r.policyId,
@@ -136,12 +169,10 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
       org: p?.supervisingOrg ?? "",
       cat: p ? categoryOf(p.category) : "life",
       verified: r.verified,
-      verifyLabel: labelOf(v, savedResult(r.policyId)),
-      fieldNotes: p && savedResult(r.policyId)?.outcome === "verified_against_notice" ? notesOf(fieldCheckEffect(savedResult(r.policyId)!, p, v, timeline.months[0])) : [],
-      evidence: r.evidence,
-      official: v
-        ? { type: v.apply.type, start: v.apply.start, end: v.apply.end }
-        : { type: p?.applyPeriodType ?? "closed", start: p?.applyStart ?? null, end: p?.applyEnd ?? null },
+      verifyLabel: notice.verifyLabel,
+      fieldNotes: notice.fieldNotes,
+      evidence: notice.newRound ? [] : r.evidence,
+      official: notice.official,
       windows: windowsOf(r.cells, new Map(r.breaks.map((d) => [monthIndexOf(timeline.months, d), `${GOAL_LABEL[timeline.events.find((e) => e.date === d)?.type ?? "employment"]} 후 다시 확인`]))),
       boundaries: r.boundaries.map((d) => {
         const type = timeline.events.find((e) => e.date === d)?.type ?? "employment";
@@ -159,7 +190,7 @@ export function buildRoadmap(timeline: Timeline): Roadmap {
       summary: r.summary,
       reasons: r.reasons,
       support: shorten(p?.texts.support ?? ""),
-      link: v ? { url: v.sources[0].url, kind: "official" } : apiLink ? { url: apiLink, kind: "api" } : null,
+      link: notice.link,
     };
   });
 
