@@ -4,10 +4,10 @@ import { monthsBetween, toKstDate } from "@/lib/date";
 import { regionLabel } from "@/lib/data/regions";
 import { STATUS_NAME } from "@/lib/judge/rules";
 import { ageRange, effectiveStatus } from "@/lib/judge/personal";
-import type { Profile } from "@/lib/judge/types";
+import type { Benefit, Profile } from "@/lib/judge/types";
 import type { TimelinePlan } from "@/lib/route/timeline";
 
-export type PlanSession = { profile: Profile; plan: TimelinePlan; answers: Record<string, string> };
+export type PlanSession = { profile: Profile; plan: TimelinePlan; answers: Record<string, string>; benefits?: Benefit[] };
 
 export type AiSummary = {
   age: string;

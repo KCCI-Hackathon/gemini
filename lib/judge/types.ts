@@ -1,5 +1,7 @@
 import type { StatusKey } from "@/lib/data/verified";
 import type { Evidence } from "./rules";
+import type { Benefit, Restriction } from "./overlap";
+export type { Benefit, Restriction } from "./overlap";
 
 export type EventType = "training_completion" | "employment" | "business_registration" | "relocation";
 
@@ -19,6 +21,7 @@ export type Profile = {
   events: ProfileEvent[];
   /** 사용자가 참여 중이라고 답한 정책 번호 */
   participating: string[];
+  benefits?: Benefit[];
   /** 상담 질문의 답: 최근 6개월 안에 취업·교육·직업훈련 이력이 있는지. 없으면 모름 */
   recentHistory?: "yes" | "no";
   /** 응시일 기준 정책을 위한 응시(예정)일. 없으면 모름 */
@@ -34,7 +37,12 @@ export type Axes = {
   personal: { value: PersonalValue; reasons: string[]; evidence?: Evidence[] };
   recruitment: "open" | "upcoming" | "closed" | "always" | "unknown";
   time: { value: "met" | "unmet" | "needs_check" | "na"; note?: string };
-  restriction: { value: "applies" | "official_quote" | "confirmed_relation" | "unknown"; quotes: string[] };
+  restriction: {
+    value: "applies" | "official_quote" | "confirmed_relation" | "unknown";
+    quotes: string[];
+    current_restrictions?: Restriction[];
+    planned_conflicts?: Restriction[];
+  };
   /** 저장된 항목별 대조에서 온 문구(모집 축을 낮춘 이유, 참고 문구) */
   fieldNotes?: string[];
 };

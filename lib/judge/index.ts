@@ -2,9 +2,11 @@ import { fieldCheckEffect } from "@/lib/verify/downgrade";
 import { savedResult } from "@/lib/verify/saved";
 import { isOpenAt, monthsBetween, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { loadOverlap, loadOverlapNotices } from "@/lib/data/overlap";
 import type { Policy } from "@/lib/data/types";
 import { loadVerified, type VerifiedPolicy } from "@/lib/data/verified";
 import { effectiveStatus, judgePersonal } from "./personal";
+import { blocksParticipation, evaluateRules } from "./overlap";
 import { REASON, type Axes, type JudgeOpts, type Layer, type Profile } from "./types";
 
 export * from "./types";
@@ -46,7 +48,7 @@ function timeAxis(v: VerifiedPolicy | undefined, profile: Profile, now: Date): A
   return { value: "met", note };
 }
 
-function restrictionAxis(p: Policy, v: VerifiedPolicy | undefined, profile: Profile): Axes["restriction"] {
+function legacyRestriction(p: Policy, v: VerifiedPolicy | undefined, profile: Profile): Axes["restriction"] {
   if (v) {
     const applies = v.restrictionQuotes.filter((q) => q.mentions?.some((id) => profile.participating.includes(id)));
     if (applies.length) return { value: "applies", quotes: applies.map((q) => q.text) };
@@ -58,6 +60,24 @@ function restrictionAxis(p: Policy, v: VerifiedPolicy | undefined, profile: Prof
   return m ? { value: "official_quote", quotes: [m[0].trim()] } : { value: "unknown", quotes: [] };
 }
 
+function restrictionAxis(p: Policy, v: VerifiedPolicy | undefined, profile: Profile, now: Date): Axes["restriction"] {
+  const rules = loadOverlap().get(p.id);
+  const notices = loadOverlapNotices(p.id);
+  if (rules?.length) {
+    const facts = profile.benefits ?? [];
+    const result = evaluateRules(rules, facts, facts.filter(f => f.status === "planned" || f.plannedStart || f.plannedEnd), now);
+    return { ...result, value: result.current_restrictions.some(r => r.state === "applies") ? "applies"
+      : rules.some(r => r.judgement === "blocked") ? "confirmed_relation" : "official_quote",
+      quotes: [...new Set([...rules.map(r => r.evidence.quote_text), ...notices])] };
+  }
+  const legacy = legacyRestriction(p, v, profile);
+  if (notices.length) {
+    if (legacy.value === "unknown") legacy.value = "official_quote";
+    legacy.quotes = [...new Set([...legacy.quotes, ...notices])];
+  }
+  return legacy;
+}
+
 export function judgePolicy(
   p: Policy,
   v: VerifiedPolicy | undefined,
@@ -66,8 +86,10 @@ export function judgePolicy(
   opts: JudgeOpts = {},
 ): Axes {
   const personal = judgePersonal(p, v, profile, now, opts);
-  const restriction = restrictionAxis(p, v, profile);
-  if (restriction.value === "applies" && personal.value === "eligible") {
+  const restriction = restrictionAxis(p, v, profile, now);
+  const current = restriction.current_restrictions;
+  const blocked = current?.find(blocksParticipation);
+  if (!current && restriction.value === "applies" && personal.value === "eligible") {
     personal.value = "needs_check";
     personal.reasons.push(REASON.participating);
   }
@@ -80,6 +102,13 @@ export function judgePolicy(
   if (time.value === "unmet" && personal.value === "eligible") {
     personal.value = "needs_check";
     personal.reasons.push(REASON.period);
+  }
+  if (blocked) {
+    personal.value = "ineligible";
+    personal.reasons.push(blocked.reason);
+  } else if (current?.some(r => r.state === "needs_info" && !r.restricted_item) && personal.value !== "ineligible") {
+    personal.value = "needs_check";
+    personal.reasons.push("중복수혜 제한 조건 확인 필요");
   }
   const axes: Axes = { personal, recruitment: recruitment(p, v, now), time, restriction };
   return applySavedFieldChecks(axes, p, v, now);

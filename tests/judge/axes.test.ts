@@ -46,7 +46,8 @@ describe("judgePolicy: 시연 인물 가(수강 중, 미취업)의 현재 판정
     const a = j(CHALLENGE);
     expect(a.personal.value).toBe("ineligible");
     expect(a.time.value).toBe("unmet");
-    expect(a.restriction.value).toBe("official_quote");
+    expect(a.restriction.value).toBe("confirmed_relation");
+    expect(a.restriction.quotes.join(" ")).toContain("구직급여를 받고 있거나");
   });
   test("드림For: 재직자 대상이라 비해당, 모집 종료, 확인된 중복 관계", () => {
     const a = j(DREAMFOR);
@@ -90,9 +91,11 @@ describe("judgePolicy 규칙", () => {
     for (const r of results) if (!r.verified) expect(r.axes.personal.value).not.toBe("eligible");
   });
 
-  test("국민취업지원제도 참여 중이라고 답하면 청년도전 제한이 '적용됨'", () => {
+  test("국민취업지원제도 참여만으로 수급을 단정하지 않고 명시적 수급 사실로 제한을 적용한다", () => {
     const a = judgePolicy(P(CHALLENGE), V(CHALLENGE), { ...PERSONA_A, participating: [NATIONAL] }, NOW);
-    expect(a.restriction.value).toBe("applies");
+    expect(a.restriction.current_restrictions?.find(r => r.sourceId === NATIONAL)?.state).toBe("needs_info");
+    const receiving = judgePolicy(P(CHALLENGE), V(CHALLENGE), { ...PERSONA_A, benefits: [{ policyId: NATIONAL, status: "receiving" }] }, NOW);
+    expect(receiving.restriction.value).toBe("applies");
   });
 
   test("예정일이 지났는데 완료로 바꾸지 않았으면 안내 문구", () => {

@@ -15,6 +15,7 @@ const INCHEON = "20260406005400212445";
 const NATIONAL = "20260710005400113256";
 const CHALLENGE = "20250122005400110346";
 const unemployedNoHistory: Profile = { ...PERSONA_A, currentStatus: ["unemployed"], events: [] };
+const unpaid = [NATIONAL, "20250122005400110369"].map(policyId => ({ policyId, status: "eligible_unpaid" as const }));
 
 describe("weighPolicy: 먼저 확인할 순서 점수", () => {
   const results = judgeAll(PERSONA_A, NOW);
@@ -130,7 +131,7 @@ describe("상담 질문: 최근 이력", () => {
   });
 
   test("'아니오'라고 답하면 청년도전의 시간 조건이 충족으로 바뀐다", () => {
-    const a = judgePolicy(P(CHALLENGE), V(CHALLENGE), { ...unemployedNoHistory, recentHistory: "no" }, NOW);
+    const a = judgePolicy(P(CHALLENGE), V(CHALLENGE), { ...unemployedNoHistory, recentHistory: "no", benefits: unpaid }, NOW);
     expect(a.time.value).toBe("met");
     expect(a.personal.value).toBe("eligible");
   });
@@ -142,7 +143,7 @@ describe("상담 질문: 최근 이력", () => {
   });
 
   test("판정 요청에 답을 실으면 반영되고, 응답에 루트가 들어 있다", () => {
-    const r = handleJudge({ profile: unemployedNoHistory, answers: { recent_history: "아니오" } }, NOW);
+    const r = handleJudge({ profile: unemployedNoHistory, benefits: unpaid, answers: { recent_history: "아니오" } }, NOW);
     if (!("route" in r.body)) throw new Error("400");
     expect(r.body.items.find((i) => i.id === CHALLENGE)?.personal).toBe("eligible");
     expect(r.body.route.trunk[0].key).toBe("now");

@@ -4,12 +4,14 @@
 // - 판정은 하지 않는다. 다음 질문 고르기, 기타 글 해석(가상 인물), 계획 요약만 한다.
 // - 서버에 상태를 남기지 않는다. 같은 요약·같은 모드면 같은 날 결과를 다시 쓴다(기타 글이 있으면 다시 쓰지 않음).
 import type Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { aiConfigured } from "@/lib/ai/client";
 import { monthsBetween, toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
 import { guardResponse } from "@/lib/agent/guard";
 import { handleJudge } from "@/lib/judge/handler";
+import { BenefitsSchema } from "@/lib/judge/overlap";
 import { BASIS_LABEL } from "@/lib/judge/rules";
 import { takeQuota } from "@/lib/limits";
 import type { Roadmap } from "@/lib/route/roadmap";
@@ -82,7 +84,7 @@ const RequestSchema = z.object({
   mode: z.enum(["first", "answer", "replan"]),
   persona: z.boolean(),
   consent: z.boolean().optional(),
-  session: z.object({ profile: z.any(), plan: z.any().default({}), answers: z.record(z.string(), z.string()).default({}) }),
+  session: z.object({ profile: z.any(), plan: z.any().default({}), answers: z.record(z.string(), z.string()).default({}), benefits: BenefitsSchema.optional() }),
   otherText: z.string().max(200).optional(),
 });
 
@@ -143,17 +145,19 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   if (!aiConfigured(ctx.env)) return { status: 503, body: { error: "AI가 꺼져 있습니다." } };
 
   const session = req.session as PlanSession;
-  const judged = handleJudge({ profile: session.profile, plan: session.plan, answers: session.answers }, ctx.now);
+  const judged = handleJudge(session, ctx.now);
   if (!("roadmap" in judged.body)) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   const roadmap = judged.body.roadmap;
   const questions = judged.body.questions;
 
   const summary = summarizeForAI(session, ctx.now);
-  const key = `${toKstDate(ctx.now)}:${req.mode}:${JSON.stringify(summary)}`;
+  const route = routeForAI(roadmap);
+  const verdictHash = createHash("sha256").update(JSON.stringify([judged.body.items, route, questions])).digest("hex");
+  const key = `${toKstDate(ctx.now)}:${req.mode}:${judged.body.dataVersion}:${verdictHash}:${JSON.stringify(summary)}`;
   if (!req.otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
   if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
-  const out = await runPlan(req.mode, summary, routeForAI(roadmap), roadmap, questions, req.persona ? req.otherText : undefined, ctx);
+  const out = await runPlan(req.mode, summary, route, roadmap, questions, req.persona ? req.otherText : undefined, ctx);
   if (!req.otherText && !out.fallback) cache.set(key, out);
   return { status: 200, body: out };
 }

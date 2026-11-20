@@ -2,6 +2,8 @@
 import { z } from "zod";
 import { toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { overlapDataVersion } from "@/lib/data/overlap";
+import { BenefitsSchema, type Restriction } from "./overlap";
 import { loadVerified, StatusKey } from "@/lib/data/verified";
 import { assembleCards, type ActionCard } from "@/lib/agent/assemble";
 import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
@@ -32,6 +34,7 @@ const ProfileSchema = z.object({
 
 const RequestSchema = z.object({
   profile: ProfileSchema,
+  benefits: BenefitsSchema.optional(),
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
   answers: z
     .object({
@@ -61,6 +64,8 @@ export type JudgeItem = {
   timeNote: string | null;
   restriction: string;
   restrictionQuotes: string[];
+  restrictions: Restriction[];
+  planned_conflicts: Restriction[];
   link: string | null;
   change: string | null;
   changeKey: string | null;
@@ -70,6 +75,7 @@ export type JudgeBody =
   | { error: string }
   | {
       asOf: string;
+      dataVersion: string;
       today: string;
       lastTransition: Transition | null;
       summary: Record<PersonalValue, number>;
@@ -89,6 +95,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   let profile: Profile = structuredClone(parsed.data.profile);
+  if (parsed.data.benefits) profile.benefits = parsed.data.benefits;
   if (parsed.data.answers?.participating_national_employment_support === "예" && !profile.participating.includes(NATIONAL)) {
     profile.participating.push(NATIONAL);
   }
@@ -131,6 +138,8 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       timeNote: r.axes.time.note ?? null,
       restriction: r.axes.restriction.value,
       restrictionQuotes: r.axes.restriction.quotes,
+      restrictions: r.axes.restriction.current_restrictions ?? [],
+      planned_conflicts: r.axes.restriction.planned_conflicts ?? [],
       link: v?.sources[0]?.url ?? r.policy.links.apply ?? r.policy.links.ref,
       change: c && c.change !== "unchanged" ? CHANGE_LABEL[c.change] : null,
       changeKey: c && c.change !== "unchanged" ? c.change : null,
@@ -143,6 +152,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
     status: 200,
     body: {
       asOf: loadSnapshot().asOf,
+      dataVersion: overlapDataVersion(),
       today: toKstDate(now),
       lastTransition: last,
       summary,

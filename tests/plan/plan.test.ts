@@ -1,10 +1,12 @@
 // 통합 설계 6장: 계획 에이전트
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PERSONA_A } from "@/lib/judge/personas";
 import type { Profile } from "@/lib/judge/types";
 import { handlePlan, resetPlanState } from "@/lib/plan/handler";
 import { summarizeForAI } from "@/lib/plan/summary";
 import { scriptedClient } from "../verify/helpers";
+import * as overlap from "@/lib/data/overlap";
+import { rule, SOURCE, TARGET } from "../overlap/runtime-fixture";
 
 const NOW = new Date("2026-11-18T12:00:00+09:00");
 const KNEWDEAL = "20260714005400113258";
@@ -14,6 +16,7 @@ const ON = { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k" };
 const ctx = (env: Record<string, string>, client: ReturnType<typeof scriptedClient>) => ({ env, ip: "1.1.1.1", now: NOW, makeClient: () => client });
 
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
+afterEach(() => vi.restoreAllMocks());
 
 describe("summarizeForAI: AI로 가는 것은 요약뿐", () => {
   test("생년월일·시군구 코드·날짜·응시일이 없고 만 나이·시군구 이름·N개월 뒤만 있다", () => {
@@ -60,6 +63,26 @@ describe("handlePlan: 실제 사용자는 스위치와 동의가 있어야", () 
     expect(sent).not.toContain("28185");
     expect(sent).not.toContain("2026-10-01");
     expect(sent).not.toContain("2027-02-18");
+  });
+
+  test("내부 판정과 자료 버전이 달라지면 캐시를 구분하고 수혜 사실을 AI에 전송하지 않는다", async () => {
+    vi.spyOn(overlap, "loadOverlap").mockReturnValue(new Map([[TARGET, [rule({ condition_type: "within_months_after_end", condition_params: { months: 6 } })]]]));
+    const version = vi.spyOn(overlap, "overlapDataVersion").mockReturnValue("version1");
+    const client = scriptedClient(Array.from({ length: 3 }, () => [
+      { name: "get_route", input: {} },
+    ]).flatMap(c => [c, [{ name: "finish_plan", input: { summary: "계획", stations: [] } }]]));
+    const req = async (lastPaymentDate: string) => handlePlan({ mode: "replan", persona: false, consent: true, session: {
+      ...session({ ...USER, sigungu: "00000" }), benefits: [{ policyId: SOURCE, status: "ended", lastPaymentDate, monthlyPayment: { month: "2026-03", amountWon: 1234598 } }],
+    } }, ctx({ ...ON, PLAN_AI_FOR_USERS: "true" }, client));
+    expect((await req("2026-08-07")).body.fallback).toBe(false);
+    await req("2026-08-07");
+    expect(client.calls).toBe(2);
+    expect((await req("2026-03-08")).body.fallback).toBe(false);
+    expect(client.calls).toBe(4);
+    version.mockReturnValue("version2");
+    await req("2026-03-08");
+    expect(client.calls).toBe(6);
+    expect(JSON.stringify(client.requests)).not.toMatch(/lastPaymentDate|monthlyPayment|2026-08-07|2026-03-08|1234598/);
   });
 });
 

@@ -50,6 +50,32 @@ npx tsx --tsconfig tsconfig.json scripts/verify-replay.ts run 202604060054002124
 
 `data/verify-results/index.json`의 현재 6건은 이 방식으로 만든 것입니다(2026-11-17). 페이지 열기·허용 도메인·robots.txt·인용 대조는 서비스 코드가 수행했고, 어떤 페이지를 열고 무엇을 인용할지는 Claude Code가 정했습니다. Claude API로 실행한 결과가 아닙니다.
 
+## 중복수혜 규칙 실행
+
+중복수혜 에이전트는 로컬에서 공개 정책 원문을 분석합니다. 기존 `/api/verify`는 정책 한 건의 공식 공고를 대조합니다. 중복수혜 결과는 SQLite에서 검증하고 JSON으로 내보냅니다. 배포된 `/api/judge`는 이 JSON을 읽어 신청자의 수혜 사실과 대조합니다. [구현 계획](docs/backend/2026-11-19-overlap-agent-implementation-plan.md)
+
+Node 22.22에서 연구 조사본으로 배포 파일을 재생성하는 명령입니다.
+
+```bash
+npm ci
+npm run db:build -- --research-only
+npm run db:export
+npm run db:verify
+```
+
+새 Gemini 실행에는 프로젝트의 무료 할당량과 로컬 `.env.local`의 `GEMINI_API_KEY`가 필요합니다. 실호출은 `npm run overlap:agent -- --live`로 시작합니다. 실행 ID는 `data/overlap-agent/latest.json`에 기록됩니다. 중단 후에는 같은 입력으로 `--live --run-id <ID>`를 사용합니다. 최신 실행의 저장 응답을 다시 채점하고 배포본을 만드는 명령은 다음과 같습니다.
+
+```bash
+npm run overlap:agent -- --replay --run-id <ID>
+npm run db:build
+npm run db:export
+npm run db:verify
+```
+
+점수와 요청 해시는 `data/overlap-agent/report-<ID>.md`에서 확인합니다. 점수 기준을 통과하지 못한 실행은 종료 코드 2를 반환합니다. 적재·내보내기는 같은 실행과 원문의 검증을 통과한 에이전트 규칙만 조사본에 추가합니다. 이전 실행을 재현하려면 별도 작업 폴더에서 그 실행 기록과 저장 응답을 사용합니다.
+
+`POST /api/judge`에 기존 프로필과 함께 선택 입력인 `benefits`를 보낼 수 있습니다. 예를 들어 구직급여 지급이 종료됐다면 `{"policyId":"20250122005400110369","status":"ended","lastPaymentDate":"2026-07-15"}`를 배열에 담습니다. 정책별 `restrictions`에는 적용 여부·이유·인용 근거가, `planned_conflicts`에는 예정된 충돌이 들어갑니다. 응답의 `dataVersion`으로 사용한 규칙 버전을 식별합니다.
+
 ## Credits / Licenses
 
 | 구분 | 이름 | 출처·라이선스 | 사용 위치 |

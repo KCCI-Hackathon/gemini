@@ -5,6 +5,7 @@
 import { addMonths, toKstDate } from "@/lib/date";
 import { regionLabel } from "@/lib/data/regions";
 import { loadVerified } from "@/lib/data/verified";
+import { loadOverlap } from "@/lib/data/overlap";
 import { judgeAll, type EventType, type JudgedPolicy, type PersonalValue, type Profile } from "@/lib/judge";
 import { baselineOpts, effectiveStatus } from "@/lib/judge/personal";
 import type { Evidence } from "@/lib/judge/rules";
@@ -133,6 +134,16 @@ export function buildTimeline(profile: Profile, now: Date, plan: TimelinePlan): 
   const verified = loadVerified();
   const lookbacks = new Set([...verified.values()].flatMap((v) => (v.lookback ? [v.lookback.months] : [])));
   const points = new Set<string>(months);
+  if (profile.benefits?.length) {
+    for (const rules of loadOverlap().values()) {
+      for (const rule of rules) {
+        const months = rule.condition_params.months;
+        if (rule.condition_type !== "within_months_after_end" || typeof months !== "number" || !Number.isSafeInteger(months) || months < 1) continue;
+        const last = profile.benefits.find(f => f.policyId === rule.source_policy_id && f.lastPaymentDate)?.lastPaymentDate;
+        if (last) points.add(addMonths(last, months));
+      }
+    }
+  }
   for (const e of events) {
     points.add(e.date);
     for (const m of lookbacks) points.add(addMonths(e.date, m));
