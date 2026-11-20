@@ -14,6 +14,9 @@ import { buildTimeline, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
 import { baselineOpts } from "./personal";
+import { PlannerInputSchema } from "@/lib/planner/schema";
+import { evaluateRequest } from "@/lib/planner/catalog";
+import type { Evaluation } from "@/lib/planner/types";
 
 const NATIONAL = "20260710005400113256";
 
@@ -32,6 +35,7 @@ const ProfileSchema = z.object({
 
 const RequestSchema = z.object({
   profile: ProfileSchema,
+  plannerV2: PlannerInputSchema.optional(),
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
   answers: z
     .object({
@@ -67,7 +71,7 @@ export type JudgeItem = {
 };
 
 export type JudgeBody =
-  | { error: string }
+  | { error: string; field?: string; code?: string }
   | {
       asOf: string;
       today: string;
@@ -83,11 +87,12 @@ export type JudgeBody =
       roadmap: Roadmap;
       pipeline: Pipeline;
       needsVerification: string[];
+      plannerV2?: Evaluation;
     };
 
 export function handleJudge(body: unknown, now: Date): { status: number; body: JudgeBody } {
   const parsed = RequestSchema.safeParse(body);
-  if (!parsed.success) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
+  if (!parsed.success) return { status: 400, body: { error: parsed.error.issues[0]?.message ?? "프로필 형식이 잘못됐습니다.", field: parsed.error.issues[0]?.path.join("."), code: "INVALID_INPUT" } };
   let profile: Profile = structuredClone(parsed.data.profile);
   if (parsed.data.answers?.participating_national_employment_support === "예" && !profile.participating.includes(NATIONAL)) {
     profile.participating.push(NATIONAL);
@@ -157,6 +162,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       roadmap,
       pipeline: buildPipeline(roadmap, allRelations()),
       needsVerification: last ? needsVerification(changes, new Set()) : [],
+      ...(parsed.data.plannerV2 ? { plannerV2: evaluateRequest(origin, parsed.data.plannerV2, now, parsed.data.plan) } : {}),
     },
   };
 }
