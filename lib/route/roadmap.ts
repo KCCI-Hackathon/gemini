@@ -4,7 +4,7 @@ import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified, type VerifiedPolicy } from "@/lib/data/verified";
 import { fieldCheckEffect, type FieldEffect } from "@/lib/verify/downgrade";
 import type { VerifyResult } from "@/lib/verify/run";
-import { savedResult } from "@/lib/verify/saved";
+import { savedResult, VERIFY_RECHECK } from "@/lib/verify/saved";
 import type { Policy } from "@/lib/data/types";
 import type { EventType } from "@/lib/judge";
 import { pickRound, type Evidence } from "@/lib/judge/rules";
@@ -125,8 +125,8 @@ function shorten(s: string): string {
 
 export function policyNotice(p: Policy | undefined, v: VerifiedPolicy | undefined, date: string) {
   const apiLink = p?.links.apply ?? p?.links.ref ?? null;
-  const saved = p ? savedResult(p.id) : undefined;
-
+  const lookup = p ? savedResult(p, v, date) : undefined;
+  const saved = lookup?.result;
   const pick = v?.rounds?.length ? pickRound(v.rounds, date) : null;
   const effect = p && saved?.outcome === "verified_against_notice" ? fieldCheckEffect(saved, p, v, date) : null;
   const notice = effect?.newRound ? saved?.notice : pick?.round?.notice;
@@ -145,8 +145,8 @@ export function policyNotice(p: Policy | undefined, v: VerifiedPolicy | undefine
   const link: RoadmapRow["link"] = officialUrl ? { url: officialUrl, kind: "official" }
     : apiLink && !pick ? { url: apiLink, kind: "api" } : null;
   return {
-    verifyLabel: labelOf(v, saved, pick, effect, false),
-    fieldNotes: effect ? notesOf(effect) : [],
+    verifyLabel: labelOf(v, saved, pick, effect, lookup?.needsReview ?? false),
+    fieldNotes: effect ? notesOf(effect) : lookup?.needsReview ? [VERIFY_RECHECK] : [],
     newRound: Boolean(effect?.newRound),
     official,
     link,

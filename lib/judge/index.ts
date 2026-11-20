@@ -1,5 +1,5 @@
 import { fieldCheckEffect } from "@/lib/verify/downgrade";
-import { savedResult } from "@/lib/verify/saved";
+import { savedResult, VERIFY_RECHECK } from "@/lib/verify/saved";
 import { isOpenAt, monthsBetween, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import type { Policy } from "@/lib/data/types";
@@ -103,7 +103,8 @@ const RANK_V = { eligible: 0, code_met_unreviewed: 1, needs_check: 2, ineligible
 
 /** 준비 단계 저장 결과의 항목별 대조를 반영한다. 낮추기만 한다(통합 설계 5.3-4) */
 function applySavedFieldChecks(axes: Axes, p: Policy, v: VerifiedPolicy | undefined, now: Date): Axes {
-  const saved = savedResult(p.id);
+  const { result: saved, needsReview } = savedResult(p, v, toKstDate(now));
+  if (needsReview) axes.fieldNotes = [...(axes.fieldNotes ?? []), VERIFY_RECHECK];
   if (!saved || saved.outcome !== "verified_against_notice") return axes;
   const e = fieldCheckEffect(saved, p, v, toKstDate(now));
   const lower = (reason: string) => {

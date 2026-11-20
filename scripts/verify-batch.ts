@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "node:fs";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { runVerification, policyHosts, type AnthropicLike } from "@/lib/verify/run";
+import { saveVerification } from "@/lib/verify/saved";
 import { createWeb } from "@/lib/verify/web";
 
 const OUT = "data/verify-results/index.json";
@@ -20,7 +21,7 @@ async function main() {
       continue;
     }
     const r = await runVerification(id, { client, web: createWeb({ extraHosts: policyHosts(p) }), now: new Date(), enableSearch: true });
-    saved[id] = r;
+    saveVerification(saved, r);
     console.log(`${id} ${p.name}: ${r.outcome} ${r.noticeUrl ?? ""} 불일치 ${r.mismatches.map((m) => m.kind).join(",") || "-"} (호출 ${r.usage.calls}, 페이지 ${r.usage.pagesOpened})`);
     fs.writeFileSync(OUT, JSON.stringify(saved, null, 1));
   }

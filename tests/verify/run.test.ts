@@ -115,12 +115,13 @@ describe("runVerification: 공고 탐색 루프", () => {
 });
 
 describe("runFixedPipeline: 고정 처리 기준선", () => {
-  test("바이오: 첫 링크를 그대로 근거로 채택한다(판단·재탐색 없음)", async () => {
+  test("고정 처리도 열지 못한 주소를 공고 원문으로 채택하지 않는다", async () => {
     const client = scriptedClient([
       [{ name: "finish", input: { outcome: "verified_against_notice", notice_url: BIO_URL, findings: [], mismatches: [] } }],
     ]);
     const r = await runFixedPipeline(BIO, deps(client, ["www.biocamp.kr"]));
-    expect(r.noticeUrl).toBe(BIO_URL);
-    expect(client.calls).toBe(1);
+    expect(r.noticeUrl).toBeNull();
+    expect(r.outcome).toBe("notice_not_found");
+    expect(r.trail).toEqual(expect.arrayContaining([expect.objectContaining({ action: "reject", target: BIO_URL })]));
   });
 });

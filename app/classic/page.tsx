@@ -698,14 +698,20 @@ function VerifyView({ r, source }: { r: VerifyResult; source?: string }) {
       {r.findings.length > 0 && (
         <ul>
           {r.findings.map((f, k) => (
-            <li key={k}>{f.text} <blockquote>{f.quote}</blockquote></li>
+            <li key={k}><blockquote>{f.quote}</blockquote></li>
           ))}
         </ul>
       )}
       {r.mismatches.length > 0 && (
         <ul>
           {r.mismatches.map((m, k) => (
-            <li key={k}><b>{MISMATCH[m.kind]}</b>: API {m.apiValue} → 공고 {m.noticeValue}</li>
+            <li key={k}>
+              <b>{MISMATCH[m.kind]}</b>
+              <blockquote>{m.quote}</blockquote>
+              {m.kind === "different_program" && m.noticeUrl && (
+                <a href={m.noticeUrl} target="_blank" rel="noreferrer">다른 사업 공고 원문</a>
+              )}
+            </li>
           ))}
         </ul>
       )}

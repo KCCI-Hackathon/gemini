@@ -3,7 +3,11 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { loadVerified, type Round } from "@/lib/data/verified";
+import { containsNoticeDate, supportsComparedValue, supportsEvidence } from "./evidence";
+import { verificationVersion, type VerifyVersion } from "./version";
 import type { Policy } from "@/lib/data/types";
+import { pickRound } from "@/lib/judge/rules";
 import { toKstDate } from "@/lib/date";
 import { normalizeSpace, type Web } from "./web";
 
@@ -41,9 +45,10 @@ function toFieldCheck(f: Record<string, unknown>, p: Policy, quoted: (q: string)
   const quote = typeof f.quote === "string" ? f.quote : "";
   const apiValue = apiValueOf(field, p);
   let status = (["match", "differs", "not_in_notice"].includes(String(f.status)) ? f.status : "notice_not_found") as FieldCheck["status"];
-  if (status !== "not_in_notice" && (!quote || !quoted(quote))) status = "notice_not_found";
-  else if (status !== "not_in_notice" && (field === "apply_period" || field === "age")) status = noticeValue === apiValue.replace(/\s+/g, "") ? "match" : "differs";
-  return [{ field, status, apiValue, noticeValue, quote }];
+  if (status !== "not_in_notice" && (!quote || !quoted(quote) || !supportsComparedValue(field, quote, noticeValue))) status = "notice_not_found";
+  else if (status !== "not_in_notice" && (field === "apply_period" || field === "biz_period" || field === "age" || field === "apply_link")) status = noticeValue === apiValue.replace(/\s+/g, "") ? "match" : "differs";
+  const supported = status === "match" || status === "differs";
+  return [{ field, status, apiValue, noticeValue: supported ? noticeValue : "", quote: supported ? quote : "" }];
 }
 
 export type AnthropicLike = {
@@ -86,6 +91,7 @@ export type NoticeRound = { year: number; round: string; title: string; applySta
 
 export type VerifyResult = {
   policyId: string;
+  version?: VerifyVersion;
   mode: "agent" | "fixed";
   outcome: "verified_against_notice" | "notice_not_found";
   noticeUrl: string | null;
@@ -117,6 +123,7 @@ const SYSTEM = `당신은 청년 정책 데이터를 공식 공고와 대조하�
 
 규칙
 - 인용(quote)은 페이지에 실제로 있는 문장을 그대로 옮깁니다. 지어내지 않습니다.
+- 인용은 해당 조건과 대조값을 직접 뒷받침해야 합니다. 문의처나 관련 없는 안내 문구는 근거로 쓰지 않습니다.
 - 페이지에 없는 값은 적지 않습니다.
 - 자격 판정이나 신청 권유를 하지 않습니다. 확인한 사실만 기록합니다.
 - 정부·공공기관·지자체·주관기관의 공식 사이트만 열 수 있고, 페이지 열기는 6회까지입니다.`;
@@ -172,6 +179,7 @@ function tools(searchesLeft: number): Record<string, unknown>[] {
               type: "object",
               properties: {
                 kind: { type: "string", enum: ["recruitment_status", "region_scope", "reference_date_wording", "different_program", "notice_only_condition"] },
+                source_url: { type: "string", description: "인용 출처. different_program일 때는 열린 다른 사업 주소를 지정" },
                 api_value: { type: "string" },
                 notice_value: { type: "string" },
                 quote: QUOTE,
@@ -267,7 +275,7 @@ function asObjects(x: unknown): Record<string, unknown>[] {
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: { policyId: string; web: Web; state: State; mode: "agent" | "fixed"; openedUrls: string[]; now: Date },
+  ctx: { policy: Policy; rounds: Round[]; activeRound: Round | null; version: VerifyVersion; web: Web; state: State; mode: "agent" | "fixed"; openedUrls: string[]; now: Date },
 ): Promise<{ content: string; isError?: boolean }> {
   const { web, state } = ctx;
   const step = state.trail.length + 1;
@@ -308,29 +316,58 @@ async function executeTool(
       return { content: "outcome은 verified_against_notice 또는 notice_not_found여야 합니다.", isError: true };
     }
     if (outcome === "verified_against_notice") {
-      if (!noticeUrl || (ctx.mode === "agent" && state.judgements.get(noticeUrl) !== "matching_notice")) {
+      if (!noticeUrl || !ctx.openedUrls.includes(noticeUrl) || (ctx.mode === "agent" && state.judgements.get(noticeUrl) !== "matching_notice")) {
         state.trail.push({ step, action: "reject", target: noticeUrl ?? "", reason: "matching_notice로 판단하지 않은 페이지를 근거로 끝내려 함" });
         return { content: "notice_url은 record_judgement에서 matching_notice로 판단한 페이지여야 합니다. 판단을 기록하거나 notice_not_found로 끝내세요.", isError: true };
       }
     }
-    const verifiedNotice = outcome === "verified_against_notice" && !!noticeUrl;
+    const sourceUrl = outcome === "verified_against_notice" ? noticeUrl : null;
+    const quoted = (quote: unknown, declaredUrl?: unknown) =>
+      sourceUrl !== null && (declaredUrl === undefined || declaredUrl === sourceUrl) && hasQuote(web, [sourceUrl], quote);
+    const n = sourceUrl && input.notice && typeof input.notice === "object" ? (input.notice as Record<string, unknown>) : null;
+    const candidate: NoticeRound | null =
+      n && typeof n.year === "number" ? { year: n.year, round: String(n.round ?? ""), title: String(n.title ?? ""), applyStart: ymdOrNull(n.apply_start), applyEnd: ymdOrNull(n.apply_end) } : null;
+    const pageText = sourceUrl ? web.pageText(sourceUrl) ?? "" : "";
+    const notice = candidate && quoted(candidate.title)
+      && (candidate.title.includes(String(candidate.year)) || [candidate.applyStart, candidate.applyEnd].some((date) => date?.startsWith(`${candidate.year}-`)))
+      && (quoted(candidate.round) || (candidate.round === `${candidate.year}년` && [candidate.applyStart, candidate.applyEnd].some((date) => date?.startsWith(`${candidate.year}-`))))
+      && [candidate.applyStart, candidate.applyEnd].every((date) => date === null || containsNoticeDate(pageText, date))
+      ? candidate : null;
+    const known = ctx.rounds.filter((round) => round.notice.url === sourceUrl);
+    const identified = notice && known.find((round) => round.notice.year === notice.year && round.notice.round === notice.round);
+    const matchedActive = known.some((round) => round.id === ctx.activeRound?.id);
+    if (sourceUrl && (ctx.version.roundKey === null || (known.length > 0 && !matchedActive)
+      || (identified && identified.id !== ctx.activeRound?.id) || (known.length > 1 && !identified))) {
+      state.trail.push({ step, action: "reject", target: sourceUrl, reason: "현재 모집 회차의 공고를 확인할 수 없음" });
+      return { content: "현재 모집 회차의 공식 공고를 찾거나 notice_not_found로 끝내세요.", isError: true };
+    }
     // 공고를 못 찾았으면 발견은 내보내지 않는다: 다른 사업 페이지의 문장이 "공고 기준"으로 보이면 안 된다
-    const findings = verifiedNotice
+    const findings = sourceUrl
       ? asObjects(input.findings)
-          .filter((f) => hasQuote(web, [noticeUrl!], f.quote))
+          .filter((f) => typeof f.quote === "string" && quoted(f.quote, f.source_url) && supportsEvidence(String(f.kind), f.quote))
           .map((f) => ({ kind: String(f.kind) as FindingKind, text: String(f.text ?? ""), quote: String(f.quote) }))
       : [];
-    const mismatches = asObjects(input.mismatches)
-      .filter((m) => hasQuote(web, ctx.openedUrls, m.quote))
-      .map((m) => ({ kind: String(m.kind) as MismatchKind, apiValue: String(m.api_value ?? ""), noticeValue: String(m.notice_value ?? ""), quote: String(m.quote), noticeUrl }));
-    const policy = loadSnapshot().policies.find((x) => x.id === ctx.policyId);
-    const fieldChecks = verifiedNotice && policy ? asObjects(input.field_checks).flatMap((f) => toFieldCheck(f, policy, (q) => hasQuote(web, [noticeUrl!], q))) : [];
-    const n = verifiedNotice && input.notice && typeof input.notice === "object" ? (input.notice as Record<string, unknown>) : null;
-    const notice: NoticeRound | null =
-      n && typeof n.year === "number" ? { year: n.year, round: String(n.round ?? ""), title: String(n.title ?? ""), applyStart: ymdOrNull(n.apply_start), applyEnd: ymdOrNull(n.apply_end) } : null;
+    const mismatches = asObjects(input.mismatches).flatMap((m): Mismatch[] => {
+      if (typeof m.quote !== "string") return [];
+      const kind = String(m.kind) as MismatchKind;
+      let quoteUrl = sourceUrl;
+      if (kind === "different_program") {
+        const pages = [...state.judgements].filter(([url, verdict]) => verdict === "different_program"
+          && (m.source_url === undefined || m.source_url === url) && hasQuote(web, [url], m.quote));
+        if (pages.length !== 1) return [];
+        quoteUrl = pages[0][0];
+      } else if ((m.source_url !== undefined && m.source_url !== sourceUrl) || !quoted(m.quote) || !supportsEvidence(kind, m.quote)) {
+        return [];
+      }
+      return [{ kind, apiValue: String(m.api_value ?? ""), noticeValue: String(m.notice_value ?? ""), quote: m.quote, noticeUrl: quoteUrl }];
+    });
+    const fieldChecks = sourceUrl ? asObjects(input.field_checks).flatMap((f) =>
+      toFieldCheck(f, ctx.policy, (quote) => quoted(quote, f.source_url)
+        && (f.field !== "apply_link" || (typeof f.notice_value === "string" && ctx.openedUrls.includes(f.notice_value.trim()))))) : [];
     state.trail.push({ step, action: "finish", target: noticeUrl ?? "", reason: outcome });
     state.result = {
-      policyId: ctx.policyId,
+      policyId: ctx.policy.id,
+      version: ctx.version,
       mode: ctx.mode,
       outcome: outcome === "verified_against_notice" && noticeUrl ? outcome : "notice_not_found",
       noticeUrl: outcome === "verified_against_notice" ? noticeUrl : null,
@@ -347,20 +384,25 @@ async function executeTool(
   return { content: `알 수 없는 도구: ${name}`, isError: true };
 }
 
-async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", firstMessage: string, maxTurns: number): Promise<VerifyResult> {
+async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMessage: string, maxTurns: number): Promise<VerifyResult> {
   const state: State = { trail: [], judgements: new Map(), usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 }, result: null, limitHit: false };
   const openedUrls: string[] = [];
   const clock = deps.clock ?? Date.now;
   const startedAt = clock();
   const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
+  const verified = loadVerified().get(policy.id);
+  const rounds = verified?.rounds ?? [];
+  const date = toKstDate(deps.now);
+  const selected = rounds.length ? pickRound(rounds, date) : null;
+  const activeRound = selected?.state === "outside" ? null : selected?.round ?? null;
+  const version = verificationVersion(policy, verified, date);
   let searches = 0;
   let stopReason = "단계 한도 도달";
   const toolDefs = () => (mode === "agent" ? tools(deps.enableSearch ? MAX_SEARCHES - searches : 0) : tools(0).filter((t) => t.name === "finish"));
   const messages: Record<string, unknown>[] = [{ role: "user", content: firstMessage }];
   if (mode === "fixed") {
     // 고정 처리: 첫 링크를 코드가 열어 둔다
-    const p = loadSnapshot().policies.find((x) => x.id === policyId)!;
-    const first = [p.links.apply, p.links.ref, p.links.ref2].find(Boolean);
+    const first = [policy.links.apply, policy.links.ref, policy.links.ref2].find(Boolean);
     if (first) {
       const r = await deps.web.openPage(first);
       state.trail.push({ step: 1, action: "open", target: first, reason: r.ok ? "열림" : r.text });
@@ -410,7 +452,7 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
     }
     const results = [];
     for (const u of uses) {
-      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policyId, web: deps.web, state, mode, openedUrls, now: deps.now });
+      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policy, rounds, activeRound, version, web: deps.web, state, mode, openedUrls, now: deps.now });
       results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
       if (state.result) break;
     }
@@ -427,18 +469,18 @@ async function loop(policyId: string, deps: Deps, mode: "agent" | "fixed", first
     return state.result;
   }
   state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: stopReason });
-  return { policyId, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(deps.now), trail: state.trail, usage: state.usage };
+  return { policyId: policy.id, version, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(deps.now), trail: state.trail, usage: state.usage };
 }
 
 export async function runVerification(policyId: string, deps: Deps): Promise<VerifyResult> {
   const p = loadSnapshot().policies.find((x) => x.id === policyId);
   if (!p) throw new Error(`정책 번호 없음: ${policyId}`);
-  return loop(policyId, deps, "agent", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, MAX_TURNS);
+  return loop(p, deps, "agent", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, MAX_TURNS);
 }
 
 /** 비교 실험용 고정 처리: 첫 링크만 열고, 판단·재탐색 없이 한 번에 끝낸다 */
 export async function runFixedPipeline(policyId: string, deps: Deps): Promise<VerifyResult> {
   const p = loadSnapshot().policies.find((x) => x.id === policyId);
   if (!p) throw new Error(`정책 번호 없음: ${policyId}`);
-  return loop(policyId, deps, "fixed", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, 2);
+  return loop(p, deps, "fixed", `다음 정책을 공식 공고와 대조해 주세요.\n\n${policyBrief(p)}`, 2);
 }

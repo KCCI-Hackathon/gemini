@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { handleVerify, resetVerifyState } from "@/lib/verify/handler";
 import { scriptedClient } from "./helpers";
+import { loadSnapshot } from "@/lib/data/snapshot";
+import { verificationVersion } from "@/lib/verify/version";
 import { guardResponse } from "@/lib/agent/guard";
 
 const ID = "20260928005400113623"; // 승인 규칙이 없는 정책(실시간 대조 대상)
@@ -43,7 +45,9 @@ describe("handleVerify", () => {
 
   test("저장된 실행 결과가 있으면 AI를 부르지 않고 그것을 돌려준다", async () => {
     resetVerifyState();
-    const saved = { [ID]: { policyId: ID, mode: "agent", outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], trail: [], usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 } } };
+    const policy = loadSnapshot().policies.find((p) => p.id === ID)!;
+    const version = verificationVersion(policy, undefined, "2026-11-24");
+    const saved = { [ID]: { policyId: ID, version, mode: "agent", outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], trail: [], usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 } } };
     const t = ctx({ saved: saved as never });
     const r = await handleVerify({ policyId: ID }, t.c);
     expect(r.status).toBe(200);

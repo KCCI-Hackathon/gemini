@@ -1,5 +1,7 @@
 // 통합 설계 4.2(항목별 대조), 5.3-4(저장 결과로 낮추기), 5.4(실시간 대조 범위·새 회차)
 import { beforeEach, describe, expect, test } from "vitest";
+import { toKstDate } from "@/lib/date";
+import { verificationVersion } from "@/lib/verify/version";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
 import { judgeAll } from "@/lib/judge";
@@ -48,14 +50,21 @@ describe("finish의 항목별 대조(fieldChecks)", () => {
   });
 
   test("신청기간이 실제로 다르면 differs", async () => {
-    const client = scriptedClient(finishWith([{ field: "apply_period", status: "match", notice_value: "2026-03-01~2026-11-30", quote: "신청기간 : 2026.02.01(09시) ~ 2026.11.30(18시)" }], null));
-    const r = await runVerification(INCHEON, { client, web: createWeb({ fetchFn: fakeFetch, extraHosts: [] }), now: NOW });
+    const quote = "신청기간 : 2026.03.01(09시) ~ 2026.11.30(18시)";
+    const client = scriptedClient(finishWith([{ field: "apply_period", status: "match", notice_value: "2026-03-01~2026-11-30", quote }], null));
+    const fetchFn = (async (input) => {
+      const response = await fakeFetch(input);
+      if (String(input) !== INCHEON_URL) return response;
+      return new Response((await response.text()).replace("2026.02.01(09시)", "2026.03.01(09시)"), { headers: response.headers });
+    }) as typeof fetch;
+    const r = await runVerification(INCHEON, { client, web: createWeb({ fetchFn, extraHosts: [] }), now: NOW });
     expect(r.fieldChecks![0].status).toBe("differs");
   });
 });
 
 const result = (policyId: string, fieldChecks: FieldCheck[], notice: VerifyResult["notice"] = null): VerifyResult => ({
   policyId,
+  version: verificationVersion(loadSnapshot().policies.find((p) => p.id === policyId)!, loadVerified().get(policyId), toKstDate(NOW)),
   mode: "agent",
   outcome: "verified_against_notice",
   noticeUrl: "https://example.go.kr/n",
@@ -88,11 +97,19 @@ describe("fieldCheckEffect: 낮추기는 API 값을 판정에 쓴 축만", () =>
     expect(e.notes).toEqual(["API 신청기간이 공고와 다름(참고)"]);
   });
 
-  test("대조한 공고가 승인된 회차와 다르면(새 회차) '올해 공고 기준 확인 중' + 원문 링크, 다름으로 낮추지 않음", () => {
+  test("대조한 공고가 승인된 회차와 다르면(새 회차) '이번 공고 기준 확인 중' + 원문 링크, 다름으로 낮추지 않음", () => {
     const v = loadVerified().get(INCHEON)!;
     const e = fieldCheckEffect(result(INCHEON, [differs("apply_period")], { year: 2027, round: "2027년", title: "2027 공고", applyStart: "2027-02-01", applyEnd: "2027-11-30" }), policy(INCHEON), v, "2026-11-16");
-    expect(e.newRound).toEqual({ text: "올해 공고 기준 확인 중", url: "https://example.go.kr/n" });
+    expect(e.newRound).toEqual({ text: "이번 공고 기준 확인 중", url: "https://example.go.kr/n" });
     expect(e.recruitment).toBeNull();
+  });
+
+  test("같은 해 추가 모집도 기존 승인 회차와 구분한다", () => {
+    const v = loadVerified().get(INCHEON)!;
+    const notice = { ...v.rounds![0].notice, round: "추가 모집", title: "추가 모집 공고" };
+    const e = fieldCheckEffect(result(INCHEON, [differs("apply_period")], notice), policy(INCHEON), v, "2026-11-16");
+    expect(e.newRound).toEqual({ text: "이번 공고 기준 확인 중", url: "https://example.go.kr/n" });
+    expect(e.notes).toEqual([]);
   });
 });
 
@@ -145,12 +162,12 @@ describe("저장 결과의 fieldChecks가 판정을 낮춘다", () => {
     }
   });
 
-  test("승인 규칙 정책에서 새 회차 공고를 찾았으면 '올해 공고 기준 확인 중'", async () => {
+  test("승인 규칙 정책에서 새 회차 공고를 찾았으면 '이번 공고 기준 확인 중'", async () => {
     const { withSavedResults } = await import("@/lib/verify/saved");
     const restore = withSavedResults({ [INCHEON]: result(INCHEON, [], { year: 2027, round: "2027년", title: "2027 공고", applyStart: "2027-02-01", applyEnd: null }) });
     try {
       const r = judgeAll(PERSONA_A, NOW).find((x) => x.policy.id === INCHEON)!;
-      expect(r.axes.personal.reasons).toContain("올해 공고 기준 확인 중");
+      expect(r.axes.personal.reasons).toContain("이번 공고 기준 확인 중");
       expect(r.axes.personal.value).toBe("needs_check");
     } finally {
       restore();
