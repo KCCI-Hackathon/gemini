@@ -1,15 +1,15 @@
 // /api/plan 계획 에이전트(통합 설계 6장).
 // - 가상 인물은 항상, 실제 사용자는 PLAN_AI_FOR_USERS=true이고 동의했을 때만 AI를 쓴다(기본 꺼짐).
 // - AI에는 summarizeForAI 요약과 코드가 만든 길(정거장·정책)만 간다. 실제 사용자의 자유 입력은 받지 않는다.
-// - 판정은 하지 않는다. 다음 질문 고르기, 기타 글 해석(가상 인물), 계획 요약만 한다.
+// - 판정은 하지 않는다. 다음 질문 고르기, 서버에 등록된 시연 문구 해석, 계획 요약만 한다.
 // - 서버에 상태를 남기지 않는다. 같은 요약·같은 모드면 같은 날 결과를 다시 쓴다(기타 글이 있으면 다시 쓰지 않음).
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { aiConfigured } from "@/lib/ai/client";
 import { monthsBetween, toKstDate } from "@/lib/date";
 import { guardResponse } from "@/lib/agent/guard";
-import { handleJudge } from "@/lib/judge/handler";
-
+import { handleJudge, JudgeRequestSchema } from "@/lib/judge/handler";
+import { findRegisteredPersona } from "@/lib/judge/personas";
 import { takeQuota } from "@/lib/limits";
 import { policyNotice, type Roadmap } from "@/lib/route/roadmap";
 import { loadVerified } from "@/lib/data/verified";
@@ -84,9 +84,19 @@ const RequestSchema = z.object({
   mode: z.enum(["first", "answer", "replan"]),
   persona: z.boolean(),
   consent: z.boolean().optional(),
-  session: z.object({ profile: z.any(), plan: z.any().default({}), answers: z.record(z.string(), z.string()).default({}) }),
+  session: JudgeRequestSchema.pick({ profile: true, plan: true, answers: true }),
   otherText: z.string().max(200).optional(),
 });
+
+const DEMO_ANSWERS = ["반년쯤 뒤에 취업할래요"];
+
+function resolveDemoProfile({ profile, plan }: z.infer<typeof RequestSchema>["session"]) {
+  const { examDate, interest } = profile;
+  const plannedInterest = plan?.businessAfterMonths != null && plan.employAfterMonths == null ? "startup" : "job";
+  if (interest !== plannedInterest) return;
+  const registered = findRegisteredPersona(profile);
+  if (registered) return { ...registered, interest: plannedInterest, ...(examDate ? { examDate } : {}) } as const;
+}
 
 type Station = { label: string; items: { policyId: string; name: string; why: string }[] };
 export type PlanBody = {
@@ -166,13 +176,19 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   const parsed = RequestSchema.safeParse(raw);
   if (!parsed.success) return { status: 400, body: { error: "요청 형식이 잘못됐습니다." } };
   const req = parsed.data;
+  let otherText: string | undefined;
   if (!req.persona) {
     if (ctx.env.PLAN_AI_FOR_USERS !== "true" || !req.consent) return { status: 403, body: { disabled: true, error: "실제 사용자 정보로는 AI 계획 정리를 쓰지 않습니다." } };
     if (req.otherText) return { status: 400, body: { error: "실제 사용자의 자유 입력은 외부 AI로 보내지 않습니다." } };
+  } else if (req.otherText) {
+    otherText = req.mode === "answer" ? DEMO_ANSWERS.find((text) => text === req.otherText) : undefined;
+    if (!otherText) return { status: 400, body: { error: "등록된 시연 문구를 선택해 주세요." } };
   }
+  const profile = req.persona ? resolveDemoProfile(req.session) : req.session.profile;
+  if (!profile) return { status: 400, body: { error: "등록된 시연 인물 정보와 일치하지 않습니다." } };
   if (!aiConfigured(ctx.env)) return { status: 503, body: { error: "AI가 꺼져 있습니다." } };
 
-  const session = req.session as PlanSession;
+  const session: PlanSession = { profile, plan: req.session.plan ?? {}, answers: req.session.answers ?? {} };
   const stationResults: StationResults = new Map();
   const judged = handleJudge({ profile: session.profile, plan: session.plan, answers: session.answers }, ctx.now,
     (date, policies) => stationResults.set(date, policies));
@@ -185,7 +201,7 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   if (!req.otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
   if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
-  const out = await runPlan(req.mode, summary, routeForAI(roadmap, stationResults), roadmap, stationResults, questions, req.persona ? req.otherText : undefined, ctx);
+  const out = await runPlan(req.mode, summary, routeForAI(roadmap, stationResults), roadmap, stationResults, questions, otherText, ctx);
   if (!req.otherText && !out.fallback) cache.set(key, out);
   return { status: 200, body: out };
 }

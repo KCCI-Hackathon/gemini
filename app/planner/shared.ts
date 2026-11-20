@@ -2,6 +2,7 @@ import type { JudgeBody } from "@/lib/judge/handler";
 import type { Profile } from "@/lib/judge/types";
 import type { RoadmapCat, RoadmapStatus } from "@/lib/route/roadmap";
 import type { TimelinePlan } from "@/lib/route/timeline";
+import { PERSONA_A } from "@/lib/judge/personas";
 
 export type Ok = Extract<JudgeBody, { items: unknown }>;
 export type { Profile, TimelinePlan };
@@ -31,16 +32,7 @@ export const SCHOOLS: [string, string][] = [
 ];
 
 /** 가상 인물: 만 27세, 인천 연수구, 대학 졸업, 국비 교육 수강 중(12/19 수료 예정) */
-export const DEMO: Profile = {
-  birthYm: "1999-03",
-  sigungu: "28185",
-  school: "0049007",
-  currentStatus: ["in_training", "unemployed"],
-  interest: "job",
-  events: [{ type: "training_completion", date: "2026-12-19", status: "scheduled" }],
-  participating: [],
-  source: "demo_persona",
-};
+export const DEMO = PERSONA_A;
 
 /** "2026-11-24" → "2026.11.24" */
 export const dot = (ymd: string) => ymd.replaceAll("-", ".");

@@ -14,3 +14,20 @@ export const PERSONA_A: Profile = {
 
 export const PERSONAS = { "demo-1": PERSONA_A } as const;
 export type PersonaId = keyof typeof PERSONAS;
+
+/** 화면에서 고르는 계획과 응시일을 제외한 시연 원본을 찾는다. */
+export function findRegisteredPersona(profile: Profile): Profile | undefined {
+  return Object.values(PERSONAS).find((base) =>
+    profile.source === base.source && profile.birthYm === base.birthYm &&
+    profile.sigungu === base.sigungu && profile.school === base.school &&
+    profile.recentHistory === base.recentHistory &&
+    profile.currentStatus.length === base.currentStatus.length &&
+    profile.currentStatus.every((status, index) => status === base.currentStatus[index]) &&
+    profile.participating.length === base.participating.length &&
+    profile.participating.every((id, index) => id === base.participating[index]) &&
+    profile.events.length === base.events.length && profile.events.every((event, index) => {
+      const registered = base.events[index];
+      return event.type === registered.type && event.status === registered.status && event.date === registered.date;
+    }),
+  );
+}

@@ -44,6 +44,14 @@ describe("summarizeForAI: AI로 가는 것은 요약뿐", () => {
     expect(s).toContain("27");
     expect(s).toContain("3개월 뒤");
   });
+
+  test("등록되지 않은 시군구는 입력 코드 대신 확인 안내로 요약한다", () => {
+    const summary = summarizeForAI({
+      profile: { ...USER, sigungu: "99999" }, plan: { move: { sigungu: "00000", afterMonths: 3 } }, answers: {},
+    }, NOW);
+    expect(summary.region).toBe("지역 확인 필요");
+    expect(summary.plans).toContain("이사(가정): 오늘부터 3개월 뒤, 지역 확인 필요");
+  });
 });
 
 describe("handlePlan: 실제 사용자는 스위치와 동의가 있어야", () => {
@@ -62,6 +70,31 @@ describe("handlePlan: 실제 사용자는 스위치와 동의가 있어야", () 
     const out = await handlePlan({ mode: "answer", persona: false, consent: true, session: session(USER), otherText: "병원 때문에 3월쯤 취업" }, ctx({ ...ON, PLAN_AI_FOR_USERS: "true" }, client));
     expect(out.status).toBe(400);
     expect(client.calls).toBe(0);
+  });
+
+  test("사용자용 AI가 꺼져 있으면 시연 표시를 붙인 미등록 프로필도 외부 AI를 부르지 않는다", async () => {
+    const client = scriptedClient([]);
+    const profile = { ...USER, source: "demo_persona" };
+    const out = await handlePlan({ mode: "replan", persona: true, session: { ...session(USER), profile } }, ctx(ON, client));
+    expect(out.status).toBe(400);
+    expect(client.calls).toBe(0);
+  });
+
+  test("등록 인물을 복제해도 서버의 시연 문구에 없는 자유 입력은 모델에 보내지 않는다", async () => {
+    const client = scriptedClient([]);
+    const out = await handlePlan({ mode: "answer", persona: true, session: session(PERSONA_A), otherText: "합성문장-privacy-04" }, ctx(ON, client));
+    expect(out.status).toBe(400);
+    expect(client.calls).toBe(0);
+  });
+
+  test("사용자 동의가 있어도 허용 필드가 아닌 자유 문장은 모델 요청 전체에서 제외한다", async () => {
+    const client = scriptedClient([[{ name: "get_route", input: {} }], [{ name: "no_more_questions", input: {} }]]);
+    const note = "합성문장-privacy-04";
+    const userSession = { ...session(USER), answers: { note } };
+    const out = await handlePlan({ mode: "replan", persona: false, consent: true, session: userSession }, ctx({ ...ON, PLAN_AI_FOR_USERS: "true" }, client));
+    expect(out.status).toBe(200);
+    expect(client.calls).toBe(2);
+    expect(JSON.stringify(client.requests)).not.toContain(note);
   });
 
   test("외부 AI가 꺼져 있으면 503", async () => {
@@ -84,6 +117,22 @@ describe("handlePlan: 실제 사용자는 스위치와 동의가 있어야", () 
 
 describe("계획 에이전트(가상 인물)", () => {
   beforeEach(() => resetPlanState());
+
+  test("등록 인물에게 화면의 구조화된 가정을 적용해 계획을 만든다", async () => {
+    const client = scriptedClient([[{ name: "finish_plan", input: { summary: "정리", stations: [] } }]]);
+    const demoSession = {
+      profile: { ...PERSONA_A, interest: "startup", examDate: "2026-10-01" },
+      plan: { businessAfterMonths: 6, move: { sigungu: "11110", afterMonths: 3 } },
+      answers: { recent_history: "예" },
+    };
+    const out = await handlePlan({ mode: "replan", persona: true, session: demoSession }, ctx(ON, client));
+    expect(out.status).toBe(200);
+    expect(out.body.plan).toBeDefined();
+    const sent = JSON.stringify(client.requests);
+    expect(sent).toContain("사업자등록(가정)");
+    expect(sent).toContain("서울 종로구");
+    expect(sent).not.toContain("2026-10-01");
+  });
 
   test("수강 제한의 근거에 맞춰 날짜 비교와 수료 후의 가정을 안내한다", async () => {
     const item = { policy_id: KNEWDEAL, why: "신청 자격을 확인하세요." };
@@ -148,8 +197,9 @@ describe("계획 에이전트(가상 인물)", () => {
 
   test("기타 글 해석: 모르는 질문 key나 형식 밖 값은 거절", async () => {
     const client = scriptedClient([[{ name: "parse_other_answer", input: { key: "income", value: "300" } }], [{ name: "parse_other_answer", input: { key: "employ", value: "99" } }], [{ name: "no_more_questions", input: {} }]]);
-    const out = await handlePlan({ mode: "answer", persona: true, session: session(PERSONA_A), otherText: "x" }, ctx(ON, client));
+    const out = await handlePlan({ mode: "answer", persona: true, session: session(PERSONA_A), otherText: "반년쯤 뒤에 취업할래요" }, ctx(ON, client));
     expect(out.body.parsed).toBeUndefined();
+    expect(client.calls).toBe(3);
   });
 
   test("ask_user: 코드가 고른 질문 후보 중에서만, 선택지는 코드가 붙인다", async () => {

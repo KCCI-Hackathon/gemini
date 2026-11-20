@@ -8,6 +8,7 @@ import { isChanging, RoadmapGrid } from "./planner/Roadmap";
 import { PipelineBoard } from "./planner/PipelineBoard";
 import s from "./planner/planner.module.css";
 import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, groupPlanPicks, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
+import { findRegisteredPersona } from "@/lib/judge/personas";
 
 type Answers = Record<string, string>;
 type Session = { profile: Profile; plan: TimelinePlan; answers: Answers };
@@ -241,7 +242,9 @@ export default function Page() {
     setAsked(nextAsked);
     const body = await judge(nextSess);
     if (!body) return;
-    askNext(nextSess, nextAsked, body, `로드맵을 다시 계산했어요. ${countLine(body.roadmap)}`);
+    const demoChanged = findRegisteredPersona(sess.profile) && !findRegisteredPersona(nextSess.profile);
+    const aiNote = demoChanged ? "\n등록된 시연 인물의 기본 조건을 변경했어요. 새 조건은 로드맵에서 확인할 수 있어요. AI 정리는 등록 조건에서 쓸 수 있어요." : "";
+    askNext(nextSess, nextAsked, body, `로드맵을 다시 계산했어요. ${countLine(body.roadmap)}${aiNote}`);
   }
 
   function reask(key: string) {
@@ -257,7 +260,7 @@ export default function Page() {
 
   const [planBusy, setPlanBusy] = useState(false);
   async function runPlanAgent() {
-    if (!sess) return;
+    if (!sess || !findRegisteredPersona(sess.profile)) return;
     setPlanBusy(true);
     try {
       const res = await fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "replan", persona: true, session: sess }) });
@@ -399,7 +402,7 @@ export default function Page() {
               push({ role: "ai", text: q ? "이어서 여쭤볼게요." : "더 여쭤볼 것이 없어요.", question: q ?? undefined });
             }}
             onCollapse={() => setChatOpen(false)}
-            aiPlan={sess.profile.source === "demo_persona" ? { busy: planBusy, onRun: () => void runPlanAgent() } : undefined}
+            aiPlan={findRegisteredPersona(sess.profile) ? { busy: planBusy, onRun: () => void runPlanAgent() } : undefined}
           />
         ) : (
           <div className={s.rail}>

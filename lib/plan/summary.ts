@@ -24,6 +24,11 @@ const ANSWER: Record<string, string> = { participating_national_employment_suppo
 
 const after = (n: number) => (n <= 0 ? "이번 달" : `${n}개월 뒤`);
 
+function regionForAI(code: string): string {
+  const label = regionLabel(code);
+  return label === code ? "지역 확인 필요" : label;
+}
+
 export function summarizeForAI(s: PlanSession, now: Date): AiSummary {
   const today = toKstDate(now);
   const [a, b] = ageRange(s.profile.birthYm, today);
@@ -33,11 +38,11 @@ export function summarizeForAI(s: PlanSession, now: Date): AiSummary {
     ...s.profile.events.filter((e) => e.date >= today).map((e) => `${EVENT[e.type]}: ${after(monthsBetween(today, e.date))}`),
     ...(s.plan.employAfterMonths != null ? [`취업(가정): ${base}부터 ${after(s.plan.employAfterMonths)}`] : []),
     ...(s.plan.businessAfterMonths != null ? [`사업자등록(가정): ${base}부터 ${after(s.plan.businessAfterMonths)}`] : []),
-    ...(s.plan.move ? [`이사(가정): 오늘부터 ${after(s.plan.move.afterMonths)}, ${regionLabel(s.plan.move.sigungu)}`] : []),
+    ...(s.plan.move ? [`이사(가정): 오늘부터 ${after(s.plan.move.afterMonths)}, ${regionForAI(s.plan.move.sigungu)}`] : []),
   ];
   return {
     age: a === b ? `만 ${a}세` : `만 ${a}~${b}세`,
-    region: regionLabel(s.profile.sigungu),
+    region: regionForAI(s.profile.sigungu),
     school: SCHOOL[s.profile.school] ?? "학력 미입력",
     status: [...effectiveStatus(s.profile)].map((k) => STATUS_NAME[k] ?? k),
     plans,

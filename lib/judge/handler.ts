@@ -30,7 +30,7 @@ const ProfileSchema = z.object({
   source: z.enum(["demo_persona", "user"]),
 });
 
-const JudgeRequestSchema = z.object({
+export const JudgeRequestSchema = z.object({
   profile: ProfileSchema,
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
   answers: z
