@@ -76,6 +76,23 @@ npm run db:verify
 
 `POST /api/judge`에 기존 프로필과 함께 선택 입력인 `benefits`를 보낼 수 있습니다. 예를 들어 구직급여 지급이 종료됐다면 `{"policyId":"20250122005400110369","status":"ended","lastPaymentDate":"2026-07-15"}`를 배열에 담습니다. 정책별 `restrictions`에는 적용 여부·이유·인용 근거가, `planned_conflicts`에는 예정된 충돌이 들어갑니다. 응답의 `dataVersion`으로 사용한 규칙 버전을 식별합니다.
 
+## Vercel Preview 배포
+
+팀 Vercel 프로젝트에 GitHub 저장소를 연결하고 Node.js 22.x를 선택합니다. `backend/vercel-preview` 브랜치를 Preview로 배포합니다. 함수 리전은 `vercel.json`에서 서울(`icn1`)로 설정합니다. 현재 배포용 규칙과 버전은 `data/overlap/approved.json`과 `data/release/manifest.json`에서 가져옵니다.
+
+초기 Preview에서는 브랜치별 환경변수에 `EXTERNAL_AI_ENABLED=false`와 `PLAN_AI_FOR_USERS=false`를 설정합니다. 이 상태에서 자격 판정과 저장된 정책 검증 근거를 확인할 수 있습니다. 외부 AI를 확인하는 Preview에는 승인된 제공자의 키와 `EXTERNAL_AI_ENABLED=true`를 별도로 설정합니다.
+
+```bash
+npm ci
+npm run db:build -- --research-only
+npm run db:verify
+npm test
+npm run build
+npm run smoke:preview -- <Preview URL>
+```
+
+스모크 명령은 첫 화면과 세 시연 지역의 `/api/judge` 요청 8건을 확인합니다. 응답에서 배포 데이터 버전, 적용 상태, 근거 인용을 검사합니다.
+
 ## Credits / Licenses
 
 | 구분 | 이름 | 출처·라이선스 | 사용 위치 |

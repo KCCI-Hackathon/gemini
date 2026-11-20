@@ -11,7 +11,8 @@
     "overlap:agent": "tsx --tsconfig tsconfig.json scripts/overlap-agent.ts",
     "db:build": "tsx --tsconfig tsconfig.json scripts/db-build.ts",
     "db:export": "tsx --tsconfig tsconfig.json scripts/db-export.ts",
-    "db:verify": "tsx --tsconfig tsconfig.json scripts/db-export.ts --check"
+    "db:verify": "tsx --tsconfig tsconfig.json scripts/db-export.ts --check",
+    "smoke:preview": "tsx --tsconfig tsconfig.json scripts/smoke-preview.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
