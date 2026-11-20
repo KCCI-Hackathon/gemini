@@ -196,6 +196,8 @@ export default function Page() {
       if (id !== seq.current) return null; // 더 늦게 보낸 요청이 있으면 버린다
       setData(body as Ok);
       setSess(next);
+      setAiPicks({});
+      setOnlyAi(false);
       return body as Ok;
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
@@ -261,10 +263,12 @@ export default function Page() {
   const [planBusy, setPlanBusy] = useState(false);
   async function runPlanAgent() {
     if (!sess || !findRegisteredPersona(sess.profile)) return;
+    const id = seq.current;
     setPlanBusy(true);
     try {
       const res = await fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "replan", persona: true, session: sess }) });
       const body = await res.json();
+      if (id !== seq.current) return;
       if (res.status === 503) push({ role: "ai", text: "AI가 꺼져 있어 계획 정리를 할 수 없어요(서버에 API 키가 필요해요). 로드맵과 코드 질문은 그대로 쓸 수 있어요." });
       else if (!res.ok) push({ role: "ai", text: body.error ?? "AI 계획 정리에 실패했어요." });
       else if (body.fallback || !body.plan) push({ role: "ai", text: "AI가 만든 계획에 확인할 수 없는 내용이 있어 쓰지 않았어요. 로드맵을 그대로 봐 주세요." });
@@ -273,13 +277,13 @@ export default function Page() {
         const picks = groupPlanPicks(stations);
         const rank = Object.keys(picks).length;
         setAiPicks(picks);
-        setOnlyAi(true);
+        setOnlyAi(rank > 0);
         showToast(`AI가 정책 ${rank}개를 골라 로드맵에 표시했어요`);
         const lines = stations.flatMap((st) => [`■ ${st.label}`, ...st.items.map((i) => `${CIRCLED[picks[i.policyId].rank - 1] ?? ""} ${i.name} — ${i.why}`)]);
         push({ role: "ai", text: ["[AI 계획 정리 · 판정은 코드 결과 그대로]", body.plan.summary, ...lines].join("\n") });
       }
     } catch {
-      push({ role: "ai", text: "AI 계획 정리에 실패했어요." });
+      if (id === seq.current) push({ role: "ai", text: "AI 계획 정리에 실패했어요." });
     } finally {
       setPlanBusy(false);
     }
@@ -315,10 +319,14 @@ export default function Page() {
   }
 
   function reset() {
+    seq.current++;
+    setBusy(false);
     setSess(null);
     setData(null);
     setMessages([]);
     setSelectedId(null);
+    setAiPicks({});
+    setOnlyAi(false);
   }
 
   /* ---------------- 첫 화면: 폼 3개 ---------------- */

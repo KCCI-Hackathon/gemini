@@ -4,6 +4,7 @@
 // - 판정은 하지 않는다. 다음 질문 고르기, 서버에 등록된 시연 문구 해석, 계획 요약만 한다.
 // - 서버에 상태를 남기지 않는다. 같은 요약·같은 모드면 같은 날 결과를 다시 쓴다(기타 글이 있으면 다시 쓰지 않음).
 import type Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { aiConfigured } from "@/lib/ai/client";
 import { monthsBetween, toKstDate } from "@/lib/date";
@@ -97,6 +98,14 @@ function resolveDemoProfile({ profile, plan }: z.infer<typeof RequestSchema>["se
   const registered = findRegisteredPersona(profile);
   if (registered) return { ...registered, interest: plannedInterest, ...(examDate ? { examDate } : {}) } as const;
 }
+
+const FinishPlanSchema = z.object({
+  summary: z.string().trim().min(1),
+  stations: z.array(z.object({
+    label: z.string().min(1),
+    items: z.array(z.object({ policy_id: z.string().min(1), why: z.string().trim().min(1) })).max(3),
+  })),
+});
 
 type Station = { label: string; items: { policyId: string; name: string; why: string }[] };
 export type PlanBody = {
@@ -197,11 +206,13 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   const questions = judged.body.questions;
 
   const summary = summarizeForAI(session, ctx.now);
-  const key = `${toKstDate(ctx.now)}:${req.mode}:${JSON.stringify(summary)}`;
-  if (!req.otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
+  const route = routeForAI(roadmap, stationResults);
+  const fingerprint = createHash("sha256").update(JSON.stringify({ summary, route, questions })).digest("hex");
+  const key = `${toKstDate(ctx.now)}:${req.mode}:${fingerprint}`;
+  if (!otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
   if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
-  const out = await runPlan(req.mode, summary, routeForAI(roadmap, stationResults), roadmap, stationResults, questions, otherText, ctx);
+  const out = await runPlan(req.mode, summary, route, roadmap, stationResults, questions, otherText, ctx);
   if (!req.otherText && !out.fallback) cache.set(key, out);
   return { status: 200, body: out };
 }
@@ -216,11 +227,10 @@ async function runPlan(
   otherText: string | undefined,
   ctx: Ctx,
 ): Promise<PlanBody> {
-  const known = new Map(roadmap.rows.map((r) => [r.policyId, r.name]));
-  const stationNames = new Set(route.stations.map((st) => st.label));
-  const stationActions = new Map(route.stations.map((station) => {
+  const known = new Set(roadmap.rows.map((r) => r.policyId));
+  const stationCandidates = new Map(route.stations.map((station) => {
     const candidates = "policies" in station ? station.policies : [...station.new_policies, ...station.changed_policies];
-    return [station.label, new Map(candidates.map((p) => [p.policy_id, p.next_action]))];
+    return [station.label, new Map(candidates.map((p) => [p.policy_id, p]))];
   }));
   const log: { tool: string; summary: string }[] = [];
   const task = mode === "answer" ? (otherText ? `사용자가 직접 쓴 답을 해석하세요: """${otherText}"""` : "다음에 물을 질문을 고르세요.") : "정거장별 계획을 정리하세요.";
@@ -250,7 +260,9 @@ async function runPlan(
     if (!uses.length) break;
     const results: Record<string, unknown>[] = [];
     for (const u of uses) {
-      const input = u.input as Record<string, unknown>;
+      const parsedInput = z.record(z.string(), z.unknown()).safeParse(u.input);
+      if (!parsedInput.success) return { fallback: true, log };
+      const input = parsedInput.data;
       const reply = (content: string, isError = false) => results.push({ type: "tool_result", tool_use_id: u.id, content, ...(isError ? { is_error: true } : {}) });
       if (u.name === "get_route") {
         log.push({ tool: u.name, summary: `정거장 ${route.stations.length}개` });
@@ -268,18 +280,17 @@ async function runPlan(
         reply(evidence.length ? JSON.stringify({ name: judged?.policy.name, round: evidence[0].round, conditions: evidence.map((c) => ({ key: c.key, kind: c.kind, basis: c.basisLabel, quote: c.quote.text })) }) : "이 정거장에서 사람이 확인한 조건별 근거가 없습니다.", !evidence.length);
       } else if (u.name === "ask_user") {
         const q = questions.find((x) => x.key === input.key);
-        const text = String(input.text ?? "");
-        if (!q || !guardResponse(text, new Set()).ok) {
+        const text = input.text;
+        if (!q || typeof text !== "string" || !text.trim() || !guardResponse(text, new Set()).ok) {
           reply("질문 후보에 없는 key이거나 쓸 수 없는 표현입니다.", true);
           continue;
         }
         log.push({ tool: u.name, summary: q.key });
         return { fallback: false, question: { key: q.key, text, options: q.options }, log };
       } else if (u.name === "parse_other_answer") {
-        const key = String(input.key ?? "");
-        const value = String(input.value ?? "");
-        const rule = PARSE[key];
-        if (!otherText || !rule || !rule.values.test(value)) {
+        const { key, value } = input;
+        const rule = typeof key === "string" && Object.hasOwn(PARSE, key) ? PARSE[key] : undefined;
+        if (!otherText || !rule || typeof key !== "string" || typeof value !== "string" || !rule.values.test(value)) {
           reply("정해진 질문 key와 형식의 값만 받을 수 있습니다.", true);
           continue;
         }
@@ -290,23 +301,30 @@ async function runPlan(
         return { fallback: false, log };
       } else if (u.name === "finish_plan") {
         log.push({ tool: u.name, summary: "계획 정리" });
-        const rawStations = Array.isArray(input.stations) ? (input.stations as { label: string; items: { policy_id: string; why: string }[] }[]) : [];
-        const text = [String(input.summary ?? ""), ...rawStations.flatMap((st) => [st.label, ...(st.items ?? []).flatMap((i) => [i.policy_id, i.why])])].join("\n");
-        const unknownPolicy = rawStations.some((st) => (st.items ?? []).some((i) => !known.has(i.policy_id)));
-        const unknownStation = rawStations.some((st) => !stationNames.has(st.label) && !st.label.startsWith("지금") && ![...stationNames].some((n) => n.startsWith(st.label)));
-        // 모르는 정책·정거장, 금지 표현이 하나라도 있으면 계획 전체를 버린다(6.3)
-        if (unknownPolicy || unknownStation || !guardResponse(text, new Set(known.keys())).ok) return { fallback: true, log };
+        const finish = FinishPlanSchema.safeParse(input);
+        if (!finish.success || !guardResponse(finish.data.summary, known).ok) return { fallback: true, log };
+
+        // 모델은 정책을 고르고, 설명은 해당 정거장에서 계산한 판정과 근거로 조립한다.
+        const stations: Station[] = [];
+        for (const { label, items } of finish.data.stations) {
+          const candidates = stationCandidates.get(label);
+          if (!candidates || stations.some((station) => station.label === label)) return { fallback: true, log };
+          const station: Station = { label, items: [] };
+          for (const { policy_id, why } of items) {
+            const candidate = candidates.get(policy_id);
+            if (!candidate || station.items.some((item) => item.policyId === policy_id) || !guardResponse(why, known).ok) return { fallback: true, log };
+            const details = [candidate.status, ...candidate.reasons.filter((reason) => reason !== candidate.status)];
+            station.items.push({ policyId: policy_id, name: candidate.name, why: candidate.next_action ?? details.join(" · ") });
+          }
+          stations.push(station);
+        }
         return {
           fallback: false,
           plan: {
-            summary: String(input.summary ?? ""),
-            stations: rawStations.map((st) => ({
-              label: st.label,
-              items: (st.items ?? []).map((i) => ({
-                policyId: i.policy_id, name: known.get(i.policy_id)!,
-                why: stationActions.get(st.label)?.get(i.policy_id) ?? i.why,
-              })),
-            })),
+            summary: stations.some((station) => station.items.length)
+              ? "정거장별로 먼저 확인할 정책을 골랐어요."
+              : "먼저 확인할 정책을 고르지 않았어요. 로드맵에서 시점별 정책을 확인해 보세요.",
+            stations,
           },
           log,
         };
