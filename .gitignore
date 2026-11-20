@@ -45,3 +45,4 @@ next-env.d.ts
 !.env.example
 # 작업 장부
 .superpowers/
+/data/db/

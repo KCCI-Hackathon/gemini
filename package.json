@@ -7,7 +7,11 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "overlap:agent": "tsx --tsconfig tsconfig.json scripts/overlap-agent.ts",
+    "db:build": "tsx --tsconfig tsconfig.json scripts/db-build.ts",
+    "db:export": "tsx --tsconfig tsconfig.json scripts/db-export.ts",
+    "db:verify": "tsx --tsconfig tsconfig.json scripts/db-export.ts --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
