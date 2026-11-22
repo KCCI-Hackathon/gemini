@@ -59,3 +59,17 @@ it("재검증은 세 모델을 지정 순서로 사용하고 성공 요청 시�
     expect(s.state.requests[0].durationMs).toBe(250);
   } finally { f.cleanup(); }
 });
+
+it("분류되지 않은 429가 세 번 이어지면 일일 한도로 기록하지 않고 다음 검증 모델로 넘긴다", async () => {
+  const limited = () => Response.json({}, { status: 429 });
+  const f = runFixture([limited(), limited(), limited(), success()]);
+  try {
+    const s = makeSession({ ...f.input, compact: true });
+    expect((await s.ask({ ...req, stage: "verify" }, reviewModels)).model).toBe(reviewModels[1]);
+    expect(f.sends.map(s => s.model)).toEqual([reviewModels[0], reviewModels[0], reviewModels[0], reviewModels[1]]);
+    expect(s.state.exhausted).toEqual({});
+    expect(s.state.cooldown?.[reviewModels[0]]).toBeGreaterThan(f.sends[3].time);
+    expect(s.state.attempts?.["verify:" + reviewModels[0]]).toEqual({ success: 0, failed: 3, retries: 2 });
+    expect(s.state.attempts?.["verify:" + reviewModels[1]]).toEqual({ success: 1, failed: 0, retries: 0 });
+  } finally { f.cleanup(); }
+});

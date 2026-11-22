@@ -71,28 +71,33 @@ export function extractionRepairPrompt(prompt:string, failures:{index:number;rea
   return prompt + "\n앞 응답의 다음 위치에서 오류가 발생했습니다. 같은 필드 전문을 다시 검토해 올바른 조항 배열을 반환하세요.\n" +
     JSON.stringify(failures.map(({index,reason})=>({index,reason})));
 }
-export async function extract(batch: PublicField[], pass: Pass, ask: Ask, model?: ModelId): Promise<Extraction> {
+export async function extract(batch: PublicField[], pass: Pass, ask: Ask, model?: ModelId, narrowRepair = false): Promise<Extraction> {
   const prompt = extractionPrompt(batch);
   const initial = await ask({ stage: "extract", pass, repair: 0, prompt, model });
   const a = parseExtractionRows(batch, initial, pass);
   const out = { ...a, model: initial.model, hashes: [initial.hash], complete: !a.failures.length };
   if (out.complete) return out;
+  const repairFields = narrowRepair && a.failures.every(f => f.b_policy_id && f.field)
+    ? batch.filter(field => a.failures.some(f => f.b_policy_id === field.b_policy_id && f.field === field.field))
+    : batch;
   const correction = await ask({
     stage: "extract", pass, repair: 1, model: initial.model,
-    prompt: extractionRepairPrompt(prompt,a.failures)
+    prompt: extractionRepairPrompt(repairFields === batch ? prompt : extractionPrompt(repairFields),a.failures)
   });
   // A replacement model must produce a complete, independent first response of its own.
-  if (correction.model !== initial.model) return extract(batch, pass, ask, correction.model);
-  const b = parseExtractionRows(batch, correction, pass);
+  if (correction.model !== initial.model) return extract(batch, pass, ask, correction.model, narrowRepair);
+  const b = parseExtractionRows(repairFields, correction, pass);
   const clauses = new Map<string, Clause>();
   for (const c of [...a.clauses, ...b.clauses]) {
     const { response_hash: _hash, ...record } = c;
     void _hash;
     clauses.set(digest(record), c);
   }
+  const repaired = repairFields === batch ? b.clauses.length > 0 : repairFields.every(field =>
+    b.clauses.some(c => c.b_policy_id === field.b_policy_id && c.field === field.field));
   return {
     ...out, clauses: [...clauses.values()], failures: [...a.failures, ...b.failures],
-    complete: b.failures.length === 0 && b.clauses.length > 0, hashes: [initial.hash, correction.hash]
+    complete: b.failures.length === 0 && repaired, hashes: [initial.hash, correction.hash]
   };
 }
 

@@ -37,12 +37,12 @@ export async function runOverlap(o:AgentOptions) {
       JSON.parse(readFileSync(pointer,"utf8")).run_id!==runId)
       throw Error("이전 실행은 별도 작업 폴더에서 재생하세요. 최신 실행을 보존합니다.");
     const inputs={snapshotSha256:sha(snapshot),casesSha256:sha(casesFile),researchSha256:sha(researchFile)};
-    const session=makeSession({...o,dir,inputs,runId});
+    const session=makeSession({...o,dir,inputs,runId,compact:true});
     const initialModel = session.state.requests[0]?.model;
     const legacy = !!initialModel && !isScanModel(initialModel);
     const scanner = isScanModel(initialModel) ? initialModel : o.scanWith ?? scanModel;
     const fields = selectFields(records, !legacy);
-    const batches = batchFields(fields), region = legacy ? selectRegion(records) : records;
+    const batches = batchFields(fields, session.state.compact ? 12000 : 6000), region = legacy ? selectRegion(records) : records;
     if(!batches.length) throw Error("중복수혜 검증 대상 정책이 없습니다.");
     const ask: Ask = legacy ? session.ask : req => req.stage === "verify"
       ? session.ask(req, reviewModels)
@@ -51,7 +51,7 @@ export async function runOverlap(o:AgentOptions) {
     const votes:[Clause[],Clause[]]=[[],[]],proofs:BatchProof[]=[],failures:ClauseRow[]=[];
     if(o.live) writeAtomic(pointer,jsonBytes({run_id:runId}));
     for(const batch of batches){
-      const pair=legacy ? await extractPair(batch,ask) : [await extract(batch,1,ask)];
+      const pair=legacy ? await extractPair(batch,ask) : [await extract(batch,1,ask,undefined,session.state.compact)];
       proofs.push({first:pair[0].hashes,second:pair[1]?.hashes ?? [],complete:pair.every(x=>x.complete)});
       pair.forEach((result,i)=>{
         votes[i].push(...result.clauses);

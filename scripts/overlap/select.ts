@@ -19,11 +19,11 @@ export function selectFields(records: RawPolicy[], allRegions = false): PublicFi
   }
   return out;
 }
-export function batchFields(fields: PublicField[]): PublicField[][] {
+export function batchFields(fields: PublicField[], maxChars = 6000): PublicField[][] {
   const result: PublicField[][] = [];
   let batch: PublicField[] = [], chars = 0;
   for (const field of fields) {
-    if (batch.length && chars + field.text.length > 6000) {
+    if (batch.length && chars + field.text.length > maxChars) {
       result.push(batch);
       batch = [];
       chars = 0;

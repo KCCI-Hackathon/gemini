@@ -33,6 +33,18 @@ describe("중복수혜 에이전트 단계", () => {
     expect(out.failures.length).toBeGreaterThanOrEqual(3);
     expect(out.clauses.map(c => c.quote)).toEqual(["다른    사업 참여 중인 자"]);
   });
+  it("위치가 확인된 오류는 해당 필드만 보내고 기존의 유효 조항은 보존한다", async () => {
+    const accepted: PublicField = { ...field, field: "addAplyQlfcCndCn", text: "다른 사업 참여 중인 자 (기존 유효 조항)" };
+    const post = vi.fn<Ask>(async req => ({
+      model, hash: String(req.repair), text: JSON.stringify(req.repair ? [raw] :
+        [{ ...raw, field: accepted.field }, { ...raw, quote: "없는 말" }]),
+    }));
+    const out = await extract([accepted, field], 1, post, model, true);
+    expect(post.mock.calls[0][0].prompt).toContain("기존 유효 조항");
+    expect(post.mock.calls[1][0].prompt).not.toContain("기존 유효 조항");
+    expect(out.clauses.map(c => c.field)).toEqual([accepted.field, field.field]);
+    expect(out.complete).toBe(true);
+  });
   it("중간에 모델이 바뀐 묶음만 두 표를 같은 모델로 얻는다", async () => {
     const post = vi.fn<Ask>(async req => ({ model: req.pass === 2 ? other : req.model ?? model, hash: (req.model ?? model) + req.pass, text: JSON.stringify([raw]) }));
     const pair = await extractPair([field], post);

@@ -21,6 +21,7 @@ export type RunReport=z.infer<typeof reportSchema> & {
   missed:string[],falseBlockedCases:string[],wrongLinks:string[],newPairs:Record<string,number>,
   correctSupported:{numerator:number,denominator:number},controlsContradicted:{numerator:number,denominator:number}
   reviewTimings?:{model:string;sampleCount:number;averageMs:number|null}[],
+  attemptStats?:RunState["attempts"],
 };
 function hasProof(r: Omit<RunReport,"passed">) {
   if(!r.complete || !r.total || r.covered>r.total || r.falseBlocked || r.wrongSupported || r.wrongTotal!==3) return false;
@@ -118,7 +119,8 @@ export function score(cases:Case[],agent:CandidateSet,checks:Verification[],run:
     wrongSupported:controls.filter(c=>c.verdict==="supported").length,missed,falseBlockedCases,wrongLinks,newPairs,passed:false,
     correctSupported:{numerator:verified.filter(c=>c.verdict==="supported" && c.validQuote).length,denominator:verified.length},
     controlsContradicted:{numerator:controls.filter(c=>c.verdict==="contradicted" && c.validQuote).length,denominator:controls.length},
-    ...(measured.length ? { reviewTimings } : {})
+    ...(measured.length ? { reviewTimings } : {}),
+    ...(run.attempts ? { attemptStats:run.attempts } : {})
   };
   report.passed=hasProof(report);
   return report;
