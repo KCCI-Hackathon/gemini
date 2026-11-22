@@ -355,3 +355,17 @@ html:has(.app) { zoom:.75; }
 .chipMark { display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; font-size:11px; line-height:1; }
 .activeChip .chipMark { background:#12965A; color:#fff; }
 .mutedChip .chipMark { border:1.5px solid #c3cbd8; }
+
+/* 로드맵 깃발: 위에서 떨어져 꽂히고 펄럭인다(시안 landing/app.html 에서 옮김) */
+.plantFlag { position:absolute; top:-6px; width:4px; height:52px; margin-left:-2px; background:#16224A; border-radius:2px; transform-origin:50% 100%; z-index:4; opacity:0; animation:plant .55s cubic-bezier(.3,1.5,.5,1) forwards; }
+.plantFlag i { position:absolute; left:4px; top:2px; width:0; height:0; border-left:26px solid var(--fc); border-top:10px solid transparent; border-bottom:10px solid transparent; transform-origin:0 50%; animation:wave 2.4s ease-in-out infinite; }
+.plantFlag::after { content:""; position:absolute; left:-5px; bottom:-3px; width:14px; height:5px; border-radius:50%; background:rgba(22,34,74,.18); }
+.plantFlag em { position:absolute; left:8px; top:24px; font-style:normal; font-size:11px; font-weight:700; color:var(--fc); white-space:nowrap; background:#fff; padding:0 4px; border-radius:4px; }
+.pf_open { --fc:#12965A; } .pf_soon { --fc:#E07B39; } .pf_check { --fc:#D4A72C; } .pf_blocked { --fc:#9AA3B5; }
+.pf_blocked i { animation:none; }
+.flagLegend { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; font-size:13px; color:#5E6782; margin:0 0 12px; }
+.flagLegend>span { display:inline-flex; align-items:center; gap:4px; }
+.plantFlag.plantStill { position:relative; top:0; height:22px; opacity:1; animation:none; margin:0 14px 0 4px; }
+.plantFlag.plantStill i { border-left-width:14px; border-top-width:6px; border-bottom-width:6px; animation:none; }
+.plantFlag.plantStill::after { display:none; }
+@media (prefers-reduced-motion:reduce) { .plantFlag,.plantFlag i { animation:none; opacity:1; } }
