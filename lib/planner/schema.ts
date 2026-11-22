@@ -58,7 +58,7 @@ export const EvaluationSchema = z.object({
   })).default([]),
   revision: z.number().int().min(0), today: z.string().refine(isDate), asOf: z.string(), evaluatedAt: z.string(), dataVersion: z.string(), demo: z.boolean(),
   stages: z.array(z.object({ stageId: z.string(), label: z.string(), start: z.string().refine(isDate), endExclusive: z.string().refine(isDate).nullable(), eventIds: z.array(z.string()) })), cards: z.array(CardSchema),
-  choiceWarnings: z.array(z.object({ offeringId: z.string(), stageId: z.string(), title: z.string(), message: z.string(), otherStageIds: z.array(z.string()) })), recommendations: z.array(z.object({ offeringId: z.string(), stageId: z.string() })),
+  choiceWarnings: z.array(z.object({ offeringId: z.string(), stageId: z.string(), title: z.string(), message: z.string(), otherStageIds: z.array(z.string()) })), recommendations: z.array(z.object({ offeringId: z.string(), stageId: z.string(), confirmation: z.string().optional() })),
 }).superRefine((evaluation, ctx) => {
   for (const recommendation of evaluation.recommendations) {
     if (!evaluation.cards.some(c => c.offeringId === recommendation.offeringId && c.stageId === recommendation.stageId) || !evaluation.stages.some(st => st.stageId === recommendation.stageId)) ctx.addIssue({ code: "custom", message: "추천 대상 회차·시점을 찾을 수 없어요.", path: ["recommendations"] });

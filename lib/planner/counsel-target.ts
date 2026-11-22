@@ -4,12 +4,13 @@
 import type { Profile } from "@/lib/judge/types";
 import { applyAnswer, type BenefitAnswer } from "./answers";
 import { addDays, isDate } from "./dates";
-import type { BenefitQuestion, PlanEvent, PlannerInput } from "./types";
+import { CATEGORIES, type BenefitQuestion, type Category, type PlanEvent, type PlannerInput } from "./types";
 
 export type CounselTarget =
   | { kind: "benefit"; policyId: string; answer: "receiving" | "selected" | "ended_date" | "monthly_amount"; month?: string }
   | { kind: "event"; event: "training_completion" | "employment" | "business_registration" }
   | { kind: "status" }
+  | { kind: "preferred_category" }
   | { kind: "recent_history" };
 
 export const STATUS_VALUES: Record<string, { label: string; statuses: string[] }> = {
@@ -30,6 +31,7 @@ export function answerOptions(t: CounselTarget): { value: string; label: string 
   }
   if (t.kind === "event") return "date";
   if (t.kind === "status") return Object.entries(STATUS_VALUES).map(([value, v]) => ({ value, label: v.label }));
+  if (t.kind === "preferred_category") return [{ value: "all", label: "모든 분야" }, ...Object.entries(CATEGORIES).map(([value, category]) => ({ value, label: category.label }))];
   return [{ value: "yes", label: "있어요" }, { value: "no", label: "없어요" }];
 }
 
@@ -42,6 +44,7 @@ export function validateAnswer(t: CounselTarget, value: string, today: string): 
     return { ok: true };
   }
   if (t.kind === "status") return STATUS_VALUES[v] ? { ok: true } : { ok: false, message: "보기 중에서 골라 주세요." };
+  if (t.kind === "preferred_category") return v === "all" || Object.hasOwn(CATEGORIES, v) ? { ok: true } : { ok: false, message: "보기 중에서 골라 주세요." };
   if (t.kind === "recent_history") return v === "yes" || v === "no" ? { ok: true } : { ok: false, message: "있어요 · 없어요 중에서 골라 주세요." };
   if (t.answer === "monthly_amount") {
     if (v === "no") return { ok: true };
@@ -72,6 +75,7 @@ export function applyTarget(profile: Profile, input: PlannerInput, t: CounselTar
     return { profile, input: { ...input, events } };
   }
   if (t.kind === "status") return { profile: { ...profile, currentStatus: [...STATUS_VALUES[v].statuses] as Profile["currentStatus"] }, input: { ...input, mutedKeys: input.mutedKeys.filter(k => k !== "status") } };
+  if (t.kind === "preferred_category") return { profile, input: { ...input, preferredCategory: v as Category | "all", mutedKeys: input.mutedKeys.filter(k => k !== "interest") } };
   return { profile: { ...profile, recentHistory: v as "yes" | "no" }, input };
 }
 

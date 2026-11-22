@@ -9,7 +9,7 @@ import { isDate } from "./dates";
 import { evaluatePlanner, type BaseEvaluator, type DraftConflictEvaluator } from "./evaluate";
 import { plannedFor, restrictionVerdict } from "./overlap-bridge";
 import { hasOverlapLanguage } from "./eligibility";
-import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
+import type { Choice, Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
 
 /**
  * 공고 데이터의 자리표시 날짜(예: "0001-01-01")는 "모름"이다. 날짜로 두면 저장 스키마가 평가 전체를 거부해
@@ -38,7 +38,7 @@ export function backendDraftConflict(now: Date, benefits: Benefit[] = []): Draft
   };
 }
 
-export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date, legacyPlan?: { employAfterMonths?: number | null; businessAfterMonths?: number | null; move?: { sigungu: string; afterMonths: number } | null }): Evaluation {
+export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date, legacyPlan?: { employAfterMonths?: number | null; businessAfterMonths?: number | null; move?: { sigungu: string; afterMonths: number } | null }, preferredRecommendations?: Choice[]): Evaluation {
   const today = toKstDate(now);
   if (input.events === undefined) {
     const events: PlanEvent[] = profile.events.filter(e => e.status === "scheduled" && e.type !== "relocation").map((e, i) => ({ ...e, id: `legacy-${i}`, status: "scheduled" }));
@@ -103,7 +103,7 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
   };
   const boundaries = [...verified.values()].flatMap(v => v.lookback ? [...profile.events, ...(input.events ?? [])].filter(e => e.type === "training_completion" || e.type === "employment").map(e => addMonths(e.date, v.lookback!.months)) : []);
   const evaluation = evaluatePlanner(profile, input, catalog, now, baseEvaluator, [...new Set(boundaries)], {
-    backendOverlap: true, draftConflict: backendDraftConflict(now, profile.benefits),
+    backendOverlap: true, draftConflict: backendDraftConflict(now, profile.benefits), preferredRecommendations,
   });
   evaluation.asOf = snapshot.asOf;
   return evaluation;

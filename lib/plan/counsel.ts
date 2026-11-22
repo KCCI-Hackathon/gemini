@@ -21,7 +21,8 @@ import { findNamedCards } from "@/lib/planner/commands";
 import { answerOptions, scrubPII, validateAnswer, type CounselTarget } from "@/lib/planner/counsel-target";
 import { dayNumber } from "@/lib/planner/dates";
 import { PlannerInputSchema, ProfileSnapshotSchema } from "@/lib/planner/schema";
-import type { Card, Evaluation } from "@/lib/planner/types";
+import { CATEGORIES, type Card, type Evaluation, type RecommendationPick } from "@/lib/planner/types";
+import { rankRecommendationQuestions } from "@/lib/planner/recommendation-questions";
 import type { AnthropicLike } from "@/lib/verify/run";
 
 const MAX_TEXT = 500;
@@ -40,6 +41,7 @@ export const CounselRequestSchema = z.object({
   version: z.literal(2),
   action: z.enum(["message", "recommend", "followup"]),
   consent: z.boolean().optional(),
+  questionnaireComplete: z.boolean().optional(),
   profile: ProfileSnapshotSchema.extend({ recentHistory: z.enum(["yes", "no"]).optional(), examDate: z.string().optional() }),
   input: PlannerInputSchema,
   message: z.string().max(MAX_TEXT).optional(),
@@ -48,7 +50,7 @@ export const CounselRequestSchema = z.object({
 });
 export type CounselRequest = z.infer<typeof CounselRequestSchema>;
 
-export type CounselPick = { offeringId: string; stageId: string; why: string[] };
+export type CounselPick = RecommendationPick;
 export type CounselBody = {
   kind: "question" | "answer" | "plan" | "out_of_scope" | "blocked" | "fallback" | "none" | "parsed";
   text?: string;
@@ -72,7 +74,7 @@ export type CounselCtx = { env: Record<string, string | undefined>; ip: string; 
 const SYSTEM = `당신은 청년 정책 상담 · 추천 에이전트입니다. 코드가 낸 1차 판정을 도구로 보고 다음 중 하나로 이번 턴을 끝냅니다.
 - ask_user: 판정을 바꿀 정보가 더 필요하면 질문 하나. target 은 get_open_questions 가 준 칸 중에서 고릅니다. 문장만 쓰고 선택지는 코드가 붙입니다.
 - answer_user: 사용자 질문에 답합니다. 반드시 citations 에 근거(evidence_id) 나 카드(offering_id) 를 넣습니다. 도구 결과에 없는 날짜 · 금액 · 조건은 쓰지 않습니다.
-- finish_plan: 시점마다 계획에 넣을 카드 1~3개(offering_id + stage_id)와 이유. get_evaluation 에 나온 열린 카드만 고릅니다.
+- finish_plan: 시점마다 계획에 넣을 카드 2~3개(offering_id + stage_id)와 이유. 신청 가능을 먼저 고르고, 남은 자리는 확인 필요 후보로 채웁니다. 확인 필요 카드는 남은 조건을 안내합니다. 후보가 적으면 있는 만큼 고릅니다.
 - parse_other_answer: 사용자가 질문에 글로 답했으면 target 값으로 바꿉니다. 불확실하면 ask_user 로 다시 묻습니다.
 - out_of_scope: 청년 정책 · 계획 · 일정과 전혀 관계없는 요청일 때만. 정책 이름이 나오면 find_cards 로 찾아 답합니다.
 - no_more_questions: 더 물을 것도 할 말도 없을 때.
@@ -104,7 +106,8 @@ export function isDemoPersona(req: Pick<CounselRequest, "profile" | "input">) {
 }
 
 function ruleFallback(evaluation: Evaluation, notice: string, extra: Partial<CounselBody> = {}): CounselBody {
-  return { kind: "fallback", source: "rule", notice, picks: evaluation.recommendations.map(c => ({ ...c, why: [] })), ...extra };
+  const confirmation = evaluation.recommendations.some(c => c.confirmation);
+  return { kind: "fallback", source: "rule", notice: confirmation ? `${notice} ‘확인 필요’ 후보는 남은 조건을 확인해 주세요.` : notice, picks: evaluation.recommendations.map(c => ({ ...c, why: [] })), ...extra };
 }
 
 /** 실사용자에게는 개인 일정 · 개인 기한을 "오늘부터 N일 뒤"로. 공고의 공식 날짜는 공개 정보라 그대로. */
@@ -119,7 +122,7 @@ function personalDates(ev: Evaluation) {
 function cardBrief(c: Card, today: string, persona: boolean, mine: Set<string> = new Set()) {
   const text = (m: string) => persona ? m : m.replace(/\d{4}-\d{2}-\d{2}/g, d => mine.has(d) ? relDay(today, d, false)! : d);
   return {
-    offering_id: c.offeringId, stage_id: c.stageId, title: c.title, judgement: c.availability === "eligible" ? "신청 가능" : c.availability === "needs_check" ? "확인 필요" : "불가",
+    offering_id: c.offeringId, stage_id: c.stageId, title: c.title, category: CATEGORIES[c.category].label, judgement: c.eligibility === "eligible" ? "신청 가능" : c.eligibility === "needs_check" ? "확인 필요" : "불가",
     reasons: c.reasons.slice(0, 3).map(r => text(r.message)), my_deadline: relDay(today, c.personalWindow?.end, persona), official_end: c.official.end, verify: c.verifyLabel, chosen: c.selectedStageId === c.stageId,
   };
 }
@@ -128,13 +131,16 @@ function evaluationForAI(ev: Evaluation, persona: boolean) {
   return {
     today: persona ? ev.today : "오늘",
     stages: ev.stages.map(s => ({ stage_id: s.stageId, label: s.label, start: relDay(ev.today, s.start, persona) })),
-    cards: ev.stages.flatMap(s => ev.cards.filter(c => c.stageId === s.stageId && (c.availability !== "blocked" || chosen.has(c.offeringId + c.stageId))).slice(0, 10)).map(c => cardBrief(c, ev.today, persona, personalDates(ev))),
+    cards: ev.stages.flatMap(s => ev.cards.filter(c => c.stageId === s.stageId && (c.availability !== "blocked" || chosen.has(c.offeringId + c.stageId)))
+      .sort((a, b) => Number(b.eligibility === "eligible") - Number(a.eligibility === "eligible"))
+      .slice(0, 10)).map(c => cardBrief(c, ev.today, persona, personalDates(ev))),
   };
 }
 function profileForAI(req: CounselRequest, persona: boolean, today: string) {
   const p = req.profile;
   const age = Number(today.slice(0, 4)) - Number(p.birthYm.slice(0, 4));
   return {
+    preferred_category: req.input.preferredCategory === "all" || req.input.mutedKeys.includes("interest") ? "모든 분야" : CATEGORIES[req.input.preferredCategory].label,
     age: persona ? p.birthYm : `만 ${age - 1}~${age}세`, region: persona ? p.sigungu : regionLabel(p.sigungu) === p.sigungu ? "지역 미상" : regionLabel(p.sigungu), status: p.currentStatus,
     schedule: (req.input.events ?? []).map(e => ({ type: e.type, date: relDay(today, e.date, persona) })),
     benefits: (p.benefits ?? []).map(b => ({ policy_id: b.policyId, status: b.status ?? "모름" })),
@@ -156,6 +162,12 @@ function allowedTarget(t: CounselTarget): boolean {
   if (t.kind !== "benefit") return true;
   for (const rules of loadOverlap().values()) if (rules.some(r => r.source_policy_id === t.policyId)) return true;
   return false;
+}
+
+function questionBeforeEmptyPlan(req: CounselRequest, ev: Evaluation): CounselBody | undefined {
+  if (req.action === "message" || req.questionnaireComplete || ev.recommendations.length) return;
+  const first = rankRecommendationQuestions(req.profile, req.input, ev)[0];
+  if (first) return { kind: "question", source: "rule", text: first.text, target: first.target, options: answerOptions(first.target) };
 }
 
 /** 답 · 이유 문장의 숫자는 이번 턴에 AI 에게 보낸 자료나 사용자 글에 있는 숫자여야 한다(근거 밖 날짜 · 금액 막기). */
@@ -200,7 +212,7 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   }
 
   const cacheable = req.action === "recommend" && !message && !history.length;
-  const key = cacheable ? `${toKstDate(ctx.now)}:${createHash("sha256").update(JSON.stringify({ p: profileForAI(req, persona, evaluation.today), e: evaluationForAI(evaluation, persona) })).digest("hex")}` : null;
+  const key = cacheable ? `${toKstDate(ctx.now)}:${createHash("sha256").update(JSON.stringify({ p: profileForAI(req, persona, evaluation.today), e: evaluationForAI(evaluation, persona), questionnaireComplete: req.questionnaireComplete })).digest("hex")}` : null;
   if (key && cache.has(key)) return { status: 200, body: cache.get(key)! };
 
   try {
@@ -222,12 +234,15 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
   const evidenceIds = new Map(ev.cards.flatMap(c => c.evidence.map(e => [e.evidenceId, e.title] as const)));
   const known = new Set(ev.cards.map(c => c.policyId));
   const questions = openQuestions(req, ev);
+  const completedQuestionnaire = req.action === "recommend" && req.questionnaireComplete;
+  const tools = completedQuestionnaire ? TOOLS.filter(tool => ["get_evaluation", "find_cards", "get_policy_evidence", "finish_plan"].includes(tool.name)) : TOOLS;
   // 근거 밖 숫자 검사용: 이번 턴에 AI 에게 보낸 자료와 사용자 글의 숫자
   const allowed = new Set<string>();
   const sent = (s: string) => { for (const n of numberSet(s)) allowed.add(n); return s; };
   const fallback = (notice = "AI 설명을 불러오지 못해 조건 기준 경로를 표시해요") => ruleFallback(ev, notice);
 
-  const task = req.action === "recommend" ? "계획에 넣을 정책을 시점별로 추천해 주세요. 판정을 바꿀 정보가 꼭 필요하면 먼저 하나만 물어도 됩니다."
+  const task = completedQuestionnaire ? "준비된 질문에 모두 답했어요. 현재 판정과 선호 분야를 반영해 finish_plan으로 시점별 경로를 추천하세요."
+    : req.action === "recommend" ? "계획에 넣을 정책을 시점별로 추천해 주세요. 판정을 바꿀 정보가 꼭 필요하면 먼저 하나만 물어도 됩니다."
     : req.action === "followup" ? "방금 사용자가 답해서 코드가 다시 판정했어요. 더 물을지, 추천할지 정하세요."
     : `사용자 메시지: """${sent(message ?? "")}"""`;
   const context = sent(JSON.stringify({ profile: profileForAI(req, persona, ev.today), history }));
@@ -237,7 +252,7 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     let res: Anthropic.Beta.BetaMessage;
     try {
-      res = await client.beta.messages.create({ model: "configured-by-adapter", max_tokens: MAX_TOKENS, system: SYSTEM, tools: TOOLS, messages }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
+      res = await client.beta.messages.create({ model: "configured-by-adapter", max_tokens: MAX_TOKENS, system: SYSTEM, tools, messages }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
     } catch {
       deadline.signal.throwIfAborted();
       return fallback(); // 429 · 503 · 네트워크 오류(G7)
@@ -245,9 +260,10 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
     if (res.stop_reason === "refusal") return fallback();
     messages.push({ role: "assistant", content: res.content });
     const uses = res.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-    if (!uses.length) return req.action === "recommend" ? fallback() : { kind: "none" };
+    if (!uses.length) return questionBeforeEmptyPlan(req, ev) ?? (req.action === "recommend" ? fallback() : { kind: "none" });
     const results: Record<string, unknown>[] = [];
     for (const u of uses) {
+      if (completedQuestionnaire && !tools.some(tool => tool.name === u.name)) return fallback("답변을 반영한 조건 기준 경로를 표시해요.");
       // 모델 출력은 믿지 않는다. 객체가 아니거나 칸이 이상하면 빈 값으로 보고 각 도구가 거절한다.
       const input = (u.input && typeof u.input === "object" && !Array.isArray(u.input) ? u.input : {}) as Record<string, unknown>;
       const objects = <T,>(v: unknown) => (Array.isArray(v) ? v : []).filter((x): x is T => !!x && typeof x === "object" && !Array.isArray(x));
@@ -287,14 +303,24 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
         for (const p of picks) {
           const c = cards.get(String(p.offering_id) + "|" + String(p.stage_id));
           // 지금 평가에 없거나 blocked 인 카드는 버린다(G3). 시점당 3개, 같은 회차는 한 번.
-          if (!c || c.availability === "blocked" || c.eligibility !== "eligible" || kept.some(k => k.offeringId === c.offeringId) || kept.filter(k => k.stageId === c.stageId).length >= 3) { dropped++; continue; }
+          if (!c || c.eligibility === "blocked" || kept.some(k => k.offeringId === c.offeringId) || kept.filter(k => k.stageId === c.stageId).length >= 3) { dropped++; continue; }
           const why = typeof p.why === "string" ? p.why.trim() : "";
           const whyOk = why && guardResponse(why, known).ok && !numbersOutside(why, allowed);
           kept.push({ offeringId: c.offeringId, stageId: c.stageId, why: [whyOk ? why : c.reasons[0]?.message ?? (c.availability === "eligible" ? "조건 기준 신청 가능" : "확인 필요")] });
         }
-        if (!kept.length) return fallback("AI 추천을 쓸 수 없어 조건 기준 경로를 표시해요");
-        const summary = typeof input.summary === "string" && guardResponse(input.summary, known).ok && !numbersOutside(input.summary, allowed) ? input.summary.trim() : "시점별로 먼저 확인할 정책을 골랐어요.";
-        return { kind: "plan", source: "ai", summary, picks: kept, ...(dropped ? { notice: `AI 추천 ${dropped}개는 지금 판정과 맞지 않아 뺐어요` } : {}) };
+        if (!kept.length) return questionBeforeEmptyPlan(req, ev) ?? fallback(ev.recommendations.length
+          ? "현재 판정을 기준으로 경로를 정리했어요."
+          : "지금까지 입력한 조건으로 신청 가능으로 확인된 정책이 없어요. ‘확인 필요’ 탭에서 남은 조건을 확인해 주세요.");
+        const planned = evaluateRequest(req.profile, req.input, ctx.now, undefined, kept).recommendations;
+        const completed = planned.map(c => {
+          const modelPick = kept.find(p => p.offeringId === c.offeringId && p.stageId === c.stageId);
+          return { ...c, ...(modelPick ? {} : { filled: true }), why: c.confirmation ? [] : modelPick?.why ?? ["현재 조건으로 신청 가능해요."] };
+        });
+        const conditional = completed.some(c => c.confirmation);
+        const summary = !conditional && typeof input.summary === "string" && guardResponse(input.summary, known).ok && !numbersOutside(input.summary, allowed) ? input.summary.trim() : "시점별로 먼저 확인할 정책을 골랐어요.";
+        dropped += kept.filter(p => !completed.some(c => c.offeringId === p.offeringId && c.stageId === p.stageId)).length;
+        const notice = [conditional ? "‘확인 필요’ 후보는 남은 조건을 확인해 주세요." : "", dropped ? `AI 추천 ${dropped}개는 지금 판정과 맞지 않아 뺐어요.` : ""].filter(Boolean).join(" ");
+        return { kind: "plan", source: "ai", summary, picks: completed, ...(notice ? { notice } : {}) };
       } else if (u.name === "parse_other_answer") {
         const target = TargetSchema.safeParse(input.target);
         const value = typeof input.value === "string" ? input.value : "";
@@ -305,7 +331,7 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
         if (message && (findNamedCards(message, ev, req.input.choices).length || ev.cards.some(c => { const t = c.title.replace(/\s|\(.*?\)/g, ""); return t.length >= 4 && message.replace(/\s/g, "").includes(t); }))) { reply("이 메시지에는 정책 이름이 있어요. 주제 밖이 아니에요. find_cards 로 찾아 answer_user 로 답하세요.", true); continue; }
         return { kind: "out_of_scope", text: OUT_OF_SCOPE };
       }
-      else if (u.name === "no_more_questions") return req.action === "recommend" ? fallback() : { kind: "none" };
+      else if (u.name === "no_more_questions") return questionBeforeEmptyPlan(req, ev) ?? (req.action === "recommend" ? fallback() : { kind: "none" });
       else reply("알 수 없는 도구", true);
     }
     messages.push({ role: "user", content: results });

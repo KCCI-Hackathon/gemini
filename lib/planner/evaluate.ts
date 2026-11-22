@@ -3,7 +3,7 @@ import { toKstDate } from "@/lib/date";
 import type { Profile } from "@/lib/judge/types";
 import { effectiveStatus } from "@/lib/judge/personal";
 import { addDays, dayNumber } from "./dates";
-import { EVENT_NAMES, type BenefitQuestion, type Evidence, type Card, type Choice, type Evaluation, type Offering, type Period, type PlanEvent, type PlannerInput, type Reason, type Stage } from "./types";
+import { EVENT_NAMES, type BenefitQuestion, type Evidence, type Card, type Choice, type Evaluation, type Offering, type Period, type PlanEvent, type PlannerInput, type Reason, type RecommendationChoice, type Stage } from "./types";
 import { classifyEligibility } from "./eligibility";
 
 export type BaseVerdict = { availability: Card["availability"]; reasons: Reason[]; evidence?: Evidence[]; questions?: BenefitQuestion[] };
@@ -75,7 +75,7 @@ export function sortCards(a: Card, b: Card): number {
   return (ae === null ? 1 : 0) - (be === null ? 1 : 0) || (ae ?? "").localeCompare(be ?? "") || (a.personalWindow?.start ?? "9999").localeCompare(b.personalWindow?.start ?? "9999") || a.title.localeCompare(b.title, "ko") || a.offeringId.localeCompare(b.offeringId);
 }
 
-export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: Offering[], now: Date, baseEvaluator?: BaseEvaluator, extraBoundaries: string[] = [], options: { backendOverlap?: boolean; draftConflict?: DraftConflictEvaluator } = {}): Evaluation {
+export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: Offering[], now: Date, baseEvaluator?: BaseEvaluator, extraBoundaries: string[] = [], options: { backendOverlap?: boolean; draftConflict?: DraftConflictEvaluator; preferredRecommendations?: Choice[] } = {}): Evaluation {
   const today = toKstDate(now);
   const events = input.events ?? profile.events.filter(e => e.status === "scheduled").map((e, i) => ({ ...e, status: "scheduled" as const, id: `legacy-${i}` }));
   const stages = buildStages(events, today);
@@ -105,7 +105,8 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
           // Turning a known condition off means unknown, never satisfied.
           const mutedCodes = [...(muted.includes("residence") ? ["RESIDENCE"] : []), ...(muted.includes("status") ? ["STATUS"] : [])];
           const reasons = verdict.reasons.filter(r => !mutedCodes.includes(r.code));
-          verdict = { ...verdict, availability: reasons.length && verdict.availability === "blocked" ? "blocked" : "needs_check", reasons: [...reasons, { code: "MUTED_CONDITION", message: "꺼진 프로필 조건을 다시 확인해 주세요" }] };
+          const conditions = [muted.includes("status") && "현재 상태", muted.includes("residence") && o.regions?.length && "거주지"].filter(Boolean).join("·");
+          verdict = { ...verdict, availability: reasons.length && verdict.availability === "blocked" ? "blocked" : "needs_check", reasons: [...reasons, { code: "MUTED_CONDITION", message: `${conditions}를 알려 주면 다시 판정해요` }] };
         }
         segments.push({ stageId: stage.stageId, window: { start: cuts[n], end: pieceEnd }, verdict });
       }
@@ -191,19 +192,41 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
         clone.reasons.unshift({ code: actual ? "PARTICIPATION_CONFLICT" : "DRAFT_CONFLICT", message: `${actual ? "현재 수혜 중인" : "계획에 담은"} ${target.title}과 중복 불가`, relatedOfferingId: target.offeringId, evidenceId: relation.evidenceId });
       } else if (relation.uncertain && clone.availability !== "blocked") { clone.availability = "needs_check"; clone.reasons.push({ code: "UNCERTAIN_RESTRICTION", message: `${target.title}과 수혜 기간·제한 근거 확인 필요` }); }
     }
-    if (input.mutedKeys.includes("participation") && !actualConflict && clone.availability !== "blocked") { clone.availability = "needs_check"; clone.reasons.push({ code: "MUTED_PARTICIPATION", message: "수혜 조건을 꺼두어 추가 확인이 필요해요" }); }
+    if (input.mutedKeys.includes("participation") && !actualConflict && clone.availability !== "blocked") { clone.availability = "needs_check"; clone.reasons.push({ code: "MUTED_PARTICIPATION", message: "받고 있는 지원을 알려 주면 함께 받을 수 있는지 확인해요" }); }
     clone.canReplace = originallyAllowed && !actualConflict && clone.conflicts.length > 0;
     const classification = classifyEligibility(clone.availability, clone.overlapAssessment, clone.reasons.map(reason => reason.message));
     return { ...clone, eligibility: classification.eligibility, eligibilityReason: classification.reason };
   };
-  const recommended: Choice[] = [];
-  for (const stage of stages) {
-    let count = 0;
-    const options = cards.filter(c => c.stageId === stage.stageId).sort((a, b) => Number(b.category === input.preferredCategory && !input.mutedKeys.includes("interest")) - Number(a.category === input.preferredCategory && !input.mutedKeys.includes("interest")) || sortCards(a, b));
-    for (const card of options) {
-      if (count === 2) break;
-      if (recommended.some(c => c.offeringId === card.offeringId) || applyConflicts(card, recommended).eligibility !== "eligible") continue;
-      recommended.push({ offeringId: card.offeringId, stageId: card.stageId }); count++;
+  const recommended: RecommendationChoice[] = [];
+  const preferred = new Set(options.preferredRecommendations?.map(c => `${c.stageId}|${c.offeringId}`));
+  const preferredRank = (c: Card) => Number(preferred.has(`${c.stageId}|${c.offeringId}`));
+  const interested = (c: Card) => Number(c.category === input.preferredCategory && !input.mutedKeys.includes("interest"));
+  const usedOfferings = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const eligibility of ["eligible", "needs_check"] as const) {
+    for (const stage of stages) {
+      const candidates = cards.filter(c => c.stageId === stage.stageId && c.availability !== "blocked");
+      candidates.sort((a, b) => preferredRank(b) - preferredRank(a)
+        || (eligibility === "needs_check" ? a.reasons.length - b.reasons.length : 0)
+        || interested(b) - interested(a) || sortCards(a, b));
+      for (const card of candidates) {
+        const count = counts.get(stage.stageId) ?? 0;
+        if (count >= 3 || (count >= 2 && (!preferredRank(card) || eligibility === "needs_check"))) break;
+        if (usedOfferings.has(card.offeringId)) continue;
+        const result = applyConflicts(card, recommended);
+        if (result.eligibility !== eligibility) continue;
+        const choice = { offeringId: card.offeringId, stageId: card.stageId };
+        const proposed = [...recommended, choice];
+        // 방향성이 있는 제한은 신규 카드가 기존 추천을 막는지도 확인한다.
+        if (recommended.some(existing => {
+          const prior = cards.find(c => c.offeringId === existing.offeringId && c.stageId === existing.stageId)!;
+          const updated = applyConflicts(prior, proposed).eligibility;
+          return updated === "blocked" || (!existing.confirmation && updated !== "eligible");
+        })) continue;
+        recommended.push({ ...choice, ...(eligibility === "needs_check" ? { confirmation: result.eligibilityReason } : {}) });
+        usedOfferings.add(card.offeringId);
+        counts.set(stage.stageId, count + 1);
+      }
     }
   }
   const evaluated = cards.map(c => applyConflicts(c, input.choices)).sort(sortCards);
@@ -212,5 +235,5 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     if (card?.eligibility === "eligible") return [];
     return [{ ...choice, title: card?.title ?? catalog.find(o => o.offeringId === choice.offeringId)?.title ?? `공고 조회 불가 (${choice.offeringId})`, message: card ? `${card.eligibility === "blocked" ? "현재 일정으로 신청 불가" : "확인 필요"} · ${card.eligibilityReason}` : "시점 다시 선택 · 저장한 시점 또는 회차를 찾을 수 없어요", otherStageIds: card?.otherStageIds ?? [] }];
   });
-  return { revision: input.revision, today, asOf: catalog[0]?.dataVersion === "fixture-1" ? "2026-11-19" : (catalog[0]?.dataVersion ?? today), evaluatedAt: now.toISOString(), dataVersion: catalog[0]?.dataVersion ?? "empty", demo: input.demoId === "pathfinder-demo-2026", stages, questions: [...questions.values()], cards: evaluated, choiceWarnings, recommendations: recommended };
+  return { revision: input.revision, today, asOf: catalog[0]?.dataVersion === "fixture-1" ? "2026-11-19" : (catalog[0]?.dataVersion ?? today), evaluatedAt: now.toISOString(), dataVersion: catalog[0]?.dataVersion ?? "empty", demo: input.demoId === "pathfinder-demo-2026", stages, questions: [...questions.values()], cards: evaluated, choiceWarnings, recommendations: stages.flatMap(stage => recommended.filter(choice => choice.stageId === stage.stageId)) };
 }

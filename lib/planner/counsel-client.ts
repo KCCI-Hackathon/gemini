@@ -7,7 +7,7 @@ export type CounselResult = CounselBody & { status: number };
 
 export async function requestCounsel(args: {
   draft: Draft; action: "message" | "recommend" | "followup"; message?: string; history: CounselTurn[];
-  consent: boolean; outOfScopeStreak: number; fetcher?: typeof fetch; timeoutMs?: number;
+  consent: boolean; outOfScopeStreak: number; questionnaireComplete?: boolean; fetcher?: typeof fetch; timeoutMs?: number;
 }): Promise<CounselResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), args.timeoutMs ?? 60_000);
@@ -15,7 +15,7 @@ export async function requestCounsel(args: {
     const res = await (args.fetcher ?? fetch)("/api/plan", {
       method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
       body: JSON.stringify({
-        version: 2, action: args.action, consent: args.consent, profile: args.draft.profileSnapshot, input: args.draft.input,
+        version: 2, action: args.action, consent: args.consent, questionnaireComplete: args.questionnaireComplete, profile: args.draft.profileSnapshot, input: args.draft.input,
         ...(args.message ? { message: args.message.slice(0, 500) } : {}), history: args.history.slice(-6).map(h => ({ ...h, text: h.text.slice(0, 500) })), outOfScopeStreak: args.outOfScopeStreak,
       }),
     });
