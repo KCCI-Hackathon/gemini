@@ -74,7 +74,32 @@
 ## 5. 순서 제안
 
 1. **J-1 + F-3 + A-2** (질문 흐름) 과 **F-1** (옛 저장본) — 시연을 막는 것부터
+	- 질문 흐름은 **판정 코드(J-1) 를 먼저** 올린다. J-1 에서 "질문에 어느 달인지 실어 보낸다" 처럼 질문 형식이 정해지면, 프론트(F-3 입력 칸)와 에이전트(A-2 질문 카드)가 그 형식을 받아 맞춘다. 이 순서가 충돌이 가장 적다.
+	- F-1 (옛 저장본) 은 질문 흐름과 무관해 프론트가 바로 시작해도 된다.
 2. J-2 · J-3 · F-2 · A-1 — 화면에 틀린 내용이 보이는 것
 3. 나머지 낮음 · 확인 필요
 
 에이전트 최적화(응답 품질 · 속도 등)는 위 1~2 가 끝나 통합 설계대로 동작한 뒤에 한다.
+
+---
+
+## 6. 브랜치 작업 방법
+
+세 파트가 이 브랜치에 직접 커밋하지 않는다. 이 브랜치에서 각자 브랜치를 따서 작업하고, 이 브랜치로 PR 한다.
+
+| 파트 | 브랜치 (제안) | 맡을 문제 |
+|---|---|---|
+| 판정 코드 | `backend/link-judge-fixes` | J-1 ~ J-9 |
+| 프론트엔드 | `frontend/link-ui-fixes` | F-1 ~ F-6 |
+| 에이전트 | `agent/link-agent-fixes` | A-1 ~ A-5 |
+
+1. 각 파트가 `agent/planner-backend-link` 에서 자기 브랜치를 만든다
+	```
+	git fetch origin
+	git switch -c backend/link-judge-fixes origin/agent/planner-backend-link
+	git push -u origin backend/link-judge-fixes
+	```
+2. 고친 뒤 `agent/planner-backend-link` 대상으로 PR
+3. 판정 코드 PR(J-1) 이 먼저 머지되면, 프론트 · 에이전트는 자기 브랜치에 `origin/agent/planner-backend-link` 를 받아 맞춘다
+4. 세 파트가 모두 합쳐지면 다시 독립 검증 (테스트 · 타입 · 린트 + 설계 7장 I1~I8)
+5. 통과하면 `agent/planner-backend-link` → `dev` PR 머지
