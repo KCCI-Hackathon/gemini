@@ -11,6 +11,8 @@ import { PERSONA_A } from "@/lib/judge/personas";
 import { PERSONA_DEMO_EVENTS } from "@/lib/planner/fixtures";
 import { PolicyCard } from "@/app/workspace/PolicyCard";
 import { Roadmap } from "@/app/workspace/Roadmap";
+import { Saved } from "@/app/workspace/Saved";
+import { PlanCompare } from "@/app/workspace/PlanCompare";
 import { evaluatePlanner } from "@/lib/planner/evaluate";
 import { createDraft } from "@/lib/planner/state";
 import { DEMO_EVENTS, DEMO_PROFILE, demoCatalog } from "@/lib/planner/fixtures";
@@ -44,6 +46,22 @@ test("roadmap reads the selected snapshot, not another plan's current dates", ()
   expect(html).toContain("2월 12일");
   expect(html).toContain("1월 5일");
   expect(html).not.toContain("1월 19일");
+});
+test("missing starred policy remains removable without a current verdict", () => {
+  const html = renderToStaticMarkup(React.createElement(Saved, { stars: ["missing-id"], evaluation: run("2027-01-20"), onToggle: () => {}, onDetail: () => {}, onChoose: () => {}, busy: false }));
+  expect(html).toContain("지금 판정에 없어요(회차 마감 등)");
+  expect(html).toContain("별표 해제");
+});
+test("plan comparison explains why one plan cannot be compared", () => {
+  const html = renderToStaticMarkup(React.createElement(PlanCompare, { plans: [] }));
+  expect(html).toContain("계획을 두 개 이상 저장하면 비교할 수 있어요");
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>계획 비교<\/button>/);
+});
+test("agent footer describes the verdict and recommendation roles", () => {
+  const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {} }));
+  expect(html).toContain("규칙 엔진");
+  expect(html).toContain("추천해요");
+  expect(html).not.toContain("설명만 해요");
 });
 
 afterEach(() => vi.unstubAllGlobals());

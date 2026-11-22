@@ -75,7 +75,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   return <aside className={s.agent} aria-label="정책 길잡이"><div className={s.agentHead}><Robot /><div><h2>나의 정책 길잡이</h2><small>일정부터 차근차근</small></div><button className={`${s.iconButton} ${s.agentClose}`} onClick={onClose} aria-label="에이전트 닫기">×</button></div>
     {consentNeeded && <div className={s.agentMessage} role="region" aria-label="AI 상담 동의">
       <strong>AI 상담 사용</strong>
-      <p>자유 질문 · 추천을 AI(OpenAI)가 정리해요. 보내는 것: 만 나이 범위, 시·군·구 이름, 학력·상태, 일정은 ‘오늘부터 N일 뒤’, 수혜 정책 이름과 상태, 그리고 쓴 질문(전화번호·주민번호·이메일·계좌번호는 지우고). 이름·생년월일·정확한 날짜는 보내지 않고, 대화는 저장하지 않아요. 판정은 늘 코드가 해요.</p>
+      <p>자유 질문 · 추천을 설정된 외부 AI 제공자가 정리해요. 보내는 것: 만 나이 범위, 시·군·구 이름, 학력·상태, 일정은 ‘오늘부터 N일 뒤’, 수혜 정책 이름과 상태, 그리고 쓴 질문(전화번호·주민번호·이메일·계좌번호는 지우고). 이름·생년월일·정확한 날짜는 보내지 않고, 대화는 저장하지 않아요. 판정은 늘 코드가 해요.</p>
       <button className={s.primaryButton} onClick={onConsent}>AI 상담 사용</button>
     </div>}
     {consentOn && <button className={s.textButton} onClick={onConsentOff}>AI 상담 끄기</button>}
@@ -95,5 +95,5 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
           <strong>{cards?.find(card => card.offeringId === pick.offeringId)?.title ?? pick.offeringId}</strong>
           {pick.why.map((why, i) => <p key={i}>{why}</p>)}
         </div>)}
-      </div>}<div ref={endRef} /></div><div className={s.agentExamples}>{AGENT_EXAMPLES.map(q => <button key={q} onClick={() => send(q)} disabled={busy}>{q}</button>)}</div><form className={s.agentForm} onSubmit={e => { e.preventDefault(); send(text); }}><label className={s.srOnly} htmlFor="agent-message">길잡이에게 메시지</label><textarea id="agent-message" value={text} onChange={e => setText(e.target.value)} placeholder="일정이나 정책을 물어보세요" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} /><button className={s.primaryButton} disabled={busy || !text.trim()}>보내기</button></form><p className={s.agentFoot}>앱의 일정·판정 결과로 안내해요.</p></aside>;
+      </div>}<div ref={endRef} /></div><div className={s.agentExamples}>{AGENT_EXAMPLES.map(q => <button key={q} onClick={() => send(q)} disabled={busy}>{q}</button>)}</div><form className={s.agentForm} onSubmit={e => { e.preventDefault(); send(text); }}><label className={s.srOnly} htmlFor="agent-message">길잡이에게 메시지</label><textarea id="agent-message" value={text} onChange={e => setText(e.target.value)} placeholder="일정이나 정책을 물어보세요" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} /><button className={s.primaryButton} disabled={busy || !text.trim()}>보내기</button></form><p className={s.agentFoot}>날짜·자격·중복 판정은 규칙 엔진이 하고, 길잡이는 추가로 물어보고 설명하고 추천해요.</p></aside>;
 }
