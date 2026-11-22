@@ -92,7 +92,7 @@
 @media(max-width:900px){.steps{grid-template-columns:1fr}}
 
 .cta{margin:0 clamp(16px,4vw,56px) 64px;border-radius:40px;padding:80px clamp(16px,6vw,96px);background:linear-gradient(180deg,#E6F0FF,#CFE2FF);display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:32px;overflow:hidden}
-.page .cta a.pill{display:inline-block;margin-top:28px;padding:16px 28px;font-size:17px}
+.page .cta a.pill{display:inline-block;margin-top:28px;padding:16px 28px;font-size:17px;color:#fff;background:var(--ink);box-shadow:0 8px 20px rgba(22,34,74,.25)}
 .cta .float{position:relative;width:min(320px,70%);margin:0 auto}
 @media(max-width:900px){.cta{grid-template-columns:1fr}}
 .footer{padding:40px clamp(16px,6vw,96px);color:var(--soft);font-size:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}

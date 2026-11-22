@@ -87,7 +87,9 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   // 30초가 넘으면 오래 걸린다고 알린다.
   useEffect(() => { setSlow(false); if (!planLoading) return; const t = setTimeout(() => setSlow(true), 30_000); return () => clearTimeout(t); }, [planLoading]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" }); }, [messages.length, recommendation, planLoading, currentQuestionKey, aiQuestionText, skipped.size]);
-  function send(value: string) { if (!value.trim() || busy) return; onSend(value.trim()); setText(""); }
+  // AI 상담 동의 전에는 채팅을 잠근다. 위의 ‘AI 상담 사용’을 누르면 열린다.
+  const locked = !!consentNeeded;
+  function send(value: string) { if (!value.trim() || busy || locked) return; onSend(value.trim()); setText(""); }
   // 추천 블록은 만들어진 메시지 바로 아래에 한 번만 둔다. 뒤에 오는 대화 아래로 따라 내려오지 않게.
   const inlineRecommendation = recommendationAt != null && messages.some(m => m.id === recommendationAt);
   const recommendationBlock = recommendation && <div className={s.agentMessage}>
@@ -129,10 +131,10 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
         {!inlineRecommendation && recommendationBlock}
         <div ref={endRef} />
       </div>
-      <div className={s.agentExamples} aria-label="예시 질문">{AGENT_EXAMPLES.map(q => <button key={q} onClick={() => send(q)} disabled={busy}>{q}</button>)}</div>
+      <div className={s.agentExamples} aria-label="예시 질문">{AGENT_EXAMPLES.map(q => <button key={q} onClick={() => send(q)} disabled={busy || locked}>{q}</button>)}</div>
       <form className={s.agentForm} onSubmit={e => { e.preventDefault(); send(text); }}>
         <label className={s.srOnly} htmlFor="agent-message">길잡이에게 메시지</label>
-        <textarea id="agent-message" value={text} onChange={e => setText(e.target.value)} placeholder="일정이나 정책을 물어보세요 (이름·주소·연락처는 빼고)" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} />
+        <textarea id="agent-message" disabled={locked} value={text} onChange={e => setText(e.target.value)} placeholder={locked ? "‘AI 상담 사용’을 누르면 채팅할 수 있어요" : "일정이나 정책을 물어보세요 (이름·주소·연락처는 빼고)"} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} />
         <button className={s.primaryButton} disabled={busy || !text.trim()}>보내기</button>
       </form>
       <p className={s.agentFoot}>날짜·자격·중복 판정은 규칙 엔진이 하고, 길잡이는 추가로 물어보고 설명하고 추천해요.</p>

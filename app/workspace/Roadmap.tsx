@@ -8,8 +8,8 @@ export function Roadmap({ plan, onDetail }: { plan: Draft | SavedPlan; onDetail:
   const evaluation = "evaluation" in plan ? plan.evaluation : plan.savedEvaluation;
   const cards = plan.input.choices.map(choice => ({ choice, card: evaluation.cards.find(c => c.offeringId === choice.offeringId && c.stageId === choice.stageId) }));
   const events = (plan.input.events ?? []).filter(e => e.date >= evaluation.today);
-  // 담은 정책의 기한 · 접수 기간과 일정이 모두 한 화면에 들어오게 축을 정한다(가로 스크롤 없이).
-  const { start, end, ticks } = roadmapRange(evaluation.today, [...events.map(e => e.date), ...cards.flatMap(({ card }) => card ? [card.personalWindow?.end, card.official.end, ...card.applicationWindows.map(w => w.end)] : [])]);
+  // 마지막 상태 변화 뒤 1년까지만 축으로 쓴다(가로 스크롤 없이).
+  const { start, end, ticks } = roadmapRange(evaluation.today, events.map(e => e.date));
   cards.sort((a, b) => evaluation.stages.findIndex(st => st.stageId === a.choice.stageId) - evaluation.stages.findIndex(st => st.stageId === b.choice.stageId) || (a.card?.personalWindow?.end ?? "9999").localeCompare(b.card?.personalWindow?.end ?? "9999"));
   function bar(a: string | null, b: string | null) { const left = a ? axisPosition(a, start, end) : 0, right = b ? axisPosition(addDays(b, 1), start, end) : 1; return { left: `${left * 100}%`, width: `${Math.max(0, right - left) * 100}%`, display: right <= left ? "none" : undefined }; }
   if (!cards.length) return <div className={s.emptyState}>아직 담은 정책이 없어요.<br />정책 선택하기에서 나에게 맞는 정책을 담아 보세요.</div>;
