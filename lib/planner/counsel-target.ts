@@ -3,14 +3,20 @@
 // AI 는 답을 들고 판정하지 않는다. 답은 여기서 구조화된 값이 되고, 판정 코드가 다시 판정한다.
 import type { Profile } from "@/lib/judge/types";
 import { applyAnswer, type BenefitAnswer } from "./answers";
+import { INCOME_BANDS, INCOME_BAND_NAMES, MARITAL_VALUES, TENURE_BANDS, type IncomeBand, type Marital, type SmeAnswer } from "@/lib/judge/conditions";
 import { addDays, isDate } from "./dates";
-import type { BenefitQuestion, PlanEvent, PlannerInput } from "./types";
+import { CATEGORIES, type BenefitQuestion, type Category, type PlanEvent, type PlannerInput } from "./types";
 
 export type CounselTarget =
   | { kind: "benefit"; policyId: string; answer: "receiving" | "selected" | "ended_date" | "monthly_amount"; month?: string }
   | { kind: "event"; event: "training_completion" | "employment" | "business_registration" }
   | { kind: "status" }
-  | { kind: "recent_history" };
+  | { kind: "preferred_category" }
+  | { kind: "recent_history" }
+  | { kind: "income_band" }
+  | { kind: "marital" }
+  | { kind: "tenure_months" }
+  | { kind: "sme" };
 
 export const STATUS_VALUES: Record<string, { label: string; statuses: string[] }> = {
   training: { label: "교육·훈련 수강 중", statuses: ["in_training", "unemployed"] },
@@ -30,6 +36,11 @@ export function answerOptions(t: CounselTarget): { value: string; label: string 
   }
   if (t.kind === "event") return "date";
   if (t.kind === "status") return Object.entries(STATUS_VALUES).map(([value, v]) => ({ value, label: v.label }));
+  if (t.kind === "preferred_category") return [{ value: "all", label: "모든 분야" }, ...Object.entries(CATEGORIES).map(([value, category]) => ({ value, label: category.label }))];
+  if (t.kind === "income_band") return INCOME_BAND_NAMES.map(value => ({ value, label: value === "unknown" ? "잘 모르겠어요" : INCOME_BANDS[value].label }));
+  if (t.kind === "marital") return [{ value: "single", label: "미혼" }, { value: "married", label: "기혼" }, { value: "planned", label: "혼인 예정" }];
+  if (t.kind === "tenure_months") return [...TENURE_BANDS.map(b => ({ value: b.value, label: b.label })), { value: "unknown", label: "잘 모르겠어요" }];
+  if (t.kind === "sme") return [{ value: "yes", label: "중소기업이에요" }, { value: "no", label: "아니에요" }, { value: "unknown", label: "잘 모르겠어요" }];
   return [{ value: "yes", label: "있어요" }, { value: "no", label: "없어요" }];
 }
 
@@ -42,7 +53,13 @@ export function validateAnswer(t: CounselTarget, value: string, today: string): 
     return { ok: true };
   }
   if (t.kind === "status") return STATUS_VALUES[v] ? { ok: true } : { ok: false, message: "보기 중에서 골라 주세요." };
+  if (t.kind === "preferred_category") return v === "all" || Object.hasOwn(CATEGORIES, v) ? { ok: true } : { ok: false, message: "보기 중에서 골라 주세요." };
   if (t.kind === "recent_history") return v === "yes" || v === "no" ? { ok: true } : { ok: false, message: "있어요 · 없어요 중에서 골라 주세요." };
+  const choice = (values: readonly string[]) => values.includes(v) ? { ok: true as const } : { ok: false as const, message: "보기 중에서 골라 주세요." };
+  if (t.kind === "income_band") return choice(INCOME_BAND_NAMES);
+  if (t.kind === "marital") return choice(MARITAL_VALUES);
+  if (t.kind === "tenure_months") return choice([...TENURE_BANDS.map(b => b.value), "unknown"]);
+  if (t.kind === "sme") return choice(["yes", "no", "unknown"]);
   if (t.answer === "monthly_amount") {
     if (v === "no") return { ok: true };
     if (!/^\d+$/.test(v) || Number(v) > MAX_AMOUNT_WON) return { ok: false, message: `0원부터 ${MAX_AMOUNT_WON.toLocaleString()}원 사이의 정수로 알려 주세요.` };
@@ -72,6 +89,11 @@ export function applyTarget(profile: Profile, input: PlannerInput, t: CounselTar
     return { profile, input: { ...input, events } };
   }
   if (t.kind === "status") return { profile: { ...profile, currentStatus: [...STATUS_VALUES[v].statuses] as Profile["currentStatus"] }, input: { ...input, mutedKeys: input.mutedKeys.filter(k => k !== "status") } };
+  if (t.kind === "preferred_category") return { profile, input: { ...input, preferredCategory: v as Category | "all", mutedKeys: input.mutedKeys.filter(k => k !== "interest") } };
+  if (t.kind === "income_band") return { profile: { ...profile, incomeBand: v as IncomeBand }, input };
+  if (t.kind === "marital") return { profile: { ...profile, marital: v as Marital }, input };
+  if (t.kind === "tenure_months") return { profile: { ...profile, tenureMonths: v === "unknown" ? null : Number(v) }, input };
+  if (t.kind === "sme") return { profile: { ...profile, smeEmployee: v as SmeAnswer }, input };
   return { profile: { ...profile, recentHistory: v as "yes" | "no" }, input };
 }
 

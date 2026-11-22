@@ -48,6 +48,7 @@ export const BenefitsSchema = z.array(BenefitSchema).superRefine((rows, ctx) => 
 
 export type Restriction = {
   ruleId: string; sourceId: string; sourceName: string;
+  review?: { source: "agent" | "research"; verdict: ApprovedRule["verify_verdict"]; judgement: ApprovedRule["judgement"]; model: string | null; reason: string | null };
   effect: ApprovedRule["effect_type"]; restricted_item: string | null;
   state: "applies" | "not_applies" | "needs_info";
   reason: string; question: string | null;
@@ -151,7 +152,9 @@ export function blocksParticipation(r: Restriction) {
 let names: Map<string, string> | undefined;
 function restriction(r: ApprovedRule, decision: Decision): Restriction {
   let d = decision;
-  if (d.state === "applies") {
+  if (r.judgement === "needs_check") {
+    d = ask(r.needs_check_reason ?? "중복수혜 근거 검토가 충분하지 않아요", "이번 회차의 제한 조항과 적용 조건을 확인했나요?", { summary: "중복수혜 근거 검토 필요" });
+  } else if (d.state === "applies") {
     if (r.judgement !== "blocked" || !r.effect_type) {
       d = ask(r.needs_check_reason ?? "공고의 제한 조건 확인 필요", "이번 회차의 제한이 확인됐나요?", { summary: "공고의 제한 조건 확인 필요" });
     } else if (r.exception && !(r.condition_type === "receiving" &&
@@ -170,6 +173,7 @@ function restriction(r: ApprovedRule, decision: Decision): Restriction {
   names ??= new Map(loadSnapshot().policies.map(x => [x.id, x.name]));
   return {
     ...d, ruleId: r.rule_id, sourceId: r.source_policy_id, sourceName: names.get(r.source_policy_id) ?? r.source_policy_id,
+    review: { source: r.source, verdict: r.verify_verdict, judgement: r.judgement, model: r.model, reason: r.needs_check_reason },
     effect: r.effect_type, restricted_item: r.restricted_item, evidence: {
       field: r.evidence.source_field, quote: r.evidence.quote_text, url: r.research_basis?.url ?? r.evidence.source_url,
       checkedAt: r.evidence.checked_at,

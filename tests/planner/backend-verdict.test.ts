@@ -9,13 +9,31 @@ const ev = evaluateRequest({ ...PERSONA_A, events: [] }, structuredClone(input) 
 test("backend eligible policy is eligible with its verify badge", () => {
   const card = ev.cards.find(c => c.title === "청년 자격증 응시료 지원(인천)" && c.stageId === "current")!;
   expect(card.availability).toBe("eligible");
+  expect(card.eligibility).toBe("needs_check"); // 응시료 감면 조항이 있으나 수혜 사실과 연결된 검토 규칙이 없음
+  expect(card.eligibilityReason).toContain("중복수혜 문구");
   expect(card.verifyLabel).toBe("근거 확인 대기");
   expect(card.reasons.map(r => r.code)).not.toContain("UNREVIEWED");
 });
-test("code_met_unreviewed keeps the spec wording", () => {
-  const card = ev.cards.find(c => c.availability === "needs_check" && c.reasons.some(r => r.message === "일부 조건 충족 · 공고 확인 필요"));
-  expect(card).toBeDefined();
+test("code-met policies without a reviewed notice are eligible when nothing else is unknown", () => {
+  const cards = ev.cards.filter(c => c.reasons.some(r => r.code === "UNREVIEWED"));
+  expect(cards.length).toBeGreaterThan(0);
+  // 입력 정보로 확인할 조건을 모두 충족하고 다른 확인 사유가 없으면 신청 가능, 본문 확인은 안내로만 남긴다
+  const clean = cards.filter(c => c.reasons.every(r => r.code === "UNREVIEWED"));
+  expect(clean.length).toBeGreaterThan(0);
+  expect(clean.every(c => c.availability === "eligible")).toBe(true);
+  expect(clean[0].reasons[0].message).toBe("입력 정보 기준 조건 충족 · 공고 본문 확인 권장");
 });
-test("at least one rule recommendation exists for the persona", () => {
+test("overlap language in an official notice without a linked rule stays in needs-check", () => {
+  const card = ev.cards.find(c => c.title === "K-뉴딜 아카데미" && c.stageId === "ev-course");
+  expect(card).toBeDefined();
+  expect(card).toMatchObject({ overlapAssessment: "unresolved", eligibility: "needs_check" });
+  expect(card!.eligibilityReason).toContain("중복수혜");
+});
+test("rule recommendations use the same eligibility classification as the tabs", () => {
   expect(ev.recommendations.length).toBeGreaterThan(0);
+  expect(ev.recommendations.some(choice => !!choice.confirmation)).toBe(true);
+  for (const choice of ev.recommendations) {
+    const card = ev.cards.find(card => card.offeringId === choice.offeringId && card.stageId === choice.stageId);
+    expect(card?.eligibility).toBe(choice.confirmation ? "needs_check" : "eligible");
+  }
 });

@@ -1,20 +1,32 @@
 import { judgeConditions, pickRound, type Evidence } from "./rules";
 import { toKstDate } from "@/lib/date";
+import { incomeResult, marriageResult, medianIncomeLimit, neededTenureMonths, smeResult, tenureResult } from "./conditions";
 import { regionLabel } from "@/lib/data/regions";
 import type { Policy } from "@/lib/data/types";
 import type { StatusKey, VerifiedPolicy } from "@/lib/data/verified";
 import { judgeRegion } from "./region";
 import { REASON, type JudgeOpts, type PersonalValue, type Profile } from "./types";
 
-/** 생년월과 기준일로 가능한 만 나이 범위. 기준일이 생일 달이면 두 값 */
-export function ageRange(birthYm: string, refYmd: string): [number, number] {
+/** 생일이 있으면 해당 기준일의 만 나이를, 월 정보만 있으면 기존 범위를 반환한다. */
+export function ageRange(birthYm: string, refYmd: string, birthDate?: string): [number, number] {
   const [by, bm] = birthYm.split("-").map(Number);
-  const [ry, rm] = refYmd.split("-").map(Number);
+  const [ry, rm, rd] = refYmd.split("-").map(Number);
   const base = ry - by;
+  if (birthDate && /^\d{4}-\d{2}-\d{2}$/.test(birthDate) && birthDate.slice(0, 7) === birthYm) {
+    const [, birthMonth, birthDay] = birthDate.split("-").map(Number);
+    // 2월 29일 생일은 평년의 3월 1일에 나이가 바뀌는 기준으로 계산한다.
+    const anniversaryMonth = birthMonth === 2 && birthDay === 29 && !isLeapYear(ry) ? 3 : birthMonth;
+    const anniversaryDay = birthMonth === 2 && birthDay === 29 && !isLeapYear(ry) ? 1 : birthDay;
+    const passed = rm > anniversaryMonth || (rm === anniversaryMonth && rd >= anniversaryDay);
+    const age = base - (passed ? 0 : 1);
+    return [age, age];
+  }
   if (rm > bm) return [base, base];
   if (rm < bm) return [base - 1, base - 1];
   return [base - 1, base];
 }
+
+function isLeapYear(year: number) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
 
 /** 이벤트를 적용한 현재 상태. scheduled는 반영하지 않는다 */
 /** 그날까지 일어난(가정 포함) 사건만 반영한 상태. 예정(scheduled)은 반영하지 않는다 */
@@ -72,6 +84,20 @@ class Verdict {
   }
 }
 
+/** 답으로 가릴 수 있는 조건: 충족이면 사유를 지우고, 미충족이면 불가, 모름 · 미답이면 확인 필요로 둔다. */
+function judgeAnswered(verdict: Verdict, result: "met" | "unmet" | "unknown", unmet: string, unknown: string) {
+  if (result === "unmet") verdict.push("ineligible", unmet);
+  else if (result === "unknown") verdict.push("needs_check", unknown);
+}
+function judgeIncome(verdict: Verdict, profile: Profile, text: string) {
+  const limit = medianIncomeLimit(text);
+  judgeAnswered(verdict, incomeResult(profile.incomeBand, limit), `소득 조건(기준 중위소득 ${limit}% 이하) 밖`, REASON.income);
+}
+function judgeTenure(verdict: Verdict, profile: Profile, since: string, today: string) {
+  const needed = neededTenureMonths(since, today);
+  judgeAnswered(verdict, tenureResult(profile.tenureMonths, needed), `재직 기간 조건(${needed}개월 이상) 미달`, REASON.tenure);
+}
+
 function judgeAge(
   verdict: Verdict,
   min: number | null,
@@ -79,17 +105,18 @@ function judgeAge(
   birthYm: string,
   refYmd: string | null,
   today: string,
+  birthDate?: string,
 ) {
   if (min == null && max == null) return;
   const outside = (a: number) => (min != null && a < min) || (max != null && a > max);
   if (refYmd) {
-    const [lo, hi] = ageRange(birthYm, refYmd);
+    const [lo, hi] = ageRange(birthYm, refYmd, birthDate);
     if (outside(lo) && outside(hi)) verdict.push("ineligible", `나이 조건(${min ?? ""}~${max ?? ""}세) 밖`);
     else if (outside(lo) || outside(hi)) verdict.push("needs_check", REASON.ageBoundary);
     return;
   }
   // 기준일 미상: 오늘 기준 ±1년 안에서 경계에 걸리면 확인 필요
-  const [lo, hi] = ageRange(birthYm, today);
+  const [lo, hi] = ageRange(birthYm, today, birthDate);
   if (outside(lo - 1) && outside(hi + 1) && outside(lo) && outside(hi)) verdict.push("ineligible", `나이 조건(${min ?? ""}~${max ?? ""}세) 밖`);
   else if (outside(lo - 1) || outside(hi + 1) || outside(lo) || outside(hi)) verdict.push("needs_check", REASON.ageBoundary);
 }
@@ -117,6 +144,23 @@ export function baselineOpts(...profiles: Profile[]): JudgeOpts {
 const UNREPRESENTABLE = ["0013004", "0013006", "0013008", "0013009"];
 const EMPLOYMENT_KEYS: StatusKey[] = ["unemployed", "employed", "business_registered"];
 
+// 온통청년 학력 코드는 학업 단계 순서다(0049001 고졸 미만 … 0049008 대학원). 0049009 기타, 0049010 제한 없음.
+const SCHOOL_STEPS = ["0049001", "0049002", "0049003", "0049004", "0049005", "0049006", "0049007", "0049008"];
+/**
+ * 입력한 학력이 정책의 학력 코드에 맞는지. ok 충족, near 확인 필요, far 불충족.
+ * 졸업 예정과 졸업처럼 한 단계 차이는 공고마다 인정 범위가 달라 확인 필요로 두고, 두 단계 이상 떨어질 때만 불충족으로 본다.
+ * 화면의 "고등학교 졸업"(0049003)은 졸업 예정 · 졸업(0049003 · 0049004)을 모두 본다.
+ */
+export function schoolFit(codes: string[], mine: string): "ok" | "near" | "far" {
+  if (!codes.length || codes.includes("0049010")) return "ok";
+  const own = mine === "0049003" ? ["0049003", "0049004"] : [mine];
+  if (own.some(c => codes.includes(c))) return "ok";
+  const at = own.map(c => SCHOOL_STEPS.indexOf(c));
+  if (at.some(i => i < 0) || codes.includes("0049009")) return "near";
+  const gap = Math.min(...codes.map(c => SCHOOL_STEPS.indexOf(c)).filter(i => i >= 0).flatMap(i => at.map(j => Math.abs(i - j))));
+  return Number.isFinite(gap) && gap >= 2 ? "far" : "near";
+}
+
 export function judgePersonal(
   p: Policy,
   v: VerifiedPolicy | undefined,
@@ -141,7 +185,7 @@ export function judgePersonal(
     // 나이
     if (v.age) {
       const ref = v.age.referenceRule === "fixed_date" ? v.age.referenceDate : v.age.referenceRule === "apply_date" ? today : null;
-      judgeAge(verdict, v.age.min, v.age.max, profile.birthYm, ref, today);
+      judgeAge(verdict, v.age.min, v.age.max, profile.birthYm, ref, today, profile.birthDate);
     }
     // 회차별 규칙이 있으면 신청 시점의 회차로 조건마다 판정한다
     if (v.rounds?.length) {
@@ -163,8 +207,8 @@ export function judgePersonal(
         if (statusUnknown && employmentRule) verdict.push("needs_check", REASON.statusUnknown);
         else for (const [val, reason] of r.verdicts) verdict.push(val, reason);
       }
-      if (v.tenure && status.has("employed")) verdict.push("needs_check", REASON.tenure);
-      if (v.incomeQuote) verdict.push("needs_check", REASON.income);
+      if (v.tenure && status.has("employed")) judgeTenure(verdict, profile, v.tenure.since, today);
+      if (v.incomeQuote) judgeIncome(verdict, profile, v.incomeQuote.text);
       return verdict;
     }
     // 상태 조건
@@ -189,13 +233,13 @@ export function judgePersonal(
         verdict.push("needs_check", definitionReason(missing, excluded));
       }
     }
-    if (v.tenure && status.has("employed")) verdict.push("needs_check", REASON.tenure);
-    if (v.incomeQuote) verdict.push("needs_check", REASON.income);
+    if (v.tenure && status.has("employed")) judgeTenure(verdict, profile, v.tenure.since, today);
+    if (v.incomeQuote) judgeIncome(verdict, profile, v.incomeQuote.text);
     return verdict;
   }
 
   // 비검증 정책: 코드 조건
-  judgeAge(verdict, p.minAge, p.maxAge, profile.birthYm, null, today);
+  judgeAge(verdict, p.minAge, p.maxAge, profile.birthYm, null, today, profile.birthDate);
   const jobs = p.jobCodes.filter((c) => c !== "0013010");
   if (jobs.length && !p.jobCodes.includes("0013010")) {
     const mine = [...status].flatMap((s) => CODE_OF_STATUS[s] ?? []);
@@ -206,10 +250,12 @@ export function judgePersonal(
       verdict.push(causedByTransition || ambiguous || statusUnknown ? "needs_check" : "ineligible", REASON.codeStatus);
     }
   }
-  if (p.schoolCodes.length && !p.schoolCodes.includes("0049010") && !p.schoolCodes.includes(profile.school)) verdict.push("needs_check", REASON.school);
-  if (p.specialCodes.length && !p.specialCodes.includes("0014010")) verdict.push("needs_check", REASON.special);
-  if (p.marriageCode && p.marriageCode !== "0055003") verdict.push("needs_check", REASON.marriage);
-  if (p.incomeCode === "0043002" || p.incomeCode === "0043003") verdict.push("needs_check", REASON.income);
+  const school = schoolFit(p.schoolCodes, profile.school);
+  if (school === "far") verdict.push("ineligible", "학력 조건 불충족");
+  else if (school === "near") verdict.push("needs_check", REASON.school);
+  if (p.specialCodes.length && !p.specialCodes.includes("0014010")) judgeAnswered(verdict, smeResult(profile.smeEmployee, p.specialCodes), "특화 조건(중소기업) 불충족", REASON.special);
+  if (p.marriageCode && p.marriageCode !== "0055003") judgeAnswered(verdict, marriageResult(profile.marital, p.marriageCode), "혼인 조건 불충족", REASON.marriage);
+  if (p.incomeCode === "0043002" || p.incomeCode === "0043003") judgeIncome(verdict, profile, p.texts.income);
   if (p.texts.addQualification || p.texts.excluded || p.texts.income) verdict.push("needs_check", REASON.unreviewed);
   return verdict;
 }

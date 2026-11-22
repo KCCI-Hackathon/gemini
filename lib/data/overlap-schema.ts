@@ -74,8 +74,9 @@ export type Research = z.infer<typeof ResearchSchema>;
 export const ApprovedRuleSchema = RuleRowSchema.safeExtend({evidence: EvidenceRowSchema})
   .refine(r => r.evidence_id === r.evidence.evidence_id && r.target_policy_id === r.evidence.policy_id, "규칙과 근거 불일치");
 export type ApprovedRule = z.infer<typeof ApprovedRuleSchema>;
+export const NoticeSchema = z.strictObject({b: PolicyIdSchema, field: FieldSchema, quote});
 export const ApprovedSchema = z.strictObject({
   snapshotId: z.iso.date(), rules: z.array(ApprovedRuleSchema),
-  notices: z.array(z.strictObject({b: PolicyIdSchema, field: FieldSchema, quote})).optional(),
+  notices: z.array(NoticeSchema).optional(),
 });
 export type Approved = z.infer<typeof ApprovedSchema>;

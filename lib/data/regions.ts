@@ -46,3 +46,44 @@ export function regionOptions(): { code: string; label: string }[] {
     .map(([code, label]) => ({ code, label }))
     .sort((a, b) => a.label.localeCompare(b.label, "ko"));
 }
+
+export type RegionChoice = { code: string; label: string };
+export type RegionArea = { key: string; label: string; code: string | null; wholeCode: string | null; districts: RegionChoice[] };
+export type RegionSido = { code: string; name: string; areas: RegionArea[] };
+export type RegionSelection = { sidoCode: string; areaKey: string; districtCode: string | null };
+
+/**
+ * Hierarchy reconstructed from the stored labels without guessing missing locality names.
+ * Labels with a placeholder such as "(12170)" remain selectable and show the code.
+ */
+export function regionHierarchy(): RegionSido[] {
+  const groups = new Map<string, RegionSido>();
+  for (const { code, label } of regionOptions()) {
+    const [sidoName, ...parts] = label.split(" ");
+    const sidoCode = code.slice(0, 2);
+    let sido = groups.get(sidoCode);
+    if (!sido) { sido = { code: sidoCode, name: sidoName, areas: [] }; groups.set(sidoCode, sido); }
+    const unknown = parts.length === 1 && /^\(\d{5}\)$/.test(parts[0]);
+    const areaName = unknown ? `지역명 미확인 (${code})` : parts[0] ?? `지역명 미확인 (${code})`;
+    let area = sido.areas.find(item => item.key === areaName);
+    if (!area) { area = { key: areaName, label: areaName, code: null, wholeCode: null, districts: [] }; sido.areas.push(area); }
+    if (parts.length >= 2 && !unknown) {
+      const lastName = parts.slice(1).join(" ");
+      if (!area.districts.length && area.code) { area.wholeCode = area.code; area.code = null; }
+      area.districts.push({ code, label: /^구\(\d{5}\)$/.test(lastName) ? `구 이름 미확인 (${code})` : lastName });
+    } else if (area.districts.length) {
+      area.wholeCode = code;
+    } else {
+      area.code = code;
+    }
+  }
+  return [...groups.values()].map(sido => ({ ...sido, areas: sido.areas.sort((a, b) => a.label.localeCompare(b.label, "ko")) }));
+}
+
+export function regionSelectionForCode(code: string): RegionSelection | null {
+  for (const sido of regionHierarchy()) for (const area of sido.areas) {
+    if (area.code === code) return { sidoCode: sido.code, areaKey: area.key, districtCode: null };
+    if (area.wholeCode === code || area.districts.some(d => d.code === code)) return { sidoCode: sido.code, areaKey: area.key, districtCode: code };
+  }
+  return null;
+}

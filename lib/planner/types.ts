@@ -8,23 +8,26 @@ export const CATEGORIES: Record<Category, { label: string; color: string }> = {
 export const EVENT_NAMES = { training_completion: "수료", employment: "취업", business_registration: "창업", relocation: "이사" };
 export type PlanEvent = { id: string; type: keyof typeof EVENT_NAMES; date: string; status: "scheduled" | "completed"; sigungu?: string };
 export type Choice = { offeringId: string; stageId: string };
+export type RecommendationChoice = Choice & { confirmation?: string };
+export type RecommendationPick = RecommendationChoice & { why: string[]; filled?: boolean };
 export type AiRecommendation = {
   source: "ai" | "rule";
   summary: string;
-  picks: (Choice & { why: string[] })[];
+  picks: RecommendationPick[];
   notice: string | null;
 };
 export type PlannerInput = { revision: number; events?: PlanEvent[]; choices: Choice[]; mutedKeys: string[]; preferredCategory: Category | "all"; demoId?: "pathfinder-demo-2026" };
 export type Stage = { stageId: string; label: string; start: string; endExclusive: string | null; eventIds: string[] };
 export type Period = { start: string; end: string | null };
 export type OfficialPeriod = { kind: "fixed" | "rolling" | "budget" | "unknown"; start: string | null; end: string | null; closeAt: string | null };
-export type Evidence = { evidenceId: string; title: string; quote: string; url: string | null; reviewedAt: string; reviewed: boolean };
+export type Evidence = { evidenceId: string; title: string; quote: string; url: string | null; reviewedAt: string; reviewed: boolean; overlapReview?: { source: "agent" | "research"; verdict: "supported" | "contradicted" | "insufficient" | null; judgement: "blocked" | "needs_check"; model: string | null; reason: string | null } };
 export type Rule = { key: "trained" | "unemployed" | "employed" | "in_training" | "business_registered"; kind: "requires" | "excludes"; evidenceId: string; reviewed: boolean };
 export type Restriction = { otherId: string; reviewed: boolean; action: "application" | "benefit"; direction: "both" | "outgoing"; period: Period | null; otherPeriod: Period | null; evidenceId: string };
 export type Offering = {
-  policyId: string; offeringId: string; roundLabel: string; title: string; category: Category;
+  policyId: string; offeringId: string; roundLabel: string; roundId?: string | null; title: string; category: Category;
   summary: string; support: string; org: string; official: OfficialPeriod; rules: Rule[]; evidence: Evidence[];
   verifyLabel?: string | null; regions?: string[]; restrictions: Restriction[]; reviewed: boolean; dataVersion: string;
+  overlapAssessment?: "no_restriction_found" | "reviewed_rules" | "unresolved";
 };
 export type Reason = { code: string; message: string; evidenceId?: string; eventId?: string; relatedOfferingId?: string };
 export type Card = Offering & {
@@ -32,6 +35,8 @@ export type Card = Offering & {
   stageId: string; personalWindow: Period | null; stageWindow: Period | null; applicationWindows: Period[];
   deadlineKind: "official" | "personal_estimate" | "rolling" | "unknown" | "closed";
   daysLeft: number | null; availability: "eligible" | "needs_check" | "blocked";
+  eligibility: "blocked" | "needs_check" | "eligible";
+  eligibilityReason: string;
   reasons: Reason[]; selectedStageId: string | null; otherStageIds: string[];
   conflicts: string[]; canReplace: boolean;
 };
@@ -43,6 +48,6 @@ export type BenefitQuestion = {
   /** monthly_amount 질문이 묻는 지급 월(YYYY-MM). 답을 이 달로 저장해야 같은 질문이 닫힌다(J-1). */
   month?: string;
 };
-export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: Choice[] };
+export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: RecommendationChoice[] };
 export type Draft = { draftId: string; profileSnapshot: Profile; input: PlannerInput; evaluation: Evaluation };
 export type SavedPlan = { planId: string; schemaVersion: 2; name: string; createdAt: string; source: "manual" | "recommendation" | "example"; recommendationSource?: AiRecommendation["source"]; profileSnapshot: Profile; input: PlannerInput; savedEvaluation: Evaluation };

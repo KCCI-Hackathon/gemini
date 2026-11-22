@@ -76,7 +76,7 @@ export function attachPicks(stations: Stations, evaluation: Evaluation): AiRecom
       const month = stationMonth(station, evaluation);
       const sameMonth = new Set(stages.filter(stage => stage.start.slice(0, 7) === month).map(stage => stage.stageId));
       const matching = ordered.filter(card => sameMonth.has(card.stageId));
-      const card = (matching.length ? matching : ordered).find(card => card.availability !== "blocked");
+      const card = (matching.length ? matching : ordered).find(card => card.eligibility === "eligible");
       if (!card) {
         notice = "AI 추천 일부가 지금 일정과 맞지 않아요";
         continue;

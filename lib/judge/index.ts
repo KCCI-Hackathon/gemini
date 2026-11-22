@@ -75,7 +75,8 @@ function legacyRestriction(p: Policy, v: VerifiedPolicy | undefined, profile: Pr
 }
 
 function restrictionAxis(p: Policy, v: VerifiedPolicy | undefined, profile: Profile, now: Date): Axes["restriction"] {
-  const rules = loadOverlap().get(p.id);
+  const roundId = v?.rounds?.length ? pickRound(v.rounds, toKstDate(now)).round?.id ?? null : null;
+  const rules = (loadOverlap().get(p.id) ?? []).filter(rule => rule.target_round_id === null || rule.target_round_id === roundId);
   const notices = loadOverlapNotices(p.id);
   if (rules?.length) {
     const facts = profile.benefits ?? [];

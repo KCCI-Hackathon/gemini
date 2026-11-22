@@ -13,7 +13,9 @@ export type ProfileEvent = {
 };
 
 export type Profile = {
-  birthYm: string; // YYYY-MM
+  birthYm: string; // YYYY-MM (legacy and compatible month)
+  /** Exact date for new profiles. Missing only on legacy/demo month-only profiles. */
+  birthDate?: string; // YYYY-MM-DD
   sigungu: string; // 시군구 코드 5자리
   school: string; // schoolCd (예: 0049007 대학 졸업)
   currentStatus: StatusKey[];
@@ -26,6 +28,12 @@ export type Profile = {
   recentHistory?: "yes" | "no";
   /** 응시일 기준 정책을 위한 응시(예정)일. 없으면 모름 */
   examDate?: string;
+  /** 상담 질문의 답. 없으면 아직 묻지 않음 · "unknown" 은 모른다고 답함(둘 다 판정은 '확인 필요'). 소득은 금액이 아니라 구간만 */
+  incomeBand?: "p60" | "p100" | "p150" | "over" | "unknown";
+  marital?: "single" | "married" | "planned";
+  /** 지금 회사 재직 기간 구간의 시작 개월. null 은 모름 */
+  tenureMonths?: number | null;
+  smeEmployee?: "yes" | "no" | "unknown";
   /** 화면 표시용. 서버는 이 값을 믿지 않는다 */
   source: "demo_persona" | "user";
 };
