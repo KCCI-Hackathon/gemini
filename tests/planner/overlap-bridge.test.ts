@@ -19,9 +19,10 @@ test("I1 receiving national program blocks challenge support", () => {
   expect(c.evidence.find(e => e.evidenceId === c.reasons[0].evidenceId)?.quote).toBeTruthy();
 });
 test("I2 partial restriction does not lower the verdict", () => {
-  const before = card(run([{ policyId: RENT_SRC, status: "eligible_unpaid" }]), RENT_YEONSU, "current");
-  const after = card(run([{ policyId: RENT_SRC, status: "receiving" }]), RENT_YEONSU, "current");
+  const before = card(run([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 0 } }]), RENT_YEONSU, "current");
+  const after = card(run([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 200000 } }]), RENT_YEONSU, "current");
   expect(after.reasons.some(r => r.code === "PARTIAL_RESTRICTION" && r.message.includes("청년월세"))).toBe(true);
+  expect(before.reasons.some(r => r.code === "PARTIAL_RESTRICTION")).toBe(false);
   expect(after.availability).toBe(before.availability);
 });
 test("I3 six months after last payment releases the block", () => {
@@ -36,9 +37,7 @@ test("monthly payment distinguishes confirmed rent restrictions from missing fac
     code: "PARTIAL_RESTRICTION", message: expect.stringContaining("청년월세 지급액 미지급"),
   }));
   const unknown = run([{ policyId: RENT_SRC, status: "receiving" }]);
-  expect(card(unknown, RENT_YEONSU, "current").reasons).toContainEqual(expect.objectContaining({
-    code: "PARTIAL_RESTRICTION", message: "해당 월 청년월세 지급액 · 제한 여부 확인 필요",
-  }));
+  expect(card(unknown, RENT_YEONSU, "current").reasons.some(r => r.code === "PARTIAL_RESTRICTION")).toBe(false);
   expect(card(unknown, RENT_YEONSU, "current").reasons).toContainEqual(expect.objectContaining({
     code: "RESTRICTION_QUESTION", message: expect.stringContaining("지급액 확인 필요"),
   }));

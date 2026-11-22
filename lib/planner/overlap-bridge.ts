@@ -47,9 +47,6 @@ export function restrictionVerdict(list: Restriction[], targetPolicyId: string, 
           ruleId: r.ruleId, question: r.question, answerKind });
       }
       reasons.push({ code: "RESTRICTION_QUESTION", message, evidenceId });
-      if (kind === "current" && r.restricted_item && r.reason === "해당 월 지급액 확인 필요") {
-        reasons.push({ code: "PARTIAL_RESTRICTION", message: `${r.restricted_item} · 제한 여부 확인 필요`, evidenceId });
-      }
     }
   }
   return { availability, reasons: [...blocks, ...reasons], evidence, questions };
