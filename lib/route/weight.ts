@@ -4,6 +4,7 @@
 import { toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
 import type { JudgedPolicy, Profile } from "@/lib/judge";
+import { pickRound } from "@/lib/judge/rules";
 
 export type WeightReason = { label: string; points: number };
 export type Weight = { score: number; reasons: WeightReason[] };
@@ -34,9 +35,13 @@ function daysBetween(fromYmd: string, toYmd: string): number {
 }
 
 /** 모집 중인 정책의 신청 종료일(검증 정책은 공고 기준) */
-export function deadlineOf(r: JudgedPolicy): string | null {
+export function deadlineOf(r: JudgedPolicy, now: Date): string | null {
   if (r.axes.recruitment !== "open") return null;
   const v = loadVerified().get(r.policy.id);
+  if (v?.rounds?.length) {
+    const pick = pickRound(v.rounds, toKstDate(now));
+    if (pick.state !== "outside" && pick.round) return pick.round.notice.applyEnd;
+  }
   return v ? v.apply.end : r.policy.applyEnd;
 }
 
@@ -48,7 +53,7 @@ export function weighPolicy(r: JudgedPolicy, ctx: { interest: Profile["interest"
   // 본문을 아무도 확인하지 않았고 확인할 것이 남은 정책: 자격 근거가 약하므로 마감·관심 가점을 줄인다
   const weak = !r.verified && r.axes.personal.value === "needs_check";
   const scale = (n: number) => (weak ? Math.floor(n / 2) : n);
-  const end = deadlineOf(r);
+  const end = deadlineOf(r, ctx.now);
   if (r.axes.recruitment === "open") {
     const days = end ? daysBetween(toKstDate(ctx.now), end) : null;
     const label = days === 0 ? "오늘 마감" : `마감 ${days}일 전`;

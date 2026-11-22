@@ -1,18 +1,22 @@
 // /api/plan 계획 에이전트(통합 설계 6장).
 // - 가상 인물은 항상, 실제 사용자는 PLAN_AI_FOR_USERS=true이고 동의했을 때만 AI를 쓴다(기본 꺼짐).
 // - AI에는 summarizeForAI 요약과 코드가 만든 길(정거장·정책)만 간다. 실제 사용자의 자유 입력은 받지 않는다.
-// - 판정은 하지 않는다. 다음 질문 고르기, 기타 글 해석(가상 인물), 계획 요약만 한다.
+// - 판정은 하지 않는다. 다음 질문 고르기, 서버에 등록된 시연 문구 해석, 계획 요약만 한다.
 // - 서버에 상태를 남기지 않는다. 같은 요약·같은 모드면 같은 날 결과를 다시 쓴다(기타 글이 있으면 다시 쓰지 않음).
 import type Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { aiConfigured } from "@/lib/ai/client";
+import { DeadlineExceeded, withDeadline, type Deadline } from "@/lib/ai/deadline";
 import { monthsBetween, toKstDate } from "@/lib/date";
-import { loadVerified } from "@/lib/data/verified";
 import { guardResponse } from "@/lib/agent/guard";
-import { handleJudge } from "@/lib/judge/handler";
-import { BASIS_LABEL } from "@/lib/judge/rules";
+import { handleJudge, JudgeRequestSchema } from "@/lib/judge/handler";
+import { findRegisteredPersona } from "@/lib/judge/personas";
 import { takeQuota } from "@/lib/limits";
-import type { Roadmap } from "@/lib/route/roadmap";
+import { policyNotice, type Roadmap } from "@/lib/route/roadmap";
+import { loadVerified } from "@/lib/data/verified";
+import { stateOf, type CellState } from "@/lib/route/timeline";
+import { REASON, type JudgedPolicy } from "@/lib/judge";
 import { VERIFY_MODEL, type AnthropicLike } from "@/lib/verify/run";
 import { summarizeForAI, type PlanSession } from "./summary";
 
@@ -38,8 +42,8 @@ const TOOLS = [
   { name: "rank_open_questions", description: "답하면 판정이 바뀔 수 있는 질문 후보(코드가 고름)", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   {
     name: "get_policy_evidence",
-    description: "정책의 승인된 조건·근거 문장·기준일 종류",
-    input_schema: { type: "object", properties: { policy_id: { type: "string" } }, required: ["policy_id"], additionalProperties: false },
+    description: "get_route의 정거장에서 사람이 확인한 정책 조건·근거 문장·기준일 종류. station을 생략하면 지금을 기준으로 합니다.",
+    input_schema: { type: "object", properties: { policy_id: { type: "string" }, station: { type: "string" } }, required: ["policy_id"], additionalProperties: false },
   },
   {
     name: "ask_user",
@@ -82,13 +86,32 @@ const RequestSchema = z.object({
   mode: z.enum(["first", "answer", "replan"]),
   persona: z.boolean(),
   consent: z.boolean().optional(),
-  session: z.object({ profile: z.any(), plan: z.any().default({}), answers: z.record(z.string(), z.string()).default({}) }),
+  session: JudgeRequestSchema.pick({ profile: true, plan: true, answers: true, benefits: true }),
   otherText: z.string().max(200).optional(),
+});
+
+const DEMO_ANSWERS = ["반년쯤 뒤에 취업할래요"];
+
+function resolveDemoProfile({ profile, plan }: z.infer<typeof RequestSchema>["session"]) {
+  const { examDate, interest } = profile;
+  const plannedInterest = plan?.businessAfterMonths != null && plan.employAfterMonths == null ? "startup" : "job";
+  if (interest !== plannedInterest) return;
+  const registered = findRegisteredPersona(profile);
+  if (registered) return { ...registered, interest: plannedInterest, ...(examDate ? { examDate } : {}) } as const;
+}
+
+const FinishPlanSchema = z.object({
+  summary: z.string().trim().min(1),
+  stations: z.array(z.object({
+    label: z.string().min(1),
+    items: z.array(z.object({ policy_id: z.string().min(1), why: z.string().trim().min(1) })).max(3),
+  })),
 });
 
 type Station = { label: string; items: { policyId: string; name: string; why: string }[] };
 export type PlanBody = {
   fallback?: boolean;
+  timedOut?: boolean;
   disabled?: boolean;
   question?: { key: string; text: string; options: string[] };
   parsed?: { key: string; value: string; label: string; needsConfirm: true };
@@ -106,14 +129,44 @@ export function resetPlanState() {
 
 const GOAL_STATION: Record<string, string> = { training_completion: "수료 후", employment: "취업 후", business_registration: "창업 후", relocation: "이사 후" };
 
-/** AI에 줄 길: 날짜 대신 "N개월 뒤", 정책은 코드가 판정한 줄만 */
+const STATION_STATUS: Record<CellState, string> = {
+  ok: "조건 충족", check: "확인 필요", wait: "기간 조건 남음", closed: "모집 기간 아님", no: "조건상 비해당",
+};
+type StationResults = Map<string, ReadonlyMap<string, JudgedPolicy>>;
+
+function trainingAction(policy: JudgedPolicy | undefined, station: "now" | "completion" | "other") {
+  const personal = policy?.axes.personal;
+  if (personal?.reasons.includes(REASON.nextRound)) return;
+  const rule = personal?.evidence?.find((e) =>
+    e.key === "in_training" && e.kind === "excludes" && e.basis === "resolvable_before_start");
+  if (station === "now" && rule?.outcome === "check") {
+    return "수료 예정일과 지원할 과정 시작일을 비교해, 시작 전에 교육이 끝나는지 확인하세요.";
+  }
+  if (station === "completion" && rule?.outcome === "met") {
+    const proof = rule.quote.text.includes("증빙") ? "과정 시작일과 수료 증빙을 확인하세요." : "과정 시작일을 확인하세요.";
+    return `예정대로 수료하면 훈련 수강 제한이 해소될 수 있어요. ${proof}`;
+  }
+}
+
 /** AI에 줄 길: 정거장마다 그 시점에 볼 정책(지금은 열려 있는 것, 이후는 새로 열리는 것·판정이 바뀌는 것). 날짜 대신 "N개월 뒤" */
-function routeForAI(r: Roadmap) {
+function routeForAI(r: Roadmap, stationResults: StationResults) {
   const today = r.months[0];
   const byId = new Map(r.rows.map((x) => [x.policyId, x]));
-  const brief = (id: string) => {
+  const verified = loadVerified();
+  const brief = (id: string, date: string, station: "now" | "completion" | "other") => {
     const x = byId.get(id)!;
-    return { policy_id: x.policyId, name: x.name, status: x.statusLabel, reasons: x.reasons.slice(0, 2), verify: x.verifyLabel };
+    const judged = stationResults.get(date)?.get(id);
+    let status = "해당 시점 후보에 없음";
+    if (judged) {
+      const state = stateOf(judged);
+      status = STATION_STATUS[state];
+      if (state === "ok" && !x.verified) status = "코드 조건 충족(본문 미검토)";
+      if (state === "closed" && judged.axes.recruitment === "unknown") status = "모집 기간 확인 필요";
+    }
+    const restrictions = judged?.axes.restriction.current_restrictions ?? [];
+    const reasons = judged?.axes.personal.reasons.filter(reason => !restrictions.some(r => r.reason === reason)) ?? [];
+    return { policy_id: id, name: x.name, status, reasons: reasons.slice(0, 2),
+      next_action: trainingAction(judged, station), verify: judged ? policyNotice(judged.policy, verified.get(id), date).verifyLabel : x.verifyLabel };
   };
   const nowIds = r.rows
     .filter((x) => x.firstAvailable === today && x.status !== "none")
@@ -122,40 +175,56 @@ function routeForAI(r: Roadmap) {
     .map((x) => x.policyId);
   return {
     stations: [
-      { label: "지금", policies: nowIds.map(brief) },
+      { label: "지금", policies: nowIds.map((id) => brief(id, today, "now")) },
       ...r.goals.map((g) => ({
         label: `${GOAL_STATION[g.type]}(${Math.max(0, monthsBetween(today, g.date))}개월 뒤)`,
-        new_policies: g.opened.slice(0, 6).map(brief),
-        changed_policies: g.changed.slice(0, 6).map(brief),
+        new_policies: g.opened.slice(0, 6).map((id) => brief(id, g.date, g.type === "training_completion" ? "completion" : "other")),
+        changed_policies: g.changed.slice(0, 6).map((id) => brief(id, g.date, g.type === "training_completion" ? "completion" : "other")),
       })),
     ],
   };
 }
 
 export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
+  const startedAt = Date.now();
   const parsed = RequestSchema.safeParse(raw);
   if (!parsed.success) return { status: 400, body: { error: "요청 형식이 잘못됐습니다." } };
   const req = parsed.data;
+  let otherText: string | undefined;
   if (!req.persona) {
     if (ctx.env.PLAN_AI_FOR_USERS !== "true" || !req.consent) return { status: 403, body: { disabled: true, error: "실제 사용자 정보로는 AI 계획 정리를 쓰지 않습니다." } };
     if (req.otherText) return { status: 400, body: { error: "실제 사용자의 자유 입력은 외부 AI로 보내지 않습니다." } };
+  } else if (req.otherText) {
+    otherText = req.mode === "answer" ? DEMO_ANSWERS.find((text) => text === req.otherText) : undefined;
+    if (!otherText) return { status: 400, body: { error: "등록된 시연 문구를 선택해 주세요." } };
   }
+  const profile = req.persona ? resolveDemoProfile(req.session) : req.session.profile;
+  if (!profile) return { status: 400, body: { error: "등록된 시연 인물 정보와 일치하지 않습니다." } };
   if (!aiConfigured(ctx.env)) return { status: 503, body: { error: "AI가 꺼져 있습니다." } };
 
-  const session = req.session as PlanSession;
-  const judged = handleJudge({ profile: session.profile, plan: session.plan, answers: session.answers }, ctx.now);
+  const session: PlanSession = { profile, plan: req.session.plan ?? {}, answers: req.session.answers ?? {}, benefits: req.session.benefits };
+  const stationResults: StationResults = new Map();
+  const judged = handleJudge(session, ctx.now,
+    (date, policies) => stationResults.set(date, policies));
   if (!("roadmap" in judged.body)) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
   const roadmap = judged.body.roadmap;
   const questions = judged.body.questions;
 
   const summary = summarizeForAI(session, ctx.now);
-  const key = `${toKstDate(ctx.now)}:${req.mode}:${JSON.stringify(summary)}`;
-  if (!req.otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
+  const route = routeForAI(roadmap, stationResults);
+  const fingerprint = createHash("sha256").update(JSON.stringify({ summary, route, questions, items: judged.body.items })).digest("hex");
+  const key = `${toKstDate(ctx.now)}:${req.mode}:${judged.body.dataVersion}:${fingerprint}`;
+  if (!otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
   if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
-  const out = await runPlan(req.mode, summary, routeForAI(roadmap), roadmap, questions, req.persona ? req.otherText : undefined, ctx);
-  if (!req.otherText && !out.fallback) cache.set(key, out);
-  return { status: 200, body: out };
+  try {
+    const out = await withDeadline(55_000, (deadline) => runPlan(req.mode, summary, route, roadmap, stationResults, questions, otherText, ctx, deadline), startedAt);
+    if (!otherText && !out.fallback) cache.set(key, out);
+    return { status: 200, body: out };
+  } catch (error) {
+    if (!(error instanceof DeadlineExceeded)) throw error;
+    return { status: 200, body: { fallback: true, timedOut: true } };
+  }
 }
 
 async function runPlan(
@@ -163,13 +232,17 @@ async function runPlan(
   summary: ReturnType<typeof summarizeForAI>,
   route: ReturnType<typeof routeForAI>,
   roadmap: Roadmap,
+  stationResults: StationResults,
   questions: { key: string; question: string; options: string[] }[],
   otherText: string | undefined,
   ctx: Ctx,
+  deadline: Deadline,
 ): Promise<PlanBody> {
-  const known = new Map(roadmap.rows.map((r) => [r.policyId, r.name]));
-  const stationNames = new Set(route.stations.map((st) => st.label));
-  const verified = loadVerified();
+  const known = new Set(roadmap.rows.map((r) => r.policyId));
+  const stationCandidates = new Map(route.stations.map((station) => {
+    const candidates = "policies" in station ? station.policies : [...station.new_policies, ...station.changed_policies];
+    return [station.label, new Map(candidates.map((p) => [p.policy_id, p]))];
+  }));
   const log: { tool: string; summary: string }[] = [];
   const task = mode === "answer" ? (otherText ? `사용자가 직접 쓴 답을 해석하세요: """${otherText}"""` : "다음에 물을 질문을 고르세요.") : "정거장별 계획을 정리하세요.";
   const messages: Record<string, unknown>[] = [{ role: "user", content: `사용자 요약: ${JSON.stringify(summary)}\n${task}` }];
@@ -188,8 +261,10 @@ async function runPlan(
         system: SYSTEM,
         tools: TOOLS,
         messages,
-      });
+      }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
+      deadline.remainingMs();
     } catch {
+      deadline.signal.throwIfAborted();
       return { fallback: true, log };
     }
     if (res.stop_reason === "refusal") break;
@@ -198,7 +273,9 @@ async function runPlan(
     if (!uses.length) break;
     const results: Record<string, unknown>[] = [];
     for (const u of uses) {
-      const input = u.input as Record<string, unknown>;
+      const parsedInput = z.record(z.string(), z.unknown()).safeParse(u.input);
+      if (!parsedInput.success) return { fallback: true, log };
+      const input = parsedInput.data;
       const reply = (content: string, isError = false) => results.push({ type: "tool_result", tool_use_id: u.id, content, ...(isError ? { is_error: true } : {}) });
       if (u.name === "get_route") {
         log.push({ tool: u.name, summary: `정거장 ${route.stations.length}개` });
@@ -207,24 +284,26 @@ async function runPlan(
         log.push({ tool: u.name, summary: `질문 후보 ${questions.length}개` });
         reply(JSON.stringify(questions.map((q) => ({ key: q.key, question: q.question }))));
       } else if (u.name === "get_policy_evidence") {
-        const v = verified.get(String(input.policy_id));
-        const round = v?.rounds?.find((r) => r.status === "approved");
-        log.push({ tool: u.name, summary: v?.name ?? "근거 없음" });
-        reply(round ? JSON.stringify({ name: v!.name, round: round.notice.title, conditions: round.conditions.map((c) => ({ key: c.key, kind: c.kind, basis: BASIS_LABEL[c.basis], quote: c.quote.text })) }) : "승인된 근거가 없는 정책입니다(API 값만).", !round);
+        const stationIndex = route.stations.findIndex(({ label }) => label === (input.station ?? "지금"));
+        const date = stationIndex === 0 ? roadmap.months[0] : roadmap.goals[stationIndex - 1]?.date;
+        const judged = date && typeof input.policy_id === "string" ? stationResults.get(date)?.get(input.policy_id) : undefined;
+        const personal = judged?.axes.personal;
+        const evidence = personal?.reasons.includes(REASON.nextRound) ? [] : personal?.evidence?.filter((condition) => condition.confirmed) ?? [];
+        log.push({ tool: u.name, summary: judged?.policy.name ?? "근거 없음" });
+        reply(evidence.length ? JSON.stringify({ name: judged?.policy.name, round: evidence[0].round, conditions: evidence.map((c) => ({ key: c.key, kind: c.kind, basis: c.basisLabel, quote: c.quote.text })) }) : "이 정거장에서 사람이 확인한 조건별 근거가 없습니다.", !evidence.length);
       } else if (u.name === "ask_user") {
         const q = questions.find((x) => x.key === input.key);
-        const text = String(input.text ?? "");
-        if (!q || !guardResponse(text, new Set()).ok) {
+        const text = input.text;
+        if (!q || typeof text !== "string" || !text.trim() || !guardResponse(text, new Set()).ok) {
           reply("질문 후보에 없는 key이거나 쓸 수 없는 표현입니다.", true);
           continue;
         }
         log.push({ tool: u.name, summary: q.key });
         return { fallback: false, question: { key: q.key, text, options: q.options }, log };
       } else if (u.name === "parse_other_answer") {
-        const key = String(input.key ?? "");
-        const value = String(input.value ?? "");
-        const rule = PARSE[key];
-        if (!otherText || !rule || !rule.values.test(value)) {
+        const { key, value } = input;
+        const rule = typeof key === "string" && Object.hasOwn(PARSE, key) ? PARSE[key] : undefined;
+        if (!otherText || !rule || typeof key !== "string" || typeof value !== "string" || !rule.values.test(value)) {
           reply("정해진 질문 key와 형식의 값만 받을 수 있습니다.", true);
           continue;
         }
@@ -235,17 +314,30 @@ async function runPlan(
         return { fallback: false, log };
       } else if (u.name === "finish_plan") {
         log.push({ tool: u.name, summary: "계획 정리" });
-        const rawStations = Array.isArray(input.stations) ? (input.stations as { label: string; items: { policy_id: string; why: string }[] }[]) : [];
-        const text = [String(input.summary ?? ""), ...rawStations.flatMap((st) => [st.label, ...(st.items ?? []).flatMap((i) => [i.policy_id, i.why])])].join("\n");
-        const unknownPolicy = rawStations.some((st) => (st.items ?? []).some((i) => !known.has(i.policy_id)));
-        const unknownStation = rawStations.some((st) => !stationNames.has(st.label) && !st.label.startsWith("지금") && ![...stationNames].some((n) => n.startsWith(st.label)));
-        // 모르는 정책·정거장, 금지 표현이 하나라도 있으면 계획 전체를 버린다(6.3)
-        if (unknownPolicy || unknownStation || !guardResponse(text, new Set(known.keys())).ok) return { fallback: true, log };
+        const finish = FinishPlanSchema.safeParse(input);
+        if (!finish.success || !guardResponse(finish.data.summary, known).ok) return { fallback: true, log };
+
+        // 모델은 정책을 고르고, 설명은 해당 정거장에서 계산한 판정과 근거로 조립한다.
+        const stations: Station[] = [];
+        for (const { label, items } of finish.data.stations) {
+          const candidates = stationCandidates.get(label);
+          if (!candidates || stations.some((station) => station.label === label)) return { fallback: true, log };
+          const station: Station = { label, items: [] };
+          for (const { policy_id, why } of items) {
+            const candidate = candidates.get(policy_id);
+            if (!candidate || station.items.some((item) => item.policyId === policy_id) || !guardResponse(why, known).ok) return { fallback: true, log };
+            const details = [candidate.status, ...candidate.reasons.filter((reason) => reason !== candidate.status)];
+            station.items.push({ policyId: policy_id, name: candidate.name, why: candidate.next_action ?? details.join(" · ") });
+          }
+          stations.push(station);
+        }
         return {
           fallback: false,
           plan: {
-            summary: String(input.summary ?? ""),
-            stations: rawStations.map((st) => ({ label: st.label, items: (st.items ?? []).map((i) => ({ policyId: i.policy_id, name: known.get(i.policy_id)!, why: i.why })) })),
+            summary: stations.some((station) => station.items.length)
+              ? "정거장별로 먼저 확인할 정책을 골랐어요."
+              : "먼저 확인할 정책을 고르지 않았어요. 로드맵에서 시점별 정책을 확인해 보세요.",
+            stations,
           },
           log,
         };

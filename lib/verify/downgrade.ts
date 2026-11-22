@@ -1,7 +1,7 @@
 // 항목별 대조 결과를 판정에 반영하는 규칙(통합 설계 5.3-4, 5.4).
 // - 낮추기만 한다. 공고 값으로 판정을 바꾸거나 올리지 않는다.
 // - API 값을 실제로 판정에 쓴 축만 낮춘다. 그 회차에 승인된 규칙이 있는 정책은 공고 문장으로 판정했으므로 낮추지 않고 참고로만 남긴다.
-// - 대조한 공고가 승인된 회차와 다르면(새 회차) "다름"이 아니라 "올해 공고 기준 확인 중"으로 표시한다.
+// - 새 회차는 해당 회차의 공고 원문과 확인 상태를 전달한다.
 import type { Policy } from "@/lib/data/types";
 import type { VerifiedPolicy } from "@/lib/data/verified";
 import { pickRound } from "@/lib/judge/rules";
@@ -38,11 +38,17 @@ export function fieldCheckEffect(result: VerifyResult, _policy: Policy, v: Verif
   const differs = (result.fieldChecks ?? []).filter((f) => f.status === "differs");
   const pick = v?.rounds?.length ? pickRound(v.rounds, applyDate) : null;
   const approved = pick?.state === "approved" ? pick.round : null;
+  const notice = result.notice;
+  const matchesNotice = (round: NonNullable<typeof approved>) => notice?.year === round.notice.year && notice.round === round.notice.round;
+  const savedRound = notice && v?.rounds?.find(matchesNotice);
 
-  if (approved && result.notice && result.notice.year !== approved.notice.year) {
-    out.newRound = { text: "올해 공고 기준 확인 중", url: result.noticeUrl };
+  // 이미 알고 있는 다른 회차의 대조는 현재 회차에 영향을 주지 않는다.
+  if (savedRound && savedRound.id !== pick?.round?.id) return out;
+  if (approved && notice && !matchesNotice(approved)) {
+    out.newRound = { text: "이번 공고 기준 확인 중", url: result.noticeUrl };
     return out;
   }
+  if (pick?.state === "under_review") return out;
   for (const f of differs) {
     const name = FIELD_NAME[f.field];
     if (approved || v) {

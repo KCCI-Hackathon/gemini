@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { policyBrief, policyHosts, runVerification, type AnthropicLike } from "@/lib/verify/run";
+import { saveVerification } from "@/lib/verify/saved";
 import { createWeb } from "@/lib/verify/web";
 
 const OUT = "data/verify-results/index.json";
@@ -53,7 +54,7 @@ async function main() {
     console.log(JSON.stringify({ outcome: r.outcome, noticeUrl: r.noticeUrl, findings: r.findings, mismatches: r.mismatches, trail: r.trail.map((t) => `${t.action} ${t.target.slice(0, 80)} — ${t.reason.slice(0, 80)}`) }, null, 1));
     if (process.argv.includes("--save")) {
       const saved = JSON.parse(fs.readFileSync(OUT, "utf-8"));
-      saved[id] = result;
+      saveVerification(saved, result);
       fs.writeFileSync(OUT, JSON.stringify(saved, null, 1));
       console.log(`저장: ${OUT}`);
     }

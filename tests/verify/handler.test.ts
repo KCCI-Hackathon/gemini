@@ -1,6 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { handleVerify, resetVerifyState } from "@/lib/verify/handler";
 import { scriptedClient } from "./helpers";
+import { loadSnapshot } from "@/lib/data/snapshot";
+import { verificationVersion } from "@/lib/verify/version";
 import { guardResponse } from "@/lib/agent/guard";
 
 const ID = "20260928005400113623"; // 승인 규칙이 없는 정책(실시간 대조 대상)
@@ -27,6 +29,40 @@ function ctx(over: Partial<Parameters<typeof handleVerify>[1]> = {}) {
 }
 
 describe("handleVerify", () => {
+  test("느린 공고 조회를 취소하고 같은 공고의 다음 요청을 캐시 없이 처리한다", async () => {
+    vi.useFakeTimers();
+    resetVerifyState();
+    const url = "https://example.go.kr/notice";
+    const client = scriptedClient([[{ name: "open_page", input: { url } }], ...finishNotFound]);
+    const retryClient = scriptedClient([
+      [{ name: "open_page", input: { url } }],
+      [{ name: "record_judgement", input: { url, verdict: "matching_notice", reason: "사업명 일치", quote: "공식 모집 안내" } }],
+      [{ name: "finish", input: { outcome: "verified_against_notice", notice_url: url, findings: [], mismatches: [] } }],
+    ]);
+    let signal: AbortSignal | null | undefined;
+    let attempt = 0;
+    const c = ctx({
+      env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k", AGENT_DAILY_LIMIT: "100", VERIFY_DEADLINE_MS: "40" },
+      makeClient: () => attempt++ === 0 ? client : retryClient,
+      fetchFn: async (input, init) => {
+        if (String(input).endsWith("/robots.txt")) return new Response("User-agent: *\nAllow: /\n");
+        if (attempt > 1) return new Response("공식 모집 안내");
+        signal = init?.signal;
+        return new Promise(() => {});
+      },
+    }).c;
+    try {
+      const pending = handleVerify({ policyId: ID }, c);
+      await vi.advanceTimersByTimeAsync(40);
+      expect(await Promise.race([pending, Promise.resolve("pending")])).toMatchObject({ status: 504, body: { retryable: true } });
+      expect(signal?.aborted).toBe(true);
+      expect(client.calls).toBe(1);
+      expect(await handleVerify({ policyId: ID }, c)).toMatchObject({ status: 200, body: { source: "live", result: { outcome: "verified_against_notice" } } });
+    } finally {
+      vi.useRealTimers();
+      resetVerifyState();
+    }
+  });
   test("정책 번호 외 필드가 있으면 400이고 클라이언트를 만들지 않는다", async () => {
     resetVerifyState();
     const t = ctx();
@@ -43,7 +79,9 @@ describe("handleVerify", () => {
 
   test("저장된 실행 결과가 있으면 AI를 부르지 않고 그것을 돌려준다", async () => {
     resetVerifyState();
-    const saved = { [ID]: { policyId: ID, mode: "agent", outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], trail: [], usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 } } };
+    const policy = loadSnapshot().policies.find((p) => p.id === ID)!;
+    const version = verificationVersion(policy, undefined, "2026-11-24");
+    const saved = { [ID]: { policyId: ID, version, mode: "agent", outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], trail: [], usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 } } };
     const t = ctx({ saved: saved as never });
     const r = await handleVerify({ policyId: ID }, t.c);
     expect(r.status).toBe(200);

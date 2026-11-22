@@ -126,7 +126,7 @@ function buildNode(
         Number(first(b.r)) - Number(first(a.r)) ||
         b.w.score - a.w.score ||
         Number(b.r.verified) - Number(a.r.verified) ||
-        (deadlineOf(a.r) ?? "9999").localeCompare(deadlineOf(b.r) ?? "9999") ||
+        (deadlineOf(a.r, now) ?? "9999").localeCompare(deadlineOf(b.r, now) ?? "9999") ||
         a.r.policy.id.localeCompare(b.r.policy.id),
     )
     .slice(0, parent ? NEXT_STEPS : ROOT_STEPS);
@@ -139,7 +139,7 @@ function buildNode(
     verified: c.r.verified,
     personal: c.r.axes.personal.value,
     recruitment: c.r.axes.recruitment,
-    deadline: deadlineOf(c.r),
+    deadline: deadlineOf(c.r, now),
     score: c.w.score,
     reasons: c.w.reasons,
     // 정책 자체의 기간 조건 안내만 싣는다. 마디 전체 안내는 node.note
