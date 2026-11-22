@@ -12,7 +12,7 @@ html:has(.app) { zoom:.75; }
 .app :where(h2) { font-size:18px; line-height:1.4; }
 .app :where(h3) { font-size:18px; }
 .app :where(a) { color:var(--blue); }
-.shell { display:grid; grid-template-columns:118px minmax(0,1fr) 236px; gap:16px; max-width:1920px; margin:auto; align-items:start; }
+.shell { display:grid; grid-template-columns:118px minmax(0,1fr); gap:16px; max-width:1920px; margin:auto; align-items:start; }
 .shell.noagent { grid-template-columns:118px minmax(0,1fr); }
 .nav { position:sticky; top:18px; min-height:calc(133.333dvh - 36px); background:#fff; border-radius:28px; display:flex; flex-direction:column; padding:18px 9px; gap:12px; box-shadow:0 30px 60px -30px rgba(22,34,74,.25); border:1px solid #fff; }
 .brand { text-align:center; margin-bottom:30px; display:flex; flex-direction:column; align-items:center; gap:4px; }
@@ -349,6 +349,25 @@ html:has(.app) { zoom:.75; }
 .compareResult p { margin:6px 0 0; font-size:13px; line-height:1.5; }
 @media(max-width:760px) { .compareFields { grid-template-columns:1fr; } }
 
+/* 길잡이 : 옆 열 패널 대신, 얼굴 버튼(AgentFab)으로 여는 떠 있는 채팅 창 */
+.agent { display:none; position:fixed; right:24px; bottom:24px; top:auto; width:min(400px,calc(100vw - 32px)); height:min(calc(133.333dvh - 48px),860px); z-index:91; border-radius:24px; }
+.agentDrawer .agent { display:flex; }
+.agentClose { display:block; margin-left:auto; }
+/* 창은 얼굴 버튼 자리(오른쪽 아래)에서 방울처럼 퍼진다. 이징은 스프링 230/15(원본 --goo-out)를 linear()로 옮긴 것 */
+.agentDrawer .agent { transform-origin:calc(100% - 36px) calc(100% - 36px); animation:agentPop .6s linear(0,.094,.303,.551,.782,.965,1.087,1.15,1.165,1.147,1.111,1.07,1.033,1.004,.984,.975,.973,.976,.982,.989,.995,1) both; }
+@keyframes agentPop { from { clip-path:circle(32px at calc(100% - 36px) calc(100% - 36px)); transform:scale(.9); } to { clip-path:circle(150% at calc(100% - 36px) calc(100% - 36px)); transform:scale(1); } }
+.agentFab { position:fixed; right:28px; bottom:28px; z-index:85; width:64px; height:64px; padding:0; border:0; border-radius:999px; background:#16224A; display:grid; place-items:center; cursor:pointer; box-shadow:0 14px 30px -12px rgba(22,34,74,.55); touch-action:manipulation; will-change:transform; }
+.agentFab img { width:50px; height:50px; object-fit:contain; pointer-events:none; }
+.agentFab:focus-visible { outline:3px solid #8DB3FF; outline-offset:2px; }
+.agentFabHidden { display:none; }
+@media print { .agentFab { display:none!important; } }
+@media(prefers-reduced-motion:reduce) { .agentDrawer .agent { animation:none; } }
+/* AI 상담 동의 전 : 안내문과 동의 버튼이 패널을 채운다 */
+.agentGate { flex:1 1 0; min-height:0; overflow-y:auto; display:flex; flex-direction:column; justify-content:center; gap:14px; padding:28px 24px; }
+.agentGate h3 { margin:0; font-size:20px; color:#16224A; }
+.agentGate p { margin:0; font-size:14px; line-height:1.7; color:#3a4566; }
+.agentGate strong { color:#16224A; }
+.agentGate button { margin-top:8px; width:100%; min-height:48px; }
 /* 프로필 조건 칩: 켜진 조건은 초록 체크 + 색칠, 꺼진 조건은 회색 */
 .profileChip { display:inline-flex; align-items:center; gap:6px; }
 .activeChip { background:#E8F6EE; border-color:#9ED6B6; color:#0E7A49; font-weight:700; }
