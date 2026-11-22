@@ -15,7 +15,7 @@ export type OpenCondition = {
   cards: number; eligibleCards: number; soonestDays: number | null;
   offeringIds: string[];
 };
-export type RecommendSession = { id: string; asked: number; skipped: number; skippedKeys?: string[] };
+export type RecommendSession = { id: string; asked: number; skipped: number; skippedKeys?: string[]; scope?: import("./recommend-scope").RecommendScope };
 
 export const MAX_QUESTIONS = 15;
 export const MAX_SKIPS = 2;
