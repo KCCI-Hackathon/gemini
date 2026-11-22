@@ -35,5 +35,6 @@ it("없는 후보 및 2025년 B에서 2026년 장학금 연결은 거부한다",
   const ask = vi.fn<Ask>(choose("none"));
   expect((await linkMentions([c], region, ask))[0].a).toBeNull();
   if (ask.mock.calls.length) expect(ask.mock.calls[0][0].prompt).not.toContain("20260821005400113348");
-  await expect(linkMentions([clause("복지포인트")], region, choose("10000000000000000000"))).rejects.toThrow(/후보 밖/);
+  await expect(linkMentions([clause("복지포인트")], region, choose("10000000000000000000")))
+    .resolves.toMatchObject([{ a: null, method: "none", link_issue: "후보 밖 정책번호" }]);
 });

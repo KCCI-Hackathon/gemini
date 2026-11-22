@@ -82,7 +82,10 @@ export async function linkMentions(clauses: Clause[], region: RawPolicy[], ask: 
       link.link_hash = saved.hash;
       if (row.policy_id === "none") return;
       const picked = candidates.find(p => p.plcyNo === row.policy_id);
-      if (!picked) throw Error("후보 밖 정책번호: index " + String(i + 1));
+      if (!picked) {
+        link.link_issue = "후보 밖 정책번호";
+        return;
+      }
       link.method = "ai"; link.a = picked.plcyNo; link.orgMatches = orgMatches(link.mention.org, picked);
       link.a_group_ids = (groups.get(candidateName(picked.plcyNm)) ?? []).map(p => p.plcyNo).filter(id => id !== picked.plcyNo).sort();
     });

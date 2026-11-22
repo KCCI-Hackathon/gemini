@@ -23,6 +23,7 @@ export type Clause = {
 export type LinkedMention = {
   id: string; clause: Clause; mention: Mention; a: string | null;
   method: "exact" | "ai" | "none"; a_group_ids: string[]; orgMatches: boolean; link_hash: string | null;
+  link_issue?: string;
 };
 export type Counterexample = "deduction" | "allowed" | "exception";
 export type Verification = {
