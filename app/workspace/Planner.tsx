@@ -13,7 +13,7 @@ import { AccountNotifications } from "./AccountNotifications";
 import { CATEGORIES, EVENT_NAMES, type Card, type Category, type Choice, type Draft, type Evaluation, type PlanEvent, type PlannerInput, type SavedPlan } from "@/lib/planner/types";
 import { requestCounsel, type CounselTurn } from "@/lib/planner/counsel-client";
 import { applyTarget, scheduleNeedsConfirm, validateAnswer, type CounselTarget } from "@/lib/planner/counsel-target";
-import { nextRecommendationQuestion, recommendationQuestionKey } from "@/lib/planner/recommendation-questions";
+import { askableConditions, collectOpenConditions, mayFinish, MAX_SKIPS, questionKey, wantsImmediateRecommendation, type RecommendSession } from "@/lib/planner/open-conditions";
 import type { CounselBody } from "@/lib/plan/counsel";
 import type { AiRecommendation } from "@/lib/planner/types";
 import { applyAnswer } from "@/lib/planner/answers";
@@ -70,6 +70,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   // 상담 · 추천 에이전트(GPT 재설계): 동의 · AI 질문 · 최근 대화 · 자동 재호출 횟수 · 주제 밖 연속 횟수
   const [consent, setConsent] = useState(false);
   const [aiQuestion, setAiQuestion] = useState<(CounselBody & { target: CounselTarget; forRecommendation: boolean; preparedAnswers?: ReadonlySet<string> }) | null>(null);
+  const recommendSession = useRef<{ id: string; asked: string[]; skippedKeys: string[]; stopped: boolean } | null>(null);
   const counselHistory = useRef<CounselTurn[]>([]), autoCalls = useRef(0), outOfScope = useRef(0);
   function clearRecommendation() {
     planSeq.current++;
@@ -316,20 +317,42 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     say("지금까지 답한 내용을 반영했어요.");
     showRuleRecommendation(current.evaluation, "현재 조건으로 추천한 경로예요. 확인 필요 후보는 카드의 남은 조건을 확인해 주세요.");
   }
-  function showNextPreparedQuestion(current: Draft, answered: ReadonlySet<string>) {
-    const question = nextRecommendationQuestion(current.profileSnapshot, current.input, current.evaluation, answered);
-    if (!question) return false;
-    setAiQuestion({ ...question, kind: "question", source: "rule", forRecommendation: true, preparedAnswers: answered });
-    remember({ role: "assistant", text: `질문: ${question.text}` });
-    return true;
+  /** 서버로 보내는 이번 추천의 질문 횟수. 그만두면 건너뛰기 한도를 채워 보낸다. */
+  function sessionPayload(): RecommendSession | undefined {
+    const session = recommendSession.current; if (!session) return undefined;
+    return { id: session.id, asked: session.asked.length + session.skippedKeys.length, skipped: session.stopped ? MAX_SKIPS : session.skippedKeys.length, skippedKeys: session.skippedKeys };
   }
-  async function counsel(action: "message" | "recommend" | "followup", message?: string, continuingRecommendation = false, questionnaireComplete = false) {
+  /** 추천 질문 흐름의 다음 걸음. AI 상담이 가능하면 서버(AI)가 묻거나 추천하고, 아니면 같은 질문 순서를 코드가 직접 보여 준다. */
+  async function continueRecommendation(current: Draft) {
+    if (canCounsel(current)) { await counsel("recommend"); return; }
+    const payload = sessionPayload()!;
+    const askable = askableConditions(collectOpenConditions(current.profileSnapshot, current.input, current.evaluation), payload);
+    const question = mayFinish(askable, payload).allowed ? undefined : askable[0]?.question;
+    if (!question) { say("답변을 반영해 추천 경로를 정리했어요."); showRuleRecommendation(current.evaluation, "답변을 반영한 조건 기준 경로예요."); return; }
+    setAiQuestion({ ...question, kind: "question", source: "rule", forRecommendation: true, preparedAnswers: new Set([...recommendSession.current!.asked, ...recommendSession.current!.skippedKeys]) });
+    remember({ role: "assistant", text: `질문: ${question.text}` });
+  }
+  function startRecommendation(current: Draft) {
+    recommendSession.current = { id: newId(), asked: [], skippedKeys: [], stopped: false };
+    void continueRecommendation(current);
+  }
+  function stopRecommendationQuestions() {
+    const current = draftRef.current; if (!current || !recommendSession.current) return;
+    recommendSession.current.stopped = true; setAiQuestion(null);
+    void continueRecommendation(current);
+  }
+  function laterRecommendationQuestion() {
+    const current = draftRef.current, session = recommendSession.current; if (!current || !session || !aiQuestion) return;
+    session.skippedKeys.push(questionKey(aiQuestion.target)); setAiQuestion(null);
+    void continueRecommendation(current);
+  }
+  async function counsel(action: "message" | "recommend" | "followup", message?: string, continuingRecommendation = false) {
     const current = draftRef.current; if (!current) return;
     const forRecommendation = action === "recommend" || (action === "followup" && continuingRecommendation);
     if (action === "recommend") { navigate("select"); toggleRecommendation(true); }
     if (action !== "followup") autoCalls.current = 0;
     const id = ++planSeq.current; setPlanLoading(true); setLoadingAction(action);
-    const result = await requestCounsel({ draft: current, action, message, history: counselHistory.current, consent, outOfScopeStreak: outOfScope.current, questionnaireComplete });
+    const result = await requestCounsel({ draft: current, action, message, history: counselHistory.current, consent, outOfScopeStreak: outOfScope.current, recommendSession: action === "recommend" ? sessionPayload() : undefined });
     if (id !== planSeq.current) return;
     setPlanLoading(false);
     // 이력에는 원문 대신 짧은 표시만(설계 7.1). 서버도 사용자 원문 이력은 버린다.
@@ -343,7 +366,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       say("지금은 AI 상담이 꺼져 있어요. 조건 기준 질문과 추천으로 안내해 드릴게요. 일정 바꾸기(“취업을 2월 19일로 옮겨줘”)와 기한 설명은 그대로 쓸 수 있어요.");
       return;
     }
-    if (result.kind === "question" && result.target && result.text) { setAiQuestion({ ...result, target: result.target, forRecommendation }); remember({ role: "assistant", text: `질문: ${result.text}` }); return; }
+    if (result.kind === "question" && result.target && result.text) { const session = recommendSession.current; setAiQuestion({ ...result, target: result.target, forRecommendation, ...(action === "recommend" && session ? { preparedAnswers: new Set([...session.asked, ...session.skippedKeys]) } : {}) }); remember({ role: "assistant", text: `질문: ${result.text}` }); return; }
     if (result.kind === "parsed" && result.target && result.value) { await answerAi(result.target, result.value, forRecommendation); return; }
     if (result.kind === "answer") { say(`${result.text}${result.citations?.length ? `\n근거: ${result.citations.map(c => c.label).join(" · ")}` : ""}${result.source === "ai" ? "\n(AI 정리)" : ""}`); remember({ role: "assistant", text: `답변: ${(result.text ?? "").slice(0, 120)}` }); return; }
     if (result.kind === "plan" || result.kind === "fallback") {
@@ -363,7 +386,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   }
   async function answerAi(target: CounselTarget, value: string, forRecommendation = aiQuestion?.forRecommendation ?? false) {
     const current = draftRef.current; if (!current) return;
-    const preparedAnswers = aiQuestion?.target === target ? aiQuestion.preparedAnswers : undefined;
+    const inSession = aiQuestion?.target === target && !!aiQuestion.preparedAnswers && !!recommendSession.current;
     const valid = validateAnswer(target, value, current.evaluation.today);
     if (!valid.ok) {
       say(valid.message);
@@ -374,17 +397,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       setAiQuestion(null);
       remember({ role: "user", text: `답: ${target.kind === "benefit" ? target.answer : target.kind} = ${value}` });
       const confirm = scheduleNeedsConfirm(next.input); if (confirm) say(confirm);
-      if (preparedAnswers) {
-        const answered = new Set([...preparedAnswers, recommendationQuestionKey(target)]);
-        if (!showNextPreparedQuestion(resolved, answered)) {
-          if (canCounsel(resolved)) void counsel("recommend", undefined, false, true);
-          else {
-            say("답변을 반영해 추천 경로를 정리했어요.");
-            showRuleRecommendation(resolved.evaluation, "답변을 반영한 조건 기준 경로예요.");
-          }
-        }
-        return;
-      }
+      if (inSession) { recommendSession.current!.asked.push(questionKey(target)); void continueRecommendation(resolved); return; }
       if (autoCalls.current < 3) { autoCalls.current++; void counsel("followup", undefined, forRecommendation); }
       else if (forRecommendation) {
         const notice = "추가 질문을 마쳤어요. 지금까지 답한 조건으로 추천 경로를 표시해요.";
@@ -396,7 +409,10 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   function send(text: string) {
     say(text, "user"); const current = readOnly ? view : draftRef.current;
     if (!current) return;
-    if (aiQuestion?.preparedAnswers) { say("추천을 계속하려면 질문 카드에서 답을 골라 주세요."); return; }
+    if (aiQuestion?.preparedAnswers) {
+      if (wantsImmediateRecommendation(text)) { stopRecommendationQuestions(); return; }
+      say("추천을 계속하려면 질문 카드에서 답을 골라 주세요. 바로 추천받으려면 바로 추천해줘 라고 말해 주세요."); return;
+    }
     const turn = parseScheduleTurn(text, current.input.events ?? [], pendingCommand.current);
     const command = turn.command; pendingCommand.current = turn.pending;
     // 일정 명령은 코드가 먼저. 명령이 아니거나 설명을 묻는 글은 상담 에이전트로(시연 인물 · 동의한 사용자).
@@ -412,7 +428,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       if (recommend) toggleRecommendation(false);
       navigate("select");
       setAgentOpen(true); setAgentHidden(false);
-      showNextPreparedQuestion(current, new Set());
+      startRecommendation(current);
       return;
     }
     const named = findNamedCards(text, current.evaluation, current.input.choices);
@@ -500,7 +516,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     <div className={s.categoryFilters} role="tablist" aria-label="수혜 가능성 분류">{ELIGIBILITY_TABS.map((item, index) => <button key={item.id} id={`eligibility-tab-${item.id}`} role="tab" aria-selected={eligibilityTab === item.id} aria-controls="eligibility-policy-board" tabIndex={eligibilityTab === item.id ? 0 : -1} className={`${s.filter} ${eligibilityTab === item.id ? s.filterActive : ""}`} onKeyDown={event => { if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? ELIGIBILITY_TABS.length - 1 : (index + (event.key === "ArrowRight" ? 1 : ELIGIBILITY_TABS.length - 1)) % ELIGIBILITY_TABS.length; setEligibilityTab(ELIGIBILITY_TABS[next].id); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus(); }} onClick={() => setEligibilityTab(item.id)}>{item.label} <span aria-label={`${eligibilityCounts[item.id]}개`}>{eligibilityCounts[item.id]}</span></button>)}</div><p className={s.emptyHint}>이후 열에는 새로 신청할 수 있는 후보와 해당 시점에 담은 정책이 표시돼요. 탭 개수는 검색·분야 필터를 적용한 보드 기준이에요.</p>
     <div className={s.boardScroll} id="eligibility-policy-board" role="tabpanel" aria-labelledby={`eligibility-tab-${eligibilityTab}`} ref={boardRef} aria-label="시점별 정책 보드"><div className={s.board}>{evaluation.stages.map(stage => { const cards = visibleCards(stage.stageId); const limit = limits[stage.stageId] ?? 4; return <section key={stage.stageId} id={`stage-${stage.stageId}`} className={`${s.column} ${focusedStage === stage.stageId ? s.focusedColumn : ""}`}><button className={s.columnHeader} aria-label={`${stage.label}, 정책 ${cards.length}개 전체 보기`} onClick={() => setGridStage(stage.stageId)}><h2>{stage.label}<span>{cards.length}</span></h2><p>{dateLabel(stage.start)} {stage.endExclusive ? `~ ${dateLabel(addDays(stage.endExclusive, -1))}` : "이후"} <span aria-hidden="true">⊞</span></p></button><div className={s.columnCards}>{cards.slice(0, limit).map(card => renderCard(card))}</div>{cards.length === 0 && <div className={s.emptyState}>이 시점과 선택한 분류에 해당하는 정책이 없어요.<button className={s.textButton} onClick={() => { setQuery(""); setFilter({ category: "all" }); setEligibilityTab(ELIGIBILITY_TABS.find(item => eligibilityCounts[item.id] > 0)?.id ?? "needs_check"); }}>필터 해제</button></div>}{cards.length > limit && <button data-stage={stage.stageId} className={s.moreButton} onClick={() => setLimits(prev => ({ ...prev, [stage.stageId]: limit + 4 }))}>정책 더 보기 · {cards.length - limit}개 남음</button>}<p className={s.columnFooter}>{Math.min(limit, cards.length)} / {cards.length}개 표시</p></section>; })}</div></div></> : <Roadmap plan={view} onDetail={setDetail} />}
     <p className={s.notice}>기준일 {fullDate(evaluation.today)} · 공고 데이터 기준 {evaluation.asOf} · 현재 공고와 입력한 예정일을 기준으로 계산한 결과입니다. 신청 전 공식 공고를 확인해 주세요.</p>
-    </>}</main>{tab !== "account" && <Agent today={evaluation.today} recommendation={activeRecommendation} recommendationAt={recommendationAt} cards={evaluation.cards} planLoading={planLoading && !readOnly} loadingAction={loadingAction} aiQuestion={readOnly ? null : aiQuestion} onAiAnswer={value => { if (aiQuestion) void answerAi(aiQuestion.target, value); }} onAiSkip={() => setAiQuestion(null)} onShowRecommendation={aiQuestion?.forRecommendation ? finishRecommendationWithCurrentAnswers : undefined}
+    </>}</main>{tab !== "account" && <Agent today={evaluation.today} recommendation={activeRecommendation} recommendationAt={recommendationAt} cards={evaluation.cards} planLoading={planLoading && !readOnly} loadingAction={loadingAction} aiQuestion={readOnly ? null : aiQuestion} onAiAnswer={value => { if (aiQuestion) void answerAi(aiQuestion.target, value); }} onAiSkip={() => { if (aiQuestion?.preparedAnswers) stopRecommendationQuestions(); else setAiQuestion(null); }} onAiLater={aiQuestion?.preparedAnswers ? laterRecommendationQuestion : undefined} onShowRecommendation={aiQuestion?.forRecommendation ? finishRecommendationWithCurrentAnswers : undefined}
       consentNeeded={!readOnly && !!draft && !draft.input.demoId && !consent} onConsent={() => { setConsent(true); say("AI 상담을 켰어요. 패널의 ‘AI 상담 끄기’로 언제든 끌 수 있어요."); }}
       consentOn={!readOnly && !!draft && !draft.input.demoId && consent} onConsentOff={() => { setConsent(false); setAiQuestion(null); counselHistory.current = []; say("AI 상담을 껐어요. 조건 기준 질문과 추천만 보여 드려요."); }}
       questions={readOnly ? [] : evaluation.questions} onAnswer={(question, answer) => {

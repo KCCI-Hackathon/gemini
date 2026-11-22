@@ -9,6 +9,9 @@ export const ProfileSnapshotSchema = z.object({
   birthYm: z.string().refine(value => isDate(`${value}-01`)), sigungu: z.string().refine(value => regions.has(value)), school: z.string().regex(/^\d{7}$/),
   currentStatus: z.array(StatusKey), interest: z.enum(["job", "keep_searching", "startup"]), participating: z.array(z.string()), source: z.enum(["demo_persona", "user"]),
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration", "relocation"]), date: z.string().refine(isDate), status: z.enum(["scheduled", "completed", "simulated"]) })),
+  // 상담 질문의 답. 예전에 저장한 계획에는 없으므로 모두 선택 칸이다.
+  incomeBand: z.enum(["p60", "p100", "p150", "over", "unknown"]).optional(), marital: z.enum(["single", "married", "planned"]).optional(),
+  tenureMonths: z.number().int().min(0).max(600).nullable().optional(), smeEmployee: z.enum(["yes", "no", "unknown"]).optional(),
 });
 export const EventSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), type: z.enum(["training_completion", "employment", "business_registration", "relocation"]),

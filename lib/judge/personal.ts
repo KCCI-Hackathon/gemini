@@ -1,5 +1,6 @@
 import { judgeConditions, pickRound, type Evidence } from "./rules";
 import { toKstDate } from "@/lib/date";
+import { incomeResult, marriageResult, medianIncomeLimit, neededTenureMonths, smeResult, tenureResult } from "./conditions";
 import { regionLabel } from "@/lib/data/regions";
 import type { Policy } from "@/lib/data/types";
 import type { StatusKey, VerifiedPolicy } from "@/lib/data/verified";
@@ -70,6 +71,20 @@ class Verdict {
     if (RANK[v] > RANK[this.value]) this.value = v;
     if (!this.reasons.includes(reason)) this.reasons.push(reason);
   }
+}
+
+/** 답으로 가릴 수 있는 조건: 충족이면 사유를 지우고, 미충족이면 불가, 모름 · 미답이면 확인 필요로 둔다. */
+function judgeAnswered(verdict: Verdict, result: "met" | "unmet" | "unknown", unmet: string, unknown: string) {
+  if (result === "unmet") verdict.push("ineligible", unmet);
+  else if (result === "unknown") verdict.push("needs_check", unknown);
+}
+function judgeIncome(verdict: Verdict, profile: Profile, text: string) {
+  const limit = medianIncomeLimit(text);
+  judgeAnswered(verdict, incomeResult(profile.incomeBand, limit), `소득 조건(기준 중위소득 ${limit}% 이하) 밖`, REASON.income);
+}
+function judgeTenure(verdict: Verdict, profile: Profile, since: string, today: string) {
+  const needed = neededTenureMonths(since, today);
+  judgeAnswered(verdict, tenureResult(profile.tenureMonths, needed), `재직 기간 조건(${needed}개월 이상) 미달`, REASON.tenure);
 }
 
 function judgeAge(
@@ -163,8 +178,8 @@ export function judgePersonal(
         if (statusUnknown && employmentRule) verdict.push("needs_check", REASON.statusUnknown);
         else for (const [val, reason] of r.verdicts) verdict.push(val, reason);
       }
-      if (v.tenure && status.has("employed")) verdict.push("needs_check", REASON.tenure);
-      if (v.incomeQuote) verdict.push("needs_check", REASON.income);
+      if (v.tenure && status.has("employed")) judgeTenure(verdict, profile, v.tenure.since, today);
+      if (v.incomeQuote) judgeIncome(verdict, profile, v.incomeQuote.text);
       return verdict;
     }
     // 상태 조건
@@ -189,8 +204,8 @@ export function judgePersonal(
         verdict.push("needs_check", definitionReason(missing, excluded));
       }
     }
-    if (v.tenure && status.has("employed")) verdict.push("needs_check", REASON.tenure);
-    if (v.incomeQuote) verdict.push("needs_check", REASON.income);
+    if (v.tenure && status.has("employed")) judgeTenure(verdict, profile, v.tenure.since, today);
+    if (v.incomeQuote) judgeIncome(verdict, profile, v.incomeQuote.text);
     return verdict;
   }
 
@@ -207,9 +222,9 @@ export function judgePersonal(
     }
   }
   if (p.schoolCodes.length && !p.schoolCodes.includes("0049010") && !p.schoolCodes.includes(profile.school)) verdict.push("needs_check", REASON.school);
-  if (p.specialCodes.length && !p.specialCodes.includes("0014010")) verdict.push("needs_check", REASON.special);
-  if (p.marriageCode && p.marriageCode !== "0055003") verdict.push("needs_check", REASON.marriage);
-  if (p.incomeCode === "0043002" || p.incomeCode === "0043003") verdict.push("needs_check", REASON.income);
+  if (p.specialCodes.length && !p.specialCodes.includes("0014010")) judgeAnswered(verdict, smeResult(profile.smeEmployee, p.specialCodes), "특화 조건(중소기업) 불충족", REASON.special);
+  if (p.marriageCode && p.marriageCode !== "0055003") judgeAnswered(verdict, marriageResult(profile.marital, p.marriageCode), "혼인 조건 불충족", REASON.marriage);
+  if (p.incomeCode === "0043002" || p.incomeCode === "0043003") judgeIncome(verdict, profile, p.texts.income);
   if (p.texts.addQualification || p.texts.excluded || p.texts.income) verdict.push("needs_check", REASON.unreviewed);
   return verdict;
 }

@@ -32,6 +32,9 @@ const ProfileSchema = z.object({
   participating: z.array(z.string()),
   recentHistory: z.enum(["yes", "no"]).optional(),
   examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // 상담 질문의 답(소득은 구간만). 없으면 아직 묻지 않은 것이다.
+  incomeBand: z.enum(["p60", "p100", "p150", "over", "unknown"]).optional(), marital: z.enum(["single", "married", "planned"]).optional(),
+  tenureMonths: z.number().int().min(0).max(600).nullable().optional(), smeEmployee: z.enum(["yes", "no", "unknown"]).optional(),
   source: z.enum(["demo_persona", "user"]),
 });
 
