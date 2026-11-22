@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import snapshot from "@/data/snapshot/current.json";
-import { decide } from "@/scripts/overlap/decide";
+import { decide, needsReview } from "@/scripts/overlap/decide";
+import { reviewModel, scanModel } from "@/scripts/overlap/gemini";
 import { locate, type Clause, type LinkedMention, type Verification } from "@/scripts/overlap/types";
 import type { RawPolicy } from "@/lib/data/types";
 import { EvidenceRowSchema, RuleRowSchema, ClauseRowSchema } from "@/lib/data/overlap-schema";
@@ -21,6 +22,15 @@ function votes(b = bid, a = aid, field: Clause["field"] = "ptcpPrpTrgtCn", quote
   });
 }
 const checks = (votes: LinkedMention[]): Verification[] => votes.map(v => ({ claimId: v.id, counterexample: null, verdict: "supported", reason: "공고 원문 일치", verify_quote: v.clause.quote, validQuote: true, model: v.clause.model, response_hash: "f".repeat(64) }));
+it("전체 차단과 애매한 연결만 별도 모델로 재검증하고 검증 누락은 보류한다", () => {
+  const [block] = votes(bid, aid, "ptcpPrpTrgtCn", "인천 재직청년 복지포인트", { model: scanModel });
+  const [partial] = votes(bid, aid, "ptcpPrpTrgtCn", "인천 재직청년 복지포인트", { kind: "partial", restricted_item: "복지포인트" });
+  expect([block, partial, { ...partial, method: "ai" as const }].filter(vote => needsReview(vote))).toEqual([block, { ...partial, method: "ai" }]);
+  expect(needsReview(partial, "○ 상세내용 공고문 확인\n인천 재직청년 복지포인트")).toBe(true);
+  expect(decide([block], [], [], policies, run, true).rules[0].judgement).toBe("needs_check");
+  const verified: Verification[] = checks([block]).map(check => ({ ...check, model: reviewModel }));
+  expect(decide([block], [], verified, policies, run, true).rules[0].judgement).toBe("blocked");
+});
 function result(ms: LinkedMention[], v = checks(ms), region = policies) { return decide([ms[0]], ms.slice(1), v, region, run); }
 it("실제 복지포인트 항목은 다른 제목의 공고문과 분리하고 스키마를 왕복한다", () => {
   const out = result(votes());

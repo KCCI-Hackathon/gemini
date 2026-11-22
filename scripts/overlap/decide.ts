@@ -3,6 +3,7 @@ import type { RawPolicy } from "@/lib/data/types";
 import { toKstDate } from "@/lib/date";
 import { normalizeSpace } from "@/lib/verify/web";
 import { policyYears } from "./link";
+import { isScanModel, reviewModel } from "./gemini";
 import { digest, locate, type Clause, type LinkedMention, type Verification } from "./types";
 
 export type RunContext = { run_id: string; startedAt: string };
@@ -77,7 +78,14 @@ function candidateReason(m: LinkedMention) {
   const namedInQuote = normalizeSpace(m.clause.quote).includes(normalizeSpace(m.mention.text));
   return namedInQuote && m.method === "exact" && !m.a_group_ids.length && m.orgMatches && m.mention.type === "program" ? null : "사업 이름·기관이 단독으로 일치하는지 확인 필요";
 }
-export function decide(first: LinkedMention[], second: LinkedMention[], checks: Verification[], region: RawPolicy[], run: RunContext) {
+export function needsReview(vote: LinkedMention, source?: string) {
+  const c = vote.clause;
+  if (c.kind === "allowed" || c.kind === "not_restriction") return false;
+  return c.kind !== "partial" || !!candidateReason(vote) || !c.condition_type || !!c.exception ||
+    !!c.period_text || (source !== undefined && !periodOK(c, source));
+}
+
+export function decide(first: LinkedMention[], second: LinkedMention[], checks: Verification[], region: RawPolicy[], run: RunContext, singleScan = false) {
   const rules = new Map<string, RuleRow>(), evidence = new Map<string, EvidenceRow>(), traces = new Map<string, ClauseRow>();
   const policies = new Map(region.map(p => [p.plcyNo, p]));
   const verified = new Map(checks.filter(c => !c.counterexample).map(c => [c.claimId, c]));
@@ -131,7 +139,10 @@ export function decide(first: LinkedMention[], second: LinkedMention[], checks: 
       reasons.add(c.kind === "partial" ? "일부 지원 항목만 제한될 수 있음" : "전체 수혜 제한 여부 확인 필요");
     }
     if (!compatibleYear(a, b)) reasons.add("신청 연도 또는 모집 회차 확인 필요");
-    if (!pair || m.clause.pass !== 1 || pair.clause.pass !== 2 || pair.clause.model !== c.model || pair.clause.response_hash === c.response_hash) {
+    if (singleScan) {
+      if (!isScanModel(c.model) || verified.get(m.id)?.model !== reviewModel)
+        reasons.add("지정된 독립 재검증 모델의 근거 확인 필요");
+    } else if (!pair || m.clause.pass !== 1 || pair.clause.pass !== 2 || pair.clause.model !== c.model || pair.clause.response_hash === c.response_hash) {
       reasons.add("같은 모델의 독립된 두 추출이 일치하지 않음");
     }
     const judgement = reasons.size ? "needs_check" : "blocked", reason = [...reasons].join(" · ") || null;

@@ -31,7 +31,9 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
       const b="20250122005400110346", field="ptcpPrpTrgtCn";
       const item=Array.isArray(data) && data.find(v=>v.b_policy_id===b && v.field===field);
       const quote="국민취업지원제도에 참여하여 수혜 중인 자";
-      const rows=data.assertions
+      const rows=Array.isArray(data) && data[0]?.candidates
+        ? data.map((row:{index:number})=>({index:row.index,policy_id:"none"}))
+        : data.assertions
         ? data.assertions.map((a:{index:number,quote:string})=>({index:a.index,evidence_quote:a.quote,
           verdict:a.quote===quote?"supported":"contradicted",reason:"항목 확인"}))
         : item?[{b_policy_id:b,field,quote,mentions:[{text:"국민취업지원제도",org:null,type:"program"}],
@@ -41,7 +43,10 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
     });
     const options={runId:"test-run",live:true,root,apiKey:"fixture",now:()=>now,sleep:async(ms:number)=>{now+=ms;},fetchFn:fake};
     const first=await runOverlap(options);
-    expect(first.passed).toBe(true);expect(first.covered).toBeGreaterThan(0);
+    expect(first.passed).toBe(true);
+    expect(first.requests.some(r=>r.stage==="link")).toBe(true);
+    expect(first.batches.every(b=>b.first.length===1 && b.second.length===0)).toBe(true);
+    expect(first.requests.every(r=>r.model===(r.stage==="verify"?"gemini-3-flash-preview":"gemini-3.5-flash-lite"))).toBe(true);
     expect(reportPasses(first)).toBe(true);
     expect(reportPasses({...first,controls:Array(3).fill(first.controls[0])})).toBe(false);
     expect(reportPasses({...first,requests:[...first.requests,{...first.requests.at(-1)!,model:"gemini-3-flash-preview"}]})).toBe(false);

@@ -9,11 +9,12 @@ export function selectRegion(records: RawPolicy[]): RawPolicy[] {
   return records.filter(r => typeof r.zipCd === "string" && r.zipCd.split(",").some(zip => zips.has(zip.trim())))
     .sort((a, b) => a.plcyNo.localeCompare(b.plcyNo));
 }
-export function selectFields(records: RawPolicy[]): PublicField[] {
+export function selectFields(records: RawPolicy[], allRegions = false): PublicField[] {
   const out: PublicField[] = [];
-  for (const policy of selectRegion(records)) for (const field of fieldOrder) {
+  const policies = allRegions ? [...records].sort((a, b) => a.plcyNo.localeCompare(b.plcyNo)) : selectRegion(records);
+  for (const policy of policies) for (const field of fieldOrder) {
     const text = policy[field];
-    if (typeof text !== "string" || !text.trim() || (field === "plcySprtCn" && !supportKeywords.test(text))) continue;
+    if (typeof text !== "string" || !text.trim() || (!allRegions && field === "plcySprtCn" && !supportKeywords.test(text))) continue;
     out.push({ b_policy_id: policy.plcyNo, name: policy.plcyNm, field, text });
   }
   return out;

@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-export const models = ["gemini-3.6-flash", "gemini-3-flash-preview"] as const;
+export const scanModel = "gemini-3.5-flash-lite";
+export const scanModels = ["gemini-2.5-flash-lite", scanModel] as const;
+export type ScanModel = typeof scanModels[number];
+export const isScanModel = (model: string | undefined): model is ScanModel => scanModels.some(candidate => candidate === model);
+export const reviewModel = "gemini-3-flash-preview";
+const legacyModels = ["gemini-3.6-flash", reviewModel] as const;
+export const models = [...legacyModels, ...scanModels] as const;
 export type ModelId = typeof models[number];
 const Spec = z.object({
   model: z.enum(models), stage: z.enum(["extract","link","verify"]), pass: z.union([z.literal(1),z.literal(2)]),
@@ -72,7 +78,7 @@ export function makeSession(o:Options) {
   if(state.run_id!==o.runId || Object.entries(o.inputs).some(([k,v])=>state[k as keyof RunState]!==v)) throw Error("실행 입력 해시 불일치");
   const persist=()=>writeAtomic(path,jsonBytes(state));
   let cursor=0;
-  async function ask(input:Omit<RequestSpec,"model">&{model?:ModelId}) {
+  async function ask(input:Omit<RequestSpec,"model">&{model?:ModelId}, fixedModel = false) {
     const spec=Spec.parse({...input,model:input.model??models[0]});
     const logicalKey=requestHash(spec);
     const recorded=state.requests[cursor];
@@ -85,12 +91,12 @@ export function makeSession(o:Options) {
       if(recorded?.completed && recorded.hash!==hash) throw Error("실행 요청 불일치 "+hash);
       if(!o.live && (!recorded || recorded.hash!==hash || !existsSync(file))) throw Error("재생 응답 누락 "+spec.stage+" "+hash);
       if(!existsSync(file) && (state.exhausted[model]??0)>now()) {
-        const alternative=models.find(m=>(state.exhausted[m]??0)<=now());
+        const alternative=fixedModel ? undefined : legacyModels.find(m=>(state.exhausted[m]??0)<=now());
         if(alternative) { model=alternative; continue; }
-        const resetAt=Math.min(...models.map(m=>state.exhausted[m]));
+        const resetAt=fixedModel ? state.exhausted[model] : Math.min(...legacyModels.map(m=>state.exhausted[m]));
         console.error("Gemini 일일 한도 초기화 대기 "+new Date(resetAt).toISOString());
         await sleep(Math.max(0,resetAt-now()));
-        model=models[0]; continue;
+        model=fixedModel ? spec.model : legacyModels[0]; continue;
       }
       const entry={logicalKey,model,stage:spec.stage,hash,completed:false};
       if(o.live && !recorded?.completed) {state.requests[cursor]=entry;persist();}

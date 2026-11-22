@@ -76,6 +76,12 @@ npm run db:verify
 
 `POST /api/judge`에 기존 프로필과 함께 선택 입력인 `benefits`를 보낼 수 있습니다. 예를 들어 구직급여 지급이 종료됐다면 `{"policyId":"20250122005400110369","status":"ended","lastPaymentDate":"2026-07-15"}`를 배열에 담습니다. 정책별 `restrictions`에는 적용 여부·이유·인용 근거가, `planned_conflicts`에는 예정된 충돌이 들어갑니다. 응답의 `dataVersion`으로 사용한 규칙 버전을 식별합니다.
 
+## 중복수혜 스캔과 재검증
+
+새 중복수혜 실행은 스냅샷의 전체 지역에 대해 참여 제한·추가 신청자격·지원 내용의 비어 있지 않은 원문을 모두 훑습니다. 기본 추출은 묶음당 한 번이며, 원문과 맞지 않는 응답은 기존 규칙대로 한 번 정정 요청합니다. 추출과 사업명 후보 연결의 기본 모델은 현재 프로젝트에서 생성이 확인된 `gemini-3.5-flash-lite`입니다. `gemini-3-flash-preview`는 전체 차단 후보와 연결·조건·예외가 불명확한 후보를 재검증합니다. 전체 차단을 확정하려면 재검증 모델의 지지와 원문 근거 검사를 모두 통과해야 합니다.
+
+이전에 시작된 실행은 당시의 모델과 방식으로 재생합니다. 새 방식을 쓰려면 `npm run overlap:agent -- --live`로 새 실행을 시작합니다. 2.5 Flash-Lite 생성 권한이 있는 프로젝트에서는 `OVERLAP_SCAN_MODEL=gemini-2.5-flash-lite`를 설정할 수 있습니다. Gemini 모델별 실제 호출 한도는 [Google AI Studio](https://aistudio.google.com/rate-limit?timeRange=last-28-days)에서 프로젝트 단위로 확인합니다.
+
 ## 정책 스냅샷 변경 확인
 
 기존 배포에 사용한 스냅샷과 새 수집본을 비교합니다. 기본 설정은 기존 배포 규칙을 함께 읽어, 연결 정책의 변경이나 삭제로 재검증이 필요한 규칙을 표시합니다.

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { normalizeSpace } from "@/lib/verify/web";
 import type { Condition, Effect, Field, Kind, Verdict } from "@/lib/data/overlap-schema";
 
-export type ModelId = "gemini-3.6-flash" | "gemini-3-flash-preview";
+import type { ModelId } from "./gemini";
+export type { ModelId } from "./gemini";
 export type Pass = 1 | 2;
 export type Ask = (request: {
   stage: "extract" | "link" | "verify";

@@ -2,14 +2,14 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { type Case, type ClauseRow, VerdictSchema } from "@/lib/data/overlap-schema";
 import type { CandidateSet } from "./merge";
-import { models, type RunState } from "./gemini";
+import { isScanModel, models, reviewModel, type RunState } from "./gemini";
 import type { Verification } from "./types";
 
 const hash=z.string().regex(/^[a-f0-9]{64}$/);
 const count=z.int().nonnegative();
 const request=z.object({hash,model:z.enum(models),stage:z.enum(["extract","link","verify"])});
 const control=z.object({model:z.enum(models),type:z.enum(["deduction","allowed","exception"]),validQuote:z.boolean(),verdict:VerdictSchema,hash});
-const proof=z.object({first:z.array(hash).nonempty(),second:z.array(hash).nonempty(),complete:z.boolean()});
+const proof=z.object({first:z.array(hash).nonempty(),second:z.array(hash),complete:z.boolean()});
 const reportSchema=z.object({
   run_id:z.string().min(1), startedAt:z.iso.datetime(),snapshotSha256:hash,casesSha256:hash,researchSha256:hash,
   rulesSha256:hash,evidenceSha256:hash,clausesSha256:hash,runSha256:hash,
@@ -24,12 +24,17 @@ export type RunReport=z.infer<typeof reportSchema> & {
 function hasProof(r: Omit<RunReport,"passed">) {
   if(!r.complete || !r.total || r.covered>r.total || r.falseBlocked || r.wrongSupported || r.wrongTotal!==3) return false;
   const refs=new Map(r.requests.map(e=>[e.hash,e]));
+  if (refs.size !== r.requests.length) return false;
   const verified=new Set(r.requests.filter(q=>q.stage==="verify").map(q=>q.model));
   if(!verified.size || !r.batches.length) return false;
+  const singleScan = r.batches.every(b => !b.second.length);
+  const scanned = new Set(r.requests.filter(q => q.stage !== "verify").map(q => q.model));
+  if (singleScan && (verified.size !== 1 || !verified.has(reviewModel) ||
+      scanned.size !== 1 || !isScanModel([...scanned][0]))) return false;
   const extractRuns=new Set<string>();
   for(const b of r.batches){
     const hashes=[...b.first,...b.second];
-    if(!b.complete || !b.first.length || !b.second.length || hashes.some(h=>extractRuns.has(h)) ||
+    if(!b.complete || !b.first.length || (!singleScan && !b.second.length) || hashes.some(h=>extractRuns.has(h)) ||
        new Set(hashes).size!==hashes.length || hashes.some(h=>refs.get(h)?.stage!=="extract") ||
        new Set(hashes.map(h=>refs.get(h)?.model)).size!==1) return false;
     hashes.forEach(h=>extractRuns.add(h));
