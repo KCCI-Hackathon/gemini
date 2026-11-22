@@ -21,7 +21,7 @@ import { Agent, type Message } from "./Agent";
 import { recommendationUpdate } from "./counsel-view";
 import { Building } from "./Building";
 import { DetailDialog, EventDialog, ProfileForm, SaveDialog } from "./Dialogs";
-import { demoStart, OnboardingScreen, personaProfile, SignupScreen, startInput } from "./Entry";
+import { demoStart, OnboardingScreen, PlanningScreen, personaProfile, SignupScreen, startInput } from "./Entry";
 import { Modal } from "./Modal";
 import { Nav, resolveScreen, screenOf, type Screen, type Tab } from "./Nav";
 import { PolicyCard, deadlineText } from "./PolicyCard";
@@ -227,16 +227,18 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       return null;
     } finally { if (requestId === seq.current) { setPending(null); setBusy(false); } }
   }
-  async function start(profile: Profile, demo: boolean, mutedKeys: string[] = []) {
-    const input = startInput(profile, demo, mutedKeys);
+  async function start(profile: Profile, demo: boolean, mutedKeys: string[] = [], events: PlanEvent[] = []) {
+    const input = startInput(profile, demo, mutedKeys, events);
     const requestId = ++seq.current; setBusy(true); setError(null);
     try { const evaluation = await fetchEvaluation(profile, input); if (requestId !== seq.current) return; const next = createDraft(profile, input, evaluation); setDraft(next); draftRef.current = next; confirmedRef.current = next; setHistory([]); historyRef.current = []; if (demo) setExample({ ...savedSnapshot({ ...next, input: { ...input, choices: evaluation.recommendations }, evaluation: withChoices(evaluation, evaluation.recommendations) }, "예시 계획", "example"), source: "example" }); }
     catch (err) { setError(err instanceof Error ? err.message : "첫 판정에 실패했어요."); } finally { if (requestId === seq.current) setBusy(false); }
   }
   // 첫 판정을 시작하고 로딩 화면(#building)으로 간다. 판정이 끝나면 로딩 화면이 보드(#board)로 보낸다
-  function begin(profile: Profile, demo: boolean, mutedKeys: string[] = []) { startKind.current = demo ? "demo" : "user"; void start(profile, demo, mutedKeys); window.location.hash = "building"; }
+  function begin(profile: Profile, demo: boolean, mutedKeys: string[] = [], events: PlanEvent[] = []) { startKind.current = demo ? "demo" : "user"; void start(profile, demo, mutedKeys, events); window.location.hash = "building"; }
+  // 회원가입 : 내 정보 → 계획 → 첫 판정. 내 정보는 계획 단계를 마칠 때까지 들고 있는다
+  const [signupProfile, setSignupProfile] = useState<{ profile: Profile; mutedKeys: string[] } | null>(null);
   // 첫 판정이 실패하면 입력 화면으로 되돌려 오류를 보여 준다
-  useEffect(() => { if (screen === "building" && !busy && !draft && error) window.location.replace(startKind.current === "user" ? "#onboarding" : "#signup"); }, [screen, busy, draft, error]);
+  useEffect(() => { if (screen === "building" && !busy && !draft && error) window.location.replace(startKind.current === "user" ? "#planning" : "#signup"); }, [screen, busy, draft, error]);
   function mutate(patch: Partial<PlannerInput>, profile?: Profile) { const current = draftRef.current; if (!current) return; return commit({ ...current, profileSnapshot: profile ?? current.profileSnapshot, input: { ...current.input, ...patch, revision: current.input.revision + 1 } }); }
   async function updateEvents(events: PlanEvent[], undo = false) {
     const current = draftRef.current; if (!current) return;
@@ -448,7 +450,11 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   // 입력 화면 3개(회원가입 · 내 정보 · 로딩). 초안이 없으면 어떤 해시여도 회원가입으로 온다
   const frame = (body: ReactNode) => <div className={s.app}>{body}{showDialogs()}</div>;
   if (screen === "building") return frame(<Building ready={!!draft && !busy} onDone={() => window.location.replace("#board")} />);
-  if (screen === "onboarding") return frame(<OnboardingScreen onSave={(profile, muted) => begin(profile, false, muted)} onBack={() => { window.location.hash = "signup"; }} error={error} />);
+  if (screen === "onboarding") return frame(<OnboardingScreen onSave={(profile, muted) => { setSignupProfile({ profile, mutedKeys: muted }); window.location.hash = "planning"; }} onBack={() => { window.location.hash = "signup"; }} error={error} />);
+  if (screen === "planning") return signupProfile
+    ? frame(<PlanningScreen today={toKstDate(new Date())} error={error} onBack={() => { window.location.hash = "onboarding"; }}
+      onSave={(events, currentStatus) => begin({ ...signupProfile.profile, currentStatus }, false, signupProfile.mutedKeys.filter(k => k !== "status"), events)} />)
+    : frame(<OnboardingScreen onSave={(profile, muted) => { setSignupProfile({ profile, mutedKeys: muted }); window.location.hash = "planning"; }} onBack={() => { window.location.hash = "signup"; }} error={error} />);
   if (!draft || !evaluation || !view || screen === "signup") return frame(<SignupScreen me={me} onNext={() => { window.location.hash = "onboarding"; }} onDemo={() => demoStart(begin)} onSaved={() => setAccount(true)} onSignedUp={() => refreshMe(() => { window.location.hash = "onboarding"; })} onLogout={() => void logout()} savedCount={plans.length} error={error} />);
   const tab = screen as Tab;
 
