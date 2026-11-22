@@ -39,3 +39,13 @@ test("GPT 재설계 8장: an AI question shows code-made inputs for its target a
   expect(html).toContain('type="date"');
   expect(html).not.toContain("질문 1/3");
 });
+
+test("question card names the source program instead of '해당 사업', shows which policy it changes, and uses styled answer buttons", () => {
+  const q = { question: "해당 사업의 지원금을 현재 받고 있나요?", policyId: "target", sourcePolicyId: "s", sourceName: "국민취업지원제도", ruleId: "r", answerKind: "receiving" as const };
+  const card = { policyId: "target", title: "청년도전지원사업" } as never;
+  const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {}, questions: [q], cards: [card] }));
+  expect(html).toContain("국민취업지원제도의 지원금을 현재 받고 있나요?");
+  expect(html).not.toContain("해당 사업");
+  expect(html).toContain("답하면 ‘청년도전지원사업’ 판정이 바뀌어요");
+  expect(html).toMatch(/<button class="[^"]*answerButton[^"]*"[^>]*>받고 있어요<\/button>/);
+});
