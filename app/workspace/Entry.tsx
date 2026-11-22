@@ -30,10 +30,8 @@ export function SignupScreen({ onNext, onDemo, onSaved, savedCount, error }: { o
     <div className={s.entryContent}>
       <div className={s.steps}><i className={s.on} /><i /><i /></div>
       <h2>회원가입</h2>
-      <p>이메일로 만들거나, 쓰던 계정으로 바로 시작하세요.</p>
+      <p>이메일로 만들어 시작하세요.</p>
       <form className={s.form} noValidate onSubmit={e => { e.preventDefault(); onNext(); }}>
-        <div className={s.social}><button type="button" className={s.kakao} onClick={onNext}>카카오로 시작</button><button type="button" className={s.naver} onClick={onNext}>네이버로 시작</button></div>
-        <div className={s.or}>또는 이메일로</div>
         <label>이메일<input type="email" placeholder="name@example.com" autoComplete="off" /></label>
         <label>비밀번호 <span className={s.hint}>영문·숫자 포함 8자 이상</span><input type="password" autoComplete="off" /></label>
         <label>비밀번호 확인<input type="password" autoComplete="off" /></label>

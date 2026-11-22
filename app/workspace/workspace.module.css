@@ -247,11 +247,6 @@ html:has(.app) { zoom:.75; }
 .spread { justify-content:space-between; }
 .spread .primaryButton { min-height:48px; padding:0 22px; }
 .wideButton { min-height:52px; font-size:16px; }
-.social { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.kakao { background:#FEE500; color:#191919; border-radius:999px; font-weight:650; }
-.naver { background:#03C75A; color:#fff; border-radius:999px; font-weight:650; }
-.or { display:flex; align-items:center; gap:12px; color:#61708b; font-size:13px; margin:6px 0; }
-.or::before,.or::after { content:""; flex:1; height:1px; background:#e4e9f0; }
 .accountGrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .panel { background:#fff; border:1px solid #fff; border-radius:22px; box-shadow:0 10px 24px -14px rgba(22,34,74,.3); padding:18px; }
 .panel h2 { margin-bottom:12px; }

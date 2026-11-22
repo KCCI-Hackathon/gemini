@@ -83,8 +83,6 @@ test("signup is a demo screen that never sends or stores input", () => {
   (findAll(tree, el => el.type === "form")[0].props!.onSubmit as (e: unknown) => void)({ preventDefault });
   expect(preventDefault).toHaveBeenCalled();
   expect(onNext).toHaveBeenCalledTimes(1);
-  for (const label of ["카카오로 시작", "네이버로 시작"]) (findAll(tree, el => el.type === "button" && textOf(el) === label)[0].props!.onClick as () => void)();
-  expect(onNext).toHaveBeenCalledTimes(3);
   expect(fetchSpy).not.toHaveBeenCalled();
   expect(store.setItem).not.toHaveBeenCalled();
   const html = renderToStaticMarkup(React.createElement(SignupScreen, { onNext, onDemo: () => {}, onSaved: () => {}, savedCount: 2 }));
@@ -92,6 +90,7 @@ test("signup is a demo screen that never sends or stores input", () => {
   expect(html).toContain('href="/login"');
   expect(html).toContain("저장한 계획 확인 (2)");
   expect(html).not.toContain("알림 받기");
+  for (const word of ["카카오", "네이버", "또는 이메일로"]) expect(html).not.toContain(word);
 });
 test("onboarding notice matches actual ai use", () => {
   const html = renderToStaticMarkup(React.createElement(ProfileForm, { onSave: () => {} }));

@@ -32,3 +32,9 @@ test("demo login never sends or stores input", () => {
   expect(html).toContain('href="/app#signup"');
   expect(DEMO_MESSAGE).toBe("시연용 화면이에요. 입력한 내용은 어디로도 전송되지 않아요.");
 });
+
+test("login has no social sign-in and always shows the demo notice", () => {
+  const html = renderToStaticMarkup(React.createElement(LoginForm));
+  for (const word of ["카카오", "네이버", "또는"]) expect(html).not.toContain(word);
+  expect(html).toContain(DEMO_MESSAGE);
+});
