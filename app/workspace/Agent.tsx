@@ -102,7 +102,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
     </div>)}
   </div>;
   return (
-    <aside className={s.agent} aria-label="정책 길잡이">
+    <aside className={s.agent} aria-label="정책 길잡이" data-tour="agent">
       <div className={s.agentHead}>
         {avatarFailed ? <span className={s.agentAvatarFallback} role="img" aria-label="PathFinder 길잡이">🤖</span> : <img className={s.agentAvatar} src="/pathfinder/robot-face.png" alt="PathFinder 길잡이" onError={() => setAvatarFailed(true)} />}
         <div><h2>길잡이</h2><small>일정을 말하면 보드에 바로 반영해요</small></div>

@@ -409,3 +409,22 @@ html:has(.app) { zoom:.75; }
 .plantFlag.plantStill i { border-left-width:14px; border-top-width:6px; border-bottom-width:6px; animation:none; }
 .plantFlag.plantStill::after { display:none; }
 @media (prefers-reduced-motion:reduce) { .plantFlag,.plantFlag i { animation:none; opacity:1; } }
+
+/* 처음 사용 안내(시안 landing/app.html 의 투어를 옮김): 화면을 어둡게 하고 한 칸씩 비춘다 */
+.tour { position:fixed; inset:0; z-index:250; }
+.tourHole { position:absolute; border-radius:18px; box-shadow:0 0 0 9999px rgba(15,24,54,.55); transition:all .7s cubic-bezier(.2,.8,.2,1); pointer-events:none; outline:3px solid #9FC1FF; }
+.tourBox { position:absolute; width:360px; background:#fff; border-radius:22px; padding:18px 18px 14px; box-shadow:0 30px 60px -20px rgba(15,24,54,.5); transition:left .7s ease,top .7s ease; animation:tourIn .35s ease; }
+@keyframes tourIn { from { opacity:0; transform:translateY(8px); } }
+.tourHead { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.tourHead img { width:40px; height:40px; object-fit:contain; }
+.tourStep { font-size:13px; font-weight:700; color:#2C64DB; }
+.tourSkip { margin-left:auto; font-size:13px; color:#5E6782; min-height:32px !important; padding:0 6px; }
+.tourBox h3 { font-size:18px; margin:0 0 6px; }
+.tourBox p { font-size:14px; line-height:1.7; color:#4A5470; margin:0; }
+.tourFoot { display:flex; align-items:center; justify-content:space-between; margin-top:14px; }
+.tourDots { display:flex; gap:5px; }
+.tourDots i { width:7px; height:7px; border-radius:50%; background:#D6E2F5; transition:width .3s; }
+.tourDots i.tourDotOn { background:#2C64DB; width:18px; border-radius:99px; }
+.tourButtons { display:flex; gap:6px; }
+.tourBox .outlineButton,.tourBox .primaryButton { min-height:38px; padding:6px 14px; }
+@media (prefers-reduced-motion:reduce) { .tourHole,.tourBox { transition:none; animation:none; } }
