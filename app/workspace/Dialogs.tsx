@@ -46,7 +46,7 @@ const isHttp = (url: string | null | undefined): url is string => !!url && url.s
 /** AI 공고 확인 결과: 판정 · 근거 인용 · 출처 · 확인한 링크 (사람 미확인) */
 function VerifyView({ r, source }: { r: VerifyResult; source?: string }) {
   return <div className={s.evidence}>
-    <strong>AI 대조 결과(사람 미확인)</strong>{source === "saved" && <span className={s.hint}> · 저장된 실행</span>}
+    <strong>AI 대조 결과</strong>{source === "saved" && <span className={s.hint}> · 저장된 실행</span>}
     {r.outcome === "verified_against_notice" ? <p>판정: 공식 공고와 대조함{isHttp(r.noticeUrl) && <> · <a href={r.noticeUrl} target="_blank" rel="noopener noreferrer">근거 공고 열기</a></>}</p> : <p>판정: 공식 공고를 확인하지 못했어요. 이 정책은 확인 필요로 둬요.</p>}
     {r.findings.map((f, i) => <blockquote key={i}>{f.quote}</blockquote>)}
     {r.mismatches.map((m, i) => <div key={i}><b>{MISMATCH[m.kind] ?? m.kind}</b><blockquote>{m.quote}</blockquote>{m.kind === "different_program" && isHttp(m.noticeUrl) && <a href={m.noticeUrl} target="_blank" rel="noopener noreferrer">다른 사업 공고 원문</a>}</div>)}
