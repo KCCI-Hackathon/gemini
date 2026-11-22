@@ -193,3 +193,12 @@ test("review M1/M4: amounts in 원 are not treated as account numbers; unknown r
   await handleCounsel(user, m.ctx({ env: { ...env, PLAN_AI_FOR_USERS: "true" } }));
   expect(JSON.stringify(m.calls[0])).not.toMatch(/"region":"\d{5}"/);
 });
+
+test("403 says why: the users switch being off is not reported as missing consent", async () => {
+  const user = { ...demo, consent: true, profile: { ...demo.profile, source: "user" as const }, input: { ...input, demoId: undefined } };
+  const m = scripted([{ name: "no_more_questions", input: {} }]);
+  const off = await handleCounsel(user, m.ctx({ env: { ...env, PLAN_AI_FOR_USERS: "false" } }));
+  expect(off).toMatchObject({ status: 403, body: { reason: "users_off" } });
+  const noConsent = await handleCounsel({ ...user, consent: false }, m.ctx({ env: { ...env, PLAN_AI_FOR_USERS: "true" } }));
+  expect(noConsent).toMatchObject({ status: 403, body: { reason: "consent" } });
+});

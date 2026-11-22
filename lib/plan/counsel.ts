@@ -63,6 +63,7 @@ export type CounselBody = {
   redacted?: boolean;
   timedOut?: boolean;
   disabled?: boolean;
+  reason?: "users_off" | "consent";
   error?: string;
 };
 type Out = { status: number; body: CounselBody };
@@ -171,7 +172,9 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   const req = parsed.data;
   const persona = isDemoPersona(req);
   // 실사용자: 운영 스위치 + 화면 동의 둘 다(설계 7장). 아니면 GPT 호출 0회(G5).
-  if (!persona && (ctx.env.PLAN_AI_FOR_USERS !== "true" || !req.consent)) return { status: 403, body: { kind: "none", disabled: true, error: "동의하지 않았거나 실제 사용자 AI 상담이 꺼져 있어요." } };
+  // 거절 이유를 나눠 보낸다: 화면이 동의 안 함(다시 동의 요청)과 운영 스위치 꺼짐(규칙 추천으로)을 다르게 안내한다.
+  if (!persona && ctx.env.PLAN_AI_FOR_USERS !== "true") return { status: 403, body: { kind: "none", disabled: true, reason: "users_off", error: "지금은 실제 사용자 AI 상담이 꺼져 있어요." } };
+  if (!persona && !req.consent) return { status: 403, body: { kind: "none", disabled: true, reason: "consent", error: "AI 상담 사용에 동의해 주세요." } };
   if (req.action === "message" && !req.message?.trim()) return { status: 400, body: { kind: "none", error: "메시지가 비어 있어요." } };
 
   // 식별 정보 지우기(G6). 이력에도 똑같이.
