@@ -362,3 +362,9 @@ html:has(.app) { zoom:.75; }
 .agentFabHidden { display:none; }
 @media print { .agentFab { display:none!important; } }
 @media(prefers-reduced-motion:reduce) { .agentDrawer .agent { animation:none; } }
+/* AI 상담 동의 전 : 안내문과 동의 버튼이 패널을 채운다 */
+.agentGate { flex:1 1 0; min-height:0; overflow-y:auto; display:flex; flex-direction:column; justify-content:center; gap:14px; padding:28px 24px; }
+.agentGate h3 { margin:0; font-size:20px; color:#16224A; }
+.agentGate p { margin:0; font-size:14px; line-height:1.7; color:#3a4566; }
+.agentGate strong { color:#16224A; }
+.agentGate button { margin-top:8px; width:100%; min-height:48px; }
