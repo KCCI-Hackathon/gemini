@@ -297,3 +297,27 @@ html:has(.app) { zoom:.75; }
 .answerForm { display:flex; flex-direction:column; gap:8px; }
 .answerForm label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:#364562; }
 .answerForm input { min-height:36px; border:1px solid #D6E2F5; border-radius:10px; padding:6px 10px; font-size:14px; background:#FFFFFF; }
+
+/* 생일 날짜 전용 입력과 지역 단계 선택 */
+.profileInputGroup { position:relative; display:grid; grid-template-columns:minmax(0,1fr) 48px; align-items:end; gap:6px; min-width:0; }
+.profileInputGroup>label { grid-column:1; }
+.calendarTrigger { grid-column:2; grid-row:1; border:1px solid #cbd5e5!important; border-radius:9px!important; background:#fff!important; color:#2C64DB!important; font-size:20px!important; }
+.profileInputGroup>.hint,.profileInputGroup>.error { grid-column:1/-1; }
+.dateCalendar { position:absolute; z-index:20; top:calc(100% + 6px); left:0; width:min(340px,calc(100vw - 48px)); padding:14px; border:1px solid #cbd5e5; border-radius:14px; background:#fff; box-shadow:0 16px 42px rgba(22,34,74,.2); }
+.dateSelectors { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.dateSelectors label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+.dateSelectors select { width:100%; min-height:40px; padding:7px 9px; border:1px solid #cbd5e5; border-radius:8px; background:#fff; }
+.dateWeekdays,.dateGrid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; text-align:center; }
+.dateWeekdays { margin-bottom:3px; color:#61708b; font-size:12px; }
+.dateGrid { align-items:center; }
+.dateDay { min-height:38px!important; border-radius:8px!important; padding:4px!important; font-size:14px!important; font-variant-numeric:tabular-nums; }
+.dateDay:hover:not(:disabled) { background:#eaf1fb!important; }
+.dateDaySelected { background:#2C64DB!important; color:#fff!important; }
+.dateActions { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:9px; }
+.regionFieldset { min-width:0; }
+.regionPicker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; gap:8px; }
+.regionPicker label { min-width:0; }
+.regionPicker select { width:100%; min-width:0; }
+.agentAvatar { width:48px; height:48px; flex:none; object-fit:contain; }
+.agentAvatarFallback { width:48px; height:48px; flex:none; display:grid; place-items:center; border-radius:50%; background:#eaf1ff; font-size:27px; }
+@media(max-width:520px) { .regionPicker { grid-template-columns:1fr; } .dateCalendar { width:min(320px,calc(100vw - 40px)); } }

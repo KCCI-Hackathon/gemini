@@ -26,7 +26,6 @@ function AiQuestionCard({ text, target, onAnswer, onSkip, onLater, onShowRecomme
     {!number && onShowRecommendation && <button type="button" className={s.textButton} onClick={onShowRecommendation}>지금 추천 보기</button>}
   </fieldset>;
 }
-import { Robot } from "./Robot";
 import s from "./workspace.module.css";
 export type Message = { id: number; role: "assistant" | "user"; text: string };
 type AnswerHandler = (question: BenefitQuestion, answer: BenefitAnswer) => void;
@@ -78,6 +77,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   questions?: BenefitQuestion[]; onAnswer: AnswerHandler; today?: string;
 }) {
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const pick = pickQuestion(questions ?? [], skipped);
   const first = pick.question;
   const currentQuestionKey = first ? questionKey(first) : null;
@@ -104,7 +104,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   return (
     <aside className={s.agent} aria-label="정책 길잡이">
       <div className={s.agentHead}>
-        <Robot />
+        {avatarFailed ? <span className={s.agentAvatarFallback} role="img" aria-label="PathFinder 길잡이">🤖</span> : <img className={s.agentAvatar} src="/pathfinder/robot-face.png" alt="PathFinder 길잡이" onError={() => setAvatarFailed(true)} />}
         <div><h2>길잡이</h2><small>일정을 말하면 보드에 바로 반영해요</small></div>
         <button className={`${s.iconButton} ${s.agentClose}`} onClick={onClose} aria-label="에이전트 닫기">×</button>
       </div>

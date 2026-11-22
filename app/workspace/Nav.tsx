@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import s from "./workspace.module.css";
 
 export type Tab = "board" | "saved" | "roadmap" | "account";
-export type Screen = Tab | "signup" | "onboarding" | "building";
-const SCREENS: Screen[] = ["signup", "onboarding", "building", "board", "saved", "roadmap", "account"];
+export type Screen = Tab | "signup" | "onboarding" | "planning" | "building";
+const SCREENS: Screen[] = ["signup", "onboarding", "planning", "building", "board", "saved", "roadmap", "account"];
 const WORK: Screen[] = ["board", "saved", "roadmap", "account"];
 
 // 주소의 해시(#board 등)를 화면 이름으로 바꾼다. 모르는 해시는 null

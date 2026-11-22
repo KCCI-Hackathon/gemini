@@ -15,6 +15,7 @@ import { regionLabel } from "@/lib/data/regions";
 import { toKstDate } from "@/lib/date";
 import { PERSONA_A } from "@/lib/judge/personas";
 import type { Profile } from "@/lib/judge/types";
+import { ageRange } from "@/lib/judge/personal";
 import { takeQuota } from "@/lib/limits";
 import { evaluateRequest } from "@/lib/planner/catalog";
 import { findNamedCards } from "@/lib/planner/commands";
@@ -160,10 +161,9 @@ function evaluationForAI(ev: Evaluation, persona: boolean, profile: Profile, inp
 }
 function profileForAI(req: CounselRequest, persona: boolean, today: string) {
   const p = req.profile;
-  const age = Number(today.slice(0, 4)) - Number(p.birthYm.slice(0, 4));
+  const [minAge, maxAge] = ageRange(p.birthYm, today, p.birthDate);
   return {
-    preferred_category: req.input.preferredCategory === "all" || req.input.mutedKeys.includes("interest") ? "모든 분야" : CATEGORIES[req.input.preferredCategory].label,
-    age: persona ? p.birthYm : `만 ${age - 1}~${age}세`, region: persona ? p.sigungu : regionLabel(p.sigungu) === p.sigungu ? "지역 미상" : regionLabel(p.sigungu), status: p.currentStatus,
+    age: persona ? p.birthYm : minAge === maxAge ? `만 ${minAge}세` : `만 ${minAge}~${maxAge}세`, region: persona ? p.sigungu : regionLabel(p.sigungu) === p.sigungu ? "지역 미상" : regionLabel(p.sigungu), status: p.currentStatus,
     schedule: (req.input.events ?? []).map(e => ({ type: e.type, date: relDay(today, e.date, persona) })),
     benefits: (p.benefits ?? []).map(b => ({ policy_id: b.policyId, status: b.status ?? "모름" })),
     ...answeredLabels(p),

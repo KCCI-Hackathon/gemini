@@ -31,7 +31,7 @@ function regionForAI(code: string): string {
 
 export function summarizeForAI(s: PlanSession, now: Date): AiSummary {
   const today = toKstDate(now);
-  const [a, b] = ageRange(s.profile.birthYm, today);
+  const [a, b] = ageRange(s.profile.birthYm, today, s.profile.birthDate);
   const training = s.profile.events.find((e) => e.type === "training_completion" && e.date >= today);
   const base = effectiveStatus(s.profile).has("in_training") && training ? "수료일" : "오늘";
   const plans = [
