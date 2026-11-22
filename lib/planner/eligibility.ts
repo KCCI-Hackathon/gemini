@@ -13,6 +13,7 @@ export function countEligibilityTabs(cards: Pick<Card, "offeringId" | "stageId" 
     blocked: unique.filter(card => card.eligibility === "blocked").length,
     needs_check: unique.filter(card => card.eligibility === "needs_check").length,
     eligible: unique.filter(card => card.eligibility === "eligible").length,
+    all: unique.filter(card => card.eligibility !== "blocked").length,
   };
 }
 
