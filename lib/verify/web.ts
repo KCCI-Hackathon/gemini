@@ -1,10 +1,12 @@
 // 공고 탐색에 쓰는 웹 접근. 접근 범위와 한도는 여기서 강제하며 모델이 넘을 수 없다(설계 5장 ②).
-import { DeadlineExceeded } from "@/lib/ai/deadline";
 
 const PUBLIC_SUFFIXES = [".go.kr", ".or.kr", ".re.kr"];
 /** 접미사 규칙에 안 걸리는 정부 공식 사이트: 정부24, 대한민국 정책브리핑 */
 const PUBLIC_DOMAINS = ["gov.kr", "korea.kr"];
 const BLOCKED = /(saramin|jobkorea|albamon|incruit|blog\.naver|cafe\.naver|tistory|instagram|facebook|youtube|kmong|wanted\.co\.kr)/;
+
+/** 페이지 하나가 시간 안에 안 열림(검증 전체 deadline과 다르다) */
+class PageTimeout extends Error {}
 
 export const LIMITS = { opens: 6, timeoutMs: 10_000, maxChars: 20_000 } as const;
 
@@ -99,7 +101,7 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
       return { response, text: response.ok ? await response.text() : "" };
     } catch (error) {
       signal?.throwIfAborted();
-      if (timeout.aborted) throw new DeadlineExceeded();
+      if (timeout.aborted) throw new PageTimeout();
       throw error;
     }
   }
@@ -112,7 +114,6 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
         robotsCache.set(origin, text);
       } catch (error) {
         signal?.throwIfAborted();
-        if (error instanceof DeadlineExceeded) throw error;
         robotsCache.set(origin, "");
       }
     }
@@ -148,7 +149,7 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
         return { ok: true, text };
       } catch (e) {
         signal?.throwIfAborted();
-        if (e instanceof DeadlineExceeded) throw e;
+        if (e instanceof PageTimeout) return { ok: false, text: "접속 시간 초과" };
         return { ok: false, text: `접속 실패: ${String(e)}` };
       }
     },

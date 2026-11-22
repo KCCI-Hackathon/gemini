@@ -132,7 +132,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       if (!body.result) throw new Error("공고 확인 결과가 비어 있어요.");
       setVerifyMap(v => ({ ...v, [id]: { status: "done", result: body.result, source: body.source } }));
-      setMark(id, "ai");
+      // 공고를 못 찾은 결과는 배지를 바꾸지 않는다
+      if ((body.result.fieldChecks ?? []).some((f: { status: string }) => f.status === "match" || f.status === "differs")) setMark(id, "ai");
     } catch (e) {
       setVerifyMap(v => ({ ...v, [id]: { status: "error", error: e instanceof Error ? e.message : "공고 확인에 실패했어요." } }));
     }

@@ -275,6 +275,11 @@ function asObjects(x: unknown): Record<string, unknown>[] {
   return Array.isArray(x) ? x.filter((i): i is Record<string, unknown> => !!i && typeof i === "object") : [];
 }
 
+/** 공고를 못 찾았을 때의 결과 모양(loop 끝과 404 즉시 종료가 함께 쓴다) */
+function notFoundResult(policyId: string, version: VerifyVersion, mode: "agent" | "fixed", now: Date, state: State): VerifyResult {
+  return { policyId, version, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(now), trail: state.trail, usage: state.usage };
+}
+
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
@@ -289,6 +294,12 @@ async function executeTool(
     ctx.signal.throwIfAborted();
     state.trail.push({ step, action: "open", target: url, reason: r.ok ? "열림" : r.text });
     if (r.ok) ctx.openedUrls.push(url);
+    // 공고 링크가 없어졌으면(404·410) 다른 길을 찾지 않고 바로 결과를 확정한다
+    if (!r.ok && /^HTTP (404|410)$/.test(r.text)) {
+      state.trail.push({ step: step + 1, action: "stop", target: url, reason: `공고 링크가 없어졌어요(${r.text})` });
+      state.result = notFoundResult(ctx.policy.id, ctx.version, ctx.mode, ctx.now, state);
+      return { content: r.text, isError: true };
+    }
     if (!r.ok && r.text.includes("한도")) state.limitHit = true;
     if (state.limitHit) return { content: LIMIT_MESSAGE, isError: true };
     return r.ok ? { content: r.text } : { content: r.text, isError: true };
@@ -471,7 +482,7 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
     return state.result;
   }
   state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: stopReason });
-  return { policyId: policy.id, version, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(deps.now), trail: state.trail, usage: state.usage };
+  return notFoundResult(policy.id, version, mode, deps.now, state);
 }
 
 export async function runVerification(policyId: string, deps: Deps): Promise<VerifyResult> {
