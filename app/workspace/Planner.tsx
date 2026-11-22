@@ -34,17 +34,8 @@ import { countEligibilityTabs } from "@/lib/planner/eligibility";
 import { selectBoardCards } from "@/lib/planner/board-cards";
 import { createStarStore } from "@/lib/planner/stars";
 import { Schedule } from "./Schedule";
-import { GooMenu, type GooItem } from "./GooMenu";
+import { AgentFab } from "./AgentFab";
 import s from "./workspace.module.css";
-
-const gooIcon = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />;
-// 길잡이 얼굴 버튼에서 흘러나오는 기능 4개
-const GOO_ITEMS: GooItem[] = [
-  { key: "chat", label: "길잡이와 대화", icon: gooIcon('<path d="M5 18.5V6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9z"/><path d="M8.5 9h7M8.5 12h4.5"/>') },
-  { key: "recommend", label: "AI 추천 경로", icon: gooIcon('<path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/>') },
-  { key: "schedule", label: "일정 추가", icon: gooIcon('<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16M12 13v4M10 15h4"/>') },
-  { key: "deadline", label: "내 기한 설명", icon: gooIcon('<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>') },
-];
 
 async function fetchEvaluation(profile: Profile, input: PlannerInput): Promise<Evaluation> {
   const response = await fetch("/api/judge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile, benefits: profile.benefits, plannerV2: input }) });
@@ -130,7 +121,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const [eventDialog, setEventDialog] = useState<PlanEvent | "new" | null>(null);
   const [saveDialog, setSaveDialog] = useState<PendingSave | null>(null);
   const [account, setAccount] = useState(false), [editProfile, setEditProfile] = useState(false), [chipMenu, setChipMenu] = useState<string | null>(null), [copyPlan, setCopyPlan] = useState<SavedPlan | null>(null);
-  // 길잡이 채팅 창. 평소에는 닫혀 있고 오른쪽 아래 얼굴 버튼(GooMenu)으로 연다
+  // 길잡이 채팅 창. 평소에는 닫혀 있고 오른쪽 아래 얼굴 버튼(AgentFab)으로 연다
   const [agentOpen, setAgentOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([initialMessage]); const messageId = useRef(1);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [storageNotice, setStorageNotice] = useState<string | null>(null);
@@ -570,10 +561,5 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
         ...profile, benefits: applyAnswer(profile.benefits ?? [], question, answer),
       });
     }} messages={messages} onSend={send} busy={busy} onClose={() => setAgentOpen(false)} />}
-    {tab !== "account" && <GooMenu items={GOO_ITEMS} hidden={agentOpen} face={<img src="/pathfinder/robot-face.png" alt="" />} onPick={key => {
-      if (key === "recommend") { openAiRecommendation(); return; }
-      if (key === "schedule" && !readOnly) { setEventDialog("new"); return; }
-      setAgentOpen(true);
-      if (key === "deadline") send("왜 제 기한은 더 빠른가요?");
-    }} />}</div>{showDialogs()}{toast && <div className={s.toast} role="status">{toast}</div>}</div>;
+    {tab !== "account" && <AgentFab hidden={agentOpen} face={<img src="/pathfinder/robot-face.png" alt="" />} onOpen={() => setAgentOpen(true)} />}</div>{showDialogs()}{toast && <div className={s.toast} role="status">{toast}</div>}</div>;
 }
