@@ -134,7 +134,7 @@ function profileForAI(req: CounselRequest, persona: boolean, today: string) {
   const p = req.profile;
   const age = Number(today.slice(0, 4)) - Number(p.birthYm.slice(0, 4));
   return {
-    age: persona ? p.birthYm : `만 ${age - 1}~${age}세`, region: persona ? p.sigungu : regionLabel(p.sigungu), status: p.currentStatus,
+    age: persona ? p.birthYm : `만 ${age - 1}~${age}세`, region: persona ? p.sigungu : regionLabel(p.sigungu) === p.sigungu ? "지역 미상" : regionLabel(p.sigungu), status: p.currentStatus,
     schedule: (req.input.events ?? []).map(e => ({ type: e.type, date: relDay(today, e.date, persona) })),
     benefits: (p.benefits ?? []).map(b => ({ policy_id: b.policyId, status: b.status ?? "모름" })),
   };
@@ -178,7 +178,8 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   let redacted = false;
   const scrub = (t: string) => { const r = scrubPII(t); redacted ||= r.redacted; return r.text; };
   const message = req.message ? scrub(req.message.trim()) : undefined;
-  const history = req.history.map(h => ({ role: h.role, text: scrub(h.text) }));
+  // 이력에는 사용자 원문을 싣지 않는다(설계 7.1 — 공격 문구가 다음 턴에 남지 않게). 화면이 만든 짧은 요약(답 · 추천 결과)만, 120자까지.
+  const history = req.history.filter(h => h.role === "assistant").map(h => ({ role: h.role, text: scrub(h.text.slice(0, 120)) }));
   const withRedaction = (body: CounselBody): CounselBody => redacted ? { ...body, redacted: true, notice: [body.notice, "개인정보로 보이는 부분은 빼고 보냈어요."].filter(Boolean).join(" ") } : body;
 
   const evaluation = evaluateRequest(req.profile, req.input, ctx.now);
@@ -187,6 +188,7 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   const aiAction = req.action === "recommend" ? "recommend" : "message";
   if (!planAiConfigured(ctx.env, aiAction)) return { status: 503, body: ruleFallback(evaluation, "AI가 꺼져 있어 조건 기준 경로를 표시해요") };
 
+  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: ruleFallback(evaluation, "오늘의 AI 사용 한도에 도달해 조건 기준 경로를 표시해요") };
   // 욕설 · 혐오 · 자해 검사. 검사 실패는 닫힌 쪽(보내지 않음).
   if (message && ctx.env.MODERATION_ENABLED === "true") {
     const m = ctx.moderate ? await ctx.moderate(message) : { error: true as const };
@@ -197,7 +199,6 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   const cacheable = req.action === "recommend" && !message && !history.length;
   const key = cacheable ? `${toKstDate(ctx.now)}:${createHash("sha256").update(JSON.stringify({ p: profileForAI(req, persona, evaluation.today), e: evaluationForAI(evaluation, persona) })).digest("hex")}` : null;
   if (key && cache.has(key)) return { status: 200, body: cache.get(key)! };
-  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: ruleFallback(evaluation, "오늘의 AI 사용 한도에 도달해 조건 기준 경로를 표시해요") };
 
   try {
     const body = await withDeadline(DEADLINE_MS, deadline => runCounsel(req, persona, message, history, evaluation, ctx, deadline, aiAction), startedAt);
@@ -244,7 +245,9 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
     if (!uses.length) return req.action === "recommend" ? fallback() : { kind: "none" };
     const results: Record<string, unknown>[] = [];
     for (const u of uses) {
-      const input = (u.input ?? {}) as Record<string, unknown>;
+      // 모델 출력은 믿지 않는다. 객체가 아니거나 칸이 이상하면 빈 값으로 보고 각 도구가 거절한다.
+      const input = (u.input && typeof u.input === "object" && !Array.isArray(u.input) ? u.input : {}) as Record<string, unknown>;
+      const objects = <T,>(v: unknown) => (Array.isArray(v) ? v : []).filter((x): x is T => !!x && typeof x === "object" && !Array.isArray(x));
       const reply = (content: string, isError = false) => results.push({ type: "tool_result", tool_use_id: u.id, content: sent(content), ...(isError ? { is_error: true } : {}) });
       if (u.name === "get_evaluation") reply(JSON.stringify(evaluationForAI(ev, persona)));
       else if (u.name === "get_open_questions") reply(JSON.stringify(questions));
@@ -268,12 +271,14 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
         return { kind: "question", text, target: target.data, options: answerOptions(target.data), source: "ai" };
       } else if (u.name === "answer_user") {
         const text = typeof input.text === "string" ? input.text.trim() : "";
-        const cites = Array.isArray(input.citations) ? input.citations as { evidence_id?: string; offering_id?: string }[] : [];
-        const valid = cites.length > 0 && cites.every(c => (c.evidence_id && evidenceIds.has(c.evidence_id)) || (c.offering_id && offerings.has(c.offering_id)));
+        const raw = Array.isArray(input.citations) ? input.citations : [];
+        const cites = objects<{ evidence_id?: unknown; offering_id?: unknown }>(raw).map(c => ({ evidence_id: typeof c.evidence_id === "string" && evidenceIds.has(c.evidence_id) ? c.evidence_id : undefined, offering_id: typeof c.offering_id === "string" && offerings.has(c.offering_id) ? c.offering_id : undefined }));
+        // 인용 하나라도 이상하면(객체가 아님 · 모르는 ID) 답을 버린다
+        const valid = raw.length > 0 && cites.length === raw.length && cites.every(c => c.evidence_id || c.offering_id);
         if (!text || !valid || !guardResponse(text, known).ok || numbersOutside(text, allowed)) return { kind: "answer", text: UNCITED, citations: [], source: "rule" }; // G4
         return { kind: "answer", text, source: "ai", citations: cites.map(c => c.evidence_id ? { evidenceId: c.evidence_id, label: evidenceIds.get(c.evidence_id)! } : { offeringId: c.offering_id!, label: ev.cards.find(x => x.offeringId === c.offering_id)!.title }) };
       } else if (u.name === "finish_plan") {
-        const picks = Array.isArray(input.picks) ? input.picks as { offering_id?: string; stage_id?: string; why?: string }[] : [];
+        const picks = objects<{ offering_id?: unknown; stage_id?: unknown; why?: unknown }>(input.picks);
         const kept: CounselPick[] = [];
         let dropped = 0;
         for (const p of picks) {

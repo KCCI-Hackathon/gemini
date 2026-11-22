@@ -90,7 +90,7 @@ const PII = [
   /\b0\d{1,2}[-.\s]\d{3,4}[-.\s]\d{4}\b/g, // 일반 전화
   /[\w.+-]+@[\w-]+(\.[\w-]+)+/g, // 이메일
   /\b\d{2,6}-\d{2,6}-\d{2,8}(-\d{1,4})?\b/g, // 계좌(하이픈)
-  /(?<!\d)\d{10,14}(?!\d)/g, // 계좌(숫자만)
+  /(?<!\d)\d{10,14}(?![\d원만])/g, // 계좌(숫자만). 뒤에 '원' · '만'이 붙으면 금액이라 그대로
 ];
 export function scrubPII(text: string): { text: string; redacted: boolean } {
   let out = text, redacted = false;

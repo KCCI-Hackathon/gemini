@@ -237,7 +237,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     const result = await requestCounsel({ draft: current, action, message, history: counselHistory.current, consent, outOfScopeStreak: outOfScope.current });
     if (id !== planSeq.current) return;
     setPlanLoading(false);
-    if (message) remember({ role: "user", text: message });
+    // 이력에는 원문 대신 짧은 표시만(설계 7.1). 서버도 사용자 원문 이력은 버린다.
+    if (message) remember({ role: "user", text: "자유 질문" });
     if (result.notice && result.kind !== "plan" && result.kind !== "fallback") say(result.notice);
     if (result.kind === "out_of_scope") outOfScope.current++; else if (action === "message") outOfScope.current = 0;
     if (result.status === 403) { say("AI 상담을 쓰려면 아래에서 ‘AI 상담 사용’에 동의해 주세요. 동의 전에는 조건 기준 질문과 추천만 보여 드려요."); return; }
@@ -372,7 +373,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     <div className={s.boardScroll} ref={boardRef} aria-label="시점별 정책 보드"><div className={s.board}>{evaluation.stages.map(stage => { const cards = visibleCards(stage.stageId); const limit = limits[stage.stageId] ?? 4; return <section key={stage.stageId} id={`stage-${stage.stageId}`} className={`${s.column} ${focusedStage === stage.stageId ? s.focusedColumn : ""}`}><button className={s.columnHeader} aria-label={`${stage.label}, 정책 ${cards.length}개 전체 보기`} onClick={() => setGridStage(stage.stageId)}><h2>{stage.label}<span>{cards.length}</span></h2><p>{dateLabel(stage.start)} {stage.endExclusive ? `~ ${dateLabel(addDays(stage.endExclusive, -1))}` : "이후"} <span aria-hidden="true">⊞</span></p></button><div className={s.columnCards}>{cards.slice(0, limit).map(card => renderCard(card))}</div>{cards.length === 0 && <div className={s.emptyState}>{filter.unavailable ? "현재 조건에서 신청 불가로 확인된 정책이 없어요." : `이 시점에는 ${filter.category === "all" ? "표시할" : CATEGORIES[filter.category].label} 정책이 없어요.`}<button className={s.textButton} onClick={() => setFilter({ category: "all", unavailable: false })}>전체 보기</button></div>}{cards.length > limit && <button data-stage={stage.stageId} className={s.moreButton} onClick={() => setLimits(prev => ({ ...prev, [stage.stageId]: limit + 4 }))}>정책 더 보기 · {cards.length - limit}개 남음</button>}<p className={s.columnFooter}>{Math.min(limit, cards.length)} / {cards.length}개 표시</p></section>; })}</div></div></> : <Roadmap plan={view} onDetail={setDetail} />}
     <p className={s.notice}>기준일 {fullDate(evaluation.today)} · 공고 데이터 기준 {evaluation.asOf} · 현재 공고와 입력한 예정일을 기준으로 계산한 결과입니다. 신청 전 공식 공고를 확인해 주세요.</p>
     </main><Agent today={evaluation.today} recommendation={activeRecommendation} cards={evaluation.cards} planLoading={planLoading && !readOnly} aiQuestion={readOnly ? null : aiQuestion} onAiAnswer={value => { if (aiQuestion) void answerAi(aiQuestion.target, value); }} onAiSkip={() => setAiQuestion(null)}
-      consentNeeded={!readOnly && !!draft && !draft.input.demoId && !consent} onConsent={() => { setConsent(true); say("AI 상담을 켰어요. 언제든 계정 메뉴에서 끌 수 있어요."); }}
+      consentNeeded={!readOnly && !!draft && !draft.input.demoId && !consent} onConsent={() => { setConsent(true); say("AI 상담을 켰어요. 패널의 ‘AI 상담 끄기’로 언제든 끌 수 있어요."); }}
+      consentOn={!readOnly && !!draft && !draft.input.demoId && consent} onConsentOff={() => { setConsent(false); setAiQuestion(null); counselHistory.current = []; say("AI 상담을 껐어요. 조건 기준 질문과 추천만 보여 드려요."); }}
       questions={readOnly ? [] : evaluation.questions} onAnswer={(question, answer) => {
       const profile = draft.profileSnapshot;
       void mutate({ mutedKeys: draft.input.mutedKeys.filter(key => key !== "participation") }, {

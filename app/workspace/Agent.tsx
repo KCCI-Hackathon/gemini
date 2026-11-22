@@ -59,10 +59,10 @@ function QuestionCard({ question, onAnswer, busy, month }: { question: BenefitQu
   </fieldset>;
 }
 
-export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, cards, planLoading, today, aiQuestion, onAiAnswer, onAiSkip, consentNeeded, onConsent }: {
+export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, cards, planLoading, today, aiQuestion, onAiAnswer, onAiSkip, consentNeeded, onConsent, consentOn, onConsentOff }: {
   messages: Message[]; onSend: (text: string) => void; onClose: () => void; busy: boolean;
   aiQuestion?: { text?: string; target: CounselTarget } | null; onAiAnswer?: (value: string) => void; onAiSkip?: () => void;
-  consentNeeded?: boolean; onConsent?: () => void;
+  consentNeeded?: boolean; onConsent?: () => void; consentOn?: boolean; onConsentOff?: () => void;
   recommendation?: AiRecommendation | null; cards?: Card[]; planLoading?: boolean;
   questions?: BenefitQuestion[]; onAnswer: AnswerHandler; today?: string;
 }) {
@@ -78,6 +78,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
       <p>자유 질문 · 추천을 AI(OpenAI)가 정리해요. 보내는 것: 만 나이 범위, 시·군·구 이름, 학력·상태, 일정은 ‘오늘부터 N일 뒤’, 수혜 정책 이름과 상태, 그리고 쓴 질문(전화번호·주민번호·이메일·계좌번호는 지우고). 이름·생년월일·정확한 날짜는 보내지 않고, 대화는 저장하지 않아요. 판정은 늘 코드가 해요.</p>
       <button className={s.primaryButton} onClick={onConsent}>AI 상담 사용</button>
     </div>}
+    {consentOn && <button className={s.textButton} onClick={onConsentOff}>AI 상담 끄기</button>}
     {aiQuestion?.text && <AiQuestionCard key={aiQuestion.text} text={aiQuestion.text} target={aiQuestion.target} busy={busy} onAnswer={v => onAiAnswer?.(v)} onSkip={() => onAiSkip?.()} />}
     {!aiQuestion && first && <div className={s.questionWrap}>
       <p className={s.questionMeta}>질문 {pick.index}/{pick.total}</p>
