@@ -298,7 +298,13 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     if (message) remember({ role: "user", text: "자유 질문" });
     if (result.notice && result.kind !== "plan" && result.kind !== "fallback") say(result.notice);
     if (result.kind === "out_of_scope") outOfScope.current++; else if (action === "message") outOfScope.current = 0;
-    if (result.status === 403) { say("AI 상담을 쓰려면 아래에서 ‘AI 상담 사용’에 동의해 주세요. 동의 전에는 조건 기준 질문과 추천만 보여 드려요."); return; }
+    if (result.status === 403) {
+      if (result.reason === "consent") { setConsent(false); say("AI 상담을 쓰려면 아래에서 ‘AI 상담 사용’에 동의해 주세요. 동의 전에는 조건 기준 질문과 추천만 보여 드려요."); return; }
+      // 운영 스위치가 꺼진 경우: 다시 동의를 요구하지 않고 조건 기준 추천으로 넘어간다.
+      if (action === "recommend") setRecommendation({ source: "rule", summary: "", picks: current.evaluation.recommendations.map(c => ({ ...c, why: [] })), notice: "지금은 AI 상담이 꺼져 있어 조건 기준 경로를 표시해요" });
+      say("지금은 AI 상담이 꺼져 있어요. 조건 기준 질문과 추천으로 안내해 드릴게요. 일정 바꾸기(“취업을 2월 19일로 옮겨줘”)와 기한 설명은 그대로 쓸 수 있어요.");
+      return;
+    }
     if (result.kind === "question" && result.target) { setAiQuestion(result as CounselBody & { target: CounselTarget }); badAnswers.current = 0; remember({ role: "assistant", text: `질문: ${result.text}` }); return; }
     if (result.kind === "parsed" && result.target && result.value) { await answerAi(result.target, result.value); return; }
     if (result.kind === "answer") { say(`${result.text}${result.citations?.length ? `\n근거: ${result.citations.map(c => c.label).join(" · ")}` : ""}${result.source === "ai" ? "\n(AI 정리)" : ""}`); remember({ role: "assistant", text: `답변: ${(result.text ?? "").slice(0, 120)}` }); return; }
