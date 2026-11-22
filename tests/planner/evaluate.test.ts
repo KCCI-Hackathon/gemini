@@ -74,11 +74,32 @@ describe("exact-day planner acceptance", () => {
     expect(blocked.canReplace).toBe(false);
     expect(blocked.reasons.some(r => r.code === "PARTICIPATION_CONFLICT")).toBe(true);
   });
-  test("T14: muted residence defers eligibility and removes recommendations", () => {
-    const i = { ...input(), mutedKeys: ["residence"] };
+  test("muted residence keeps policies as explicitly conditional recommendations", () => {
+    const i = { ...input(), mutedKeys: ["status", "residence"] };
     const out = evaluatePlanner(DEMO_PROFILE, i, demoCatalog(), now);
     expect(out.cards.filter(c => c.offeringId === "demo-housing").every(c => c.availability === "needs_check")).toBe(true);
-    expect(out.recommendations.some(c => c.offeringId === "demo-housing")).toBe(false);
+    expect(out.recommendations).toHaveLength(out.stages.length * 2);
+    expect(out.recommendations.every(c => !!c.confirmation)).toBe(true);
+  });
+  test("confirmed cards take priority over model-preferred cards that still need confirmation", () => {
+    const base = demoCatalog().find(o => o.offeringId === "demo-housing")!;
+    const confirmed = { ...base, offeringId: "confirmed" };
+    const conditional = { ...base, offeringId: "conditional", overlapAssessment: "unresolved" as const };
+    const result = evaluatePlanner(DEMO_PROFILE, { ...input(), events: [] }, [conditional, confirmed], now, undefined, [], {
+      preferredRecommendations: [{ offeringId: conditional.offeringId, stageId: "current" }],
+    });
+    expect(result.recommendations).toEqual([
+      { offeringId: confirmed.offeringId, stageId: "current" },
+      { offeringId: conditional.offeringId, stageId: "current", confirmation: expect.any(String) },
+    ]);
+  });
+  test("muted conditions explain what the applicant can provide", () => {
+    const out = evaluatePlanner(DEMO_PROFILE, { ...input(), mutedKeys: ["status", "participation"] }, demoCatalog(), now);
+    const card = out.cards.find(c => c.offeringId === "demo-housing" && c.stageId === "current")!;
+    expect(card.reasons).toEqual(expect.arrayContaining([
+      { code: "MUTED_CONDITION", message: "현재 상태를 알려 주면 다시 판정해요" },
+      { code: "MUTED_PARTICIPATION", message: "받고 있는 지원을 알려 주면 함께 받을 수 있는지 확인해요" },
+    ]));
   });
   test("muting residence preserves a known disqualifying employment condition", () => {
     const o = { ...demoCatalog().find(o => o.offeringId === "demo-housing")!, rules: [{ key: "employed" as const, kind: "requires" as const, reviewed: true, evidenceId: "fixture-rule-1" }] };

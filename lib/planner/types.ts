@@ -8,10 +8,12 @@ export const CATEGORIES: Record<Category, { label: string; color: string }> = {
 export const EVENT_NAMES = { training_completion: "수료", employment: "취업", business_registration: "창업", relocation: "이사" };
 export type PlanEvent = { id: string; type: keyof typeof EVENT_NAMES; date: string; status: "scheduled" | "completed"; sigungu?: string };
 export type Choice = { offeringId: string; stageId: string };
+export type RecommendationChoice = Choice & { confirmation?: string };
+export type RecommendationPick = RecommendationChoice & { why: string[]; filled?: boolean };
 export type AiRecommendation = {
   source: "ai" | "rule";
   summary: string;
-  picks: (Choice & { why: string[] })[];
+  picks: RecommendationPick[];
   notice: string | null;
 };
 export type PlannerInput = { revision: number; events?: PlanEvent[]; choices: Choice[]; mutedKeys: string[]; preferredCategory: Category | "all"; demoId?: "pathfinder-demo-2026" };
@@ -46,6 +48,6 @@ export type BenefitQuestion = {
   /** monthly_amount 질문이 묻는 지급 월(YYYY-MM). 답을 이 달로 저장해야 같은 질문이 닫힌다(J-1). */
   month?: string;
 };
-export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: Choice[] };
+export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: RecommendationChoice[] };
 export type Draft = { draftId: string; profileSnapshot: Profile; input: PlannerInput; evaluation: Evaluation };
 export type SavedPlan = { planId: string; schemaVersion: 2; name: string; createdAt: string; source: "manual" | "recommendation" | "example"; recommendationSource?: AiRecommendation["source"]; profileSnapshot: Profile; input: PlannerInput; savedEvaluation: Evaluation };

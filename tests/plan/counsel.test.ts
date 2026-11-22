@@ -37,14 +37,27 @@ beforeEach(() => { resetCounselState(); resetLimits?.(); });
 test("G1: a positive AI suggestion cannot promote cards that are not classified eligible", async () => {
   const m = scripted([{ name: "get_evaluation", input: {} }, { name: "finish_plan", input: { summary: "시점별로 골랐어요", picks: open.filter(c => c.eligibility !== "eligible").slice(0, 2).map(c => ({ offering_id: c.offeringId, stage_id: c.stageId, why: "지금 열려 있어요" })) } }]);
   const out = await handleCounsel(demo, m.ctx());
-  expect(out.body.kind).toBe("fallback");
-  expect(out.body.source).toBe("rule");
-  expect(out.body.picks).toEqual(ev.recommendations.map(c => ({ ...c, why: [] })));
+  expect(out.body).toMatchObject({ kind: "plan", source: "ai" });
+  expect(out.body.picks?.filter(pick => pick.confirmation).every(pick => pick.why.length === 0)).toBe(true);
+});
+
+test.each(["꺼진 프로필 조건", "평가 목록", "수혜 조건을 꺼두어"])("internal wording is rejected in a cited answer: %s", async phrase => {
+  const m = scripted([{ name: "answer_user", input: {
+    text: `${phrase}을 확인해 주세요.`, citations: [{ offering_id: open[0].offeringId }],
+  } }]);
+  const out = await handleCounsel({ ...demo, action: "message", message: "이 정책의 조건을 알려줘" }, m.ctx());
+  expect(out.body).toMatchObject({ kind: "answer", source: "rule", citations: [] });
 });
 test("G1: the agent may ask one question first, with a target the code turns into answer options", async () => {
   const m = scripted([{ name: "get_open_questions", input: {} }, { name: "ask_user", input: { text: "교육은 언제 끝나요?", target: { kind: "event", event: "training_completion" } } }]);
   const out = await handleCounsel(demo, m.ctx());
   expect(out.body).toMatchObject({ kind: "question", target: { kind: "event", event: "training_completion" }, options: "date" });
+});
+test("after the prepared questions are complete, the model cannot replace the recommendation with another question", async () => {
+  const m = scripted([{ name: "ask_user", input: { text: "현재 상태는 어떤가요?", target: { kind: "status" } } }]);
+  const out = await handleCounsel({ ...demo, questionnaireComplete: true, input: { ...input, preferredCategory: "housing" } }, m.ctx());
+  expect(out.body).toMatchObject({ kind: "fallback", source: "rule" });
+  expect(JSON.stringify(m.calls[0].messages)).toContain("주거");
 });
 test("G1: a question whose target is not a judgement input is refused", async () => {
   const m = scripted([{ name: "ask_user", input: { text: "생년월이 언제예요?", target: { kind: "birth" } } }, { name: "no_more_questions", input: {} }]);
@@ -60,17 +73,45 @@ test("G2: a free question is answered with citations from the card's evidence; n
   expect(out.body).toMatchObject({ kind: "answer", source: "ai", citations: [{ evidenceId: card.evidence[0].evidenceId }] });
 });
 
-test("G3: blocked and needs-check cards picked by the model are dropped", async () => {
+test("G3: blocked cards are dropped and needs-check cards stay conditional", async () => {
   const uncertain = open.find(card => card.eligibility === "needs_check")!;
   const m = scripted([{ name: "finish_plan", input: { summary: "골랐어요", picks: [{ offering_id: blocked.offeringId, stage_id: blocked.stageId, why: "좋아요" }, { offering_id: uncertain.offeringId, stage_id: uncertain.stageId, why: "확인했어요" }] } }]);
   const out = await handleCounsel(demo, m.ctx());
-  expect(out.body).toMatchObject({ kind: "fallback", source: "rule", picks: ev.recommendations.map(c => ({ ...c, why: [] })) });
+  expect(out.body).toMatchObject({ kind: "plan", source: "ai" });
+  expect(out.body.picks?.some(pick => pick.offeringId === blocked.offeringId && pick.stageId === blocked.stageId)).toBe(false);
+  expect(out.body.picks?.find(pick => pick.offeringId === uncertain.offeringId && pick.stageId === uncertain.stageId)).toMatchObject({ confirmation: expect.any(String), why: [] });
+  expect(out.body.picks?.some(pick => pick.filled)).toBe(true);
 });
-test("G3: when every pick is dropped the rule recommendation replaces it", async () => {
+test("G3: when every model pick is dropped, the rule path still has conditional candidates", async () => {
   const m = scripted([{ name: "finish_plan", input: { summary: "골랐어요", picks: [{ offering_id: blocked.offeringId, stage_id: blocked.stageId, why: "좋아요" }] } }]);
   const out = await handleCounsel(demo, m.ctx());
   expect(out.body).toMatchObject({ kind: "fallback", source: "rule" });
-  expect(out.body.picks).toEqual(ev.recommendations.map(c => ({ ...c, why: [] })));
+  expect(out.body.picks?.some(pick => pick.confirmation)).toBe(true);
+});
+
+test.each(["yes", "no"] as const)("after a recent-history answer (%s), an empty model plan still shows conditional recommendations", async answer => {
+  const inputWithMutedStatus = { ...input, mutedKeys: ["status"] };
+  const answered = applyTarget(demo.profile, inputWithMutedStatus, { kind: "recent_history" }, answer);
+  const evaluation = evaluateRequest(answered.profile, answered.input, now);
+  expect(answered.profile.recentHistory).toBe(answer);
+  expect(evaluation.recommendations.length).toBeGreaterThan(0);
+  const m = scripted([{ name: "finish_plan", input: { summary: "", picks: [] } }]);
+  const out = await handleCounsel({ ...demo, action: "followup", ...answered }, m.ctx());
+  expect(out.body).toMatchObject({ kind: "fallback", source: "rule" });
+  expect(out.body.picks).toEqual(evaluation.recommendations.map(c => ({ ...c, why: [] })));
+  expect(out.body.picks?.every(pick => !!pick.confirmation)).toBe(true);
+});
+
+test("the model sees the same eligibility label as the planner", async () => {
+  const m = scripted([{ name: "get_evaluation", input: {} }, "text"]);
+  await handleCounsel(demo, m.ctx());
+  const messages = m.calls[1].messages as { content: unknown }[];
+  const [{ content }] = messages.at(-1)!.content as { content: string }[];
+  const cards = JSON.parse(content).cards as { offering_id: string; stage_id: string; judgement: string }[];
+  const different = cards.filter(item => open.some(card => card.offeringId === item.offering_id && card.stageId === item.stage_id
+    && card.availability === "eligible" && card.eligibility === "needs_check"));
+  expect(different.length).toBeGreaterThan(0);
+  expect(different.every(card => card.judgement === "확인 필요")).toBe(true);
 });
 
 test("G4: an answer without citations (or with unknown ones) is discarded with a notice", async () => {

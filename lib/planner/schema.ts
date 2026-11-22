@@ -10,6 +10,9 @@ export const ProfileSnapshotSchema = z.object({
   birthYm: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), birthDate: z.string().refine(value => isValidBirthDate(value), "생년월일은 실제 날짜이며 미래일 수 없어요.").optional(), sigungu: z.string().refine(value => regions.has(value)), school: z.string().regex(/^\d{7}$/),
   currentStatus: z.array(StatusKey), interest: z.enum(["job", "keep_searching", "startup"]), participating: z.array(z.string()), source: z.enum(["demo_persona", "user"]),
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration", "relocation"]), date: z.string().refine(isDate), status: z.enum(["scheduled", "completed", "simulated"]) })),
+  // 상담 질문의 답. 예전에 저장한 계획에는 없으므로 모두 선택 칸이다.
+  incomeBand: z.enum(["p60", "p100", "p150", "over", "unknown"]).optional(), marital: z.enum(["single", "married", "planned"]).optional(),
+  tenureMonths: z.number().int().min(0).max(600).nullable().optional(), smeEmployee: z.enum(["yes", "no", "unknown"]).optional(),
 }).superRefine((profile, ctx) => {
   if (!isBirthPairConsistent(profile.birthYm, profile.birthDate)) ctx.addIssue({ code: "custom", message: "생년월일과 출생연월이 일치하지 않아요.", path: ["birthDate"] });
 });
@@ -61,7 +64,7 @@ export const EvaluationSchema = z.object({
   })).default([]),
   revision: z.number().int().min(0), today: z.string().refine(isDate), asOf: z.string(), evaluatedAt: z.string(), dataVersion: z.string(), demo: z.boolean(),
   stages: z.array(z.object({ stageId: z.string(), label: z.string(), start: z.string().refine(isDate), endExclusive: z.string().refine(isDate).nullable(), eventIds: z.array(z.string()) })), cards: z.array(CardSchema),
-  choiceWarnings: z.array(z.object({ offeringId: z.string(), stageId: z.string(), title: z.string(), message: z.string(), otherStageIds: z.array(z.string()) })), recommendations: z.array(z.object({ offeringId: z.string(), stageId: z.string() })),
+  choiceWarnings: z.array(z.object({ offeringId: z.string(), stageId: z.string(), title: z.string(), message: z.string(), otherStageIds: z.array(z.string()) })), recommendations: z.array(z.object({ offeringId: z.string(), stageId: z.string(), confirmation: z.string().optional() })),
 }).superRefine((evaluation, ctx) => {
   for (const recommendation of evaluation.recommendations) {
     if (!evaluation.cards.some(c => c.offeringId === recommendation.offeringId && c.stageId === recommendation.stageId) || !evaluation.stages.some(st => st.stageId === recommendation.stageId)) ctx.addIssue({ code: "custom", message: "추천 대상 회차·시점을 찾을 수 없어요.", path: ["recommendations"] });

@@ -11,9 +11,9 @@ import { createPlanRepository, DRAFT_KEY, parseDraft, readLegacyPolicies, readLe
 import { createServerPlanRepository, fetchMe, logoutAccount, type Me } from "@/lib/planner/server-storage";
 import { AccountNotifications } from "./AccountNotifications";
 import { CATEGORIES, EVENT_NAMES, type Card, type Category, type Choice, type Draft, type Evaluation, type PlanEvent, type PlannerInput, type SavedPlan } from "@/lib/planner/types";
-import { requestAiRecommendation } from "@/lib/planner/plan-request";
 import { requestCounsel, type CounselTurn } from "@/lib/planner/counsel-client";
 import { applyTarget, scheduleNeedsConfirm, validateAnswer, type CounselTarget } from "@/lib/planner/counsel-target";
+import { askableConditions, collectOpenConditions, mayFinish, MAX_SKIPS, questionKey, wantsImmediateRecommendation, type RecommendSession } from "@/lib/planner/open-conditions";
 import type { CounselBody } from "@/lib/plan/counsel";
 import type { AiRecommendation } from "@/lib/planner/types";
 import { applyAnswer } from "@/lib/planner/answers";
@@ -30,6 +30,7 @@ import { Saved } from "./Saved";
 import { PlanCompare } from "./PlanCompare";
 import { matchesSearch } from "@/lib/planner/search";
 import { countEligibilityTabs } from "@/lib/planner/eligibility";
+import { selectBoardCards } from "@/lib/planner/board-cards";
 import { createStarStore } from "@/lib/planner/stars";
 import { Schedule } from "./Schedule";
 import s from "./workspace.module.css";
@@ -68,8 +69,9 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const planSeq = useRef(0);
   // 상담 · 추천 에이전트(GPT 재설계): 동의 · AI 질문 · 최근 대화 · 자동 재호출 횟수 · 주제 밖 연속 횟수
   const [consent, setConsent] = useState(false);
-  const [aiQuestion, setAiQuestion] = useState<(CounselBody & { target: CounselTarget }) | null>(null);
-  const counselHistory = useRef<CounselTurn[]>([]), autoCalls = useRef(0), outOfScope = useRef(0), badAnswers = useRef(0);
+  const [aiQuestion, setAiQuestion] = useState<(CounselBody & { target: CounselTarget; forRecommendation: boolean; preparedAnswers?: ReadonlySet<string> }) | null>(null);
+  const recommendSession = useRef<{ id: string; asked: string[]; skippedKeys: string[]; stopped: boolean } | null>(null);
+  const counselHistory = useRef<CounselTurn[]>([]), autoCalls = useRef(0), outOfScope = useRef(0);
   function clearRecommendation() {
     planSeq.current++;
     setRecommendation(null);
@@ -210,7 +212,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     return () => observer.disconnect();
   }, [draft?.evaluation, limits, filter, route]);
 
-  async function commit(next: Draft, nextHistory: PlanEvent[][] = historyRef.current, success?: string): Promise<Draft | null> {
+  async function commit(next: Draft, nextHistory: PlanEvent[][] = historyRef.current, success?: string, onApplied?: (draft: Draft) => void): Promise<Draft | null> {
     const requestId = ++seq.current;
     clearRecommendation();
     draftRef.current = next; setPending(next); setBusy(true); setError(null); retry.current = null;
@@ -221,9 +223,10 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       setDraft(resolved); draftRef.current = resolved; confirmedRef.current = resolved;
       setHistory(nextHistory); historyRef.current = nextHistory;
       if (success) announce(success);
+      onApplied?.(resolved);
       return resolved;
     } catch (err) {
-      if (requestId === seq.current) { setError(err instanceof Error ? err.message : "판정 요청에 실패했어요."); draftRef.current = confirmedRef.current; retry.current = () => { void commit(next, nextHistory, success); }; }
+      if (requestId === seq.current) { setError(err instanceof Error ? err.message : "판정 요청에 실패했어요."); draftRef.current = confirmedRef.current; retry.current = () => { void commit(next, nextHistory, success, onApplied); }; }
       return null;
     } finally { if (requestId === seq.current) { setPending(null); setBusy(false); } }
   }
@@ -277,7 +280,9 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     await mutate({ choices: [...draft.input.choices.filter(c => c.offeringId !== card.offeringId), { offeringId: card.offeringId, stageId: card.stageId }] });
   }
   function locate(choice: Choice) {
-    navigate("select"); setFilter({ category: "all" }); setEligibilityTab("eligible"); setLimits(prev => ({ ...prev, [choice.stageId]: 10000 })); setFocusedStage(choice.stageId);
+    const card = boardCards.find(item => cardKey(item) === cardKey(choice));
+    if (!card) { setDetail(choice); return; }
+    navigate("select"); setFilter({ category: "all" }); setEligibilityTab(card.eligibility); setLimits(prev => ({ ...prev, [choice.stageId]: 10000 })); setFocusedStage(choice.stageId);
     requestAnimationFrame(() => { const el = document.getElementById(`board-${choice.stageId}-${choice.offeringId}`); el?.scrollIntoView({ block: "center", inline: "center", behavior: "auto" }); el?.querySelector<HTMLButtonElement>("button")?.focus(); });
   }
   async function openCopy(plan: SavedPlan) {
@@ -301,12 +306,55 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   }
   const canCounsel = (d: Draft | null) => !!d && (!!d.input.demoId || consent);
   function remember(turn: CounselTurn) { counselHistory.current = [...counselHistory.current, turn].slice(-6); }
-  async function counsel(action: "message" | "recommend" | "followup", message?: string) {
+  function showRuleRecommendation(evaluation: Evaluation, notice: string) {
+    setRecommendation({ source: "rule", summary: "", picks: evaluation.recommendations.map(c => ({ ...c, why: [] })), notice });
+    toggleRecommendation(true);
+  }
+  function finishRecommendationWithCurrentAnswers() {
+    const current = confirmedRef.current;
+    if (!current) return;
+    planSeq.current++;
+    setPlanLoading(false);
+    setAiQuestion(null);
+    say("지금까지 답한 내용을 반영했어요.");
+    showRuleRecommendation(current.evaluation, "현재 조건으로 추천한 경로예요. 확인 필요 후보는 카드의 남은 조건을 확인해 주세요.");
+  }
+  /** 서버로 보내는 이번 추천의 질문 횟수. 그만두면 건너뛰기 한도를 채워 보낸다. */
+  function sessionPayload(): RecommendSession | undefined {
+    const session = recommendSession.current; if (!session) return undefined;
+    return { id: session.id, asked: session.asked.length + session.skippedKeys.length, skipped: session.stopped ? MAX_SKIPS : session.skippedKeys.length, skippedKeys: session.skippedKeys };
+  }
+  /** 추천 질문 흐름의 다음 걸음. AI 상담이 가능하면 서버(AI)가 묻거나 추천하고, 아니면 같은 질문 순서를 코드가 직접 보여 준다. */
+  async function continueRecommendation(current: Draft) {
+    if (canCounsel(current)) { await counsel("recommend"); return; }
+    const payload = sessionPayload()!;
+    const askable = askableConditions(collectOpenConditions(current.profileSnapshot, current.input, current.evaluation), payload);
+    const question = mayFinish(askable, payload).allowed ? undefined : askable[0]?.question;
+    if (!question) { say("답변을 반영해 추천 경로를 정리했어요."); showRuleRecommendation(current.evaluation, "답변을 반영한 조건 기준 경로예요."); return; }
+    setAiQuestion({ ...question, kind: "question", source: "rule", forRecommendation: true, preparedAnswers: new Set([...recommendSession.current!.asked, ...recommendSession.current!.skippedKeys]) });
+    remember({ role: "assistant", text: `질문: ${question.text}` });
+  }
+  function startRecommendation(current: Draft) {
+    recommendSession.current = { id: newId(), asked: [], skippedKeys: [], stopped: false };
+    void continueRecommendation(current);
+  }
+  function stopRecommendationQuestions() {
+    const current = draftRef.current; if (!current || !recommendSession.current) return;
+    recommendSession.current.stopped = true; setAiQuestion(null);
+    void continueRecommendation(current);
+  }
+  function laterRecommendationQuestion() {
+    const current = draftRef.current, session = recommendSession.current; if (!current || !session || !aiQuestion) return;
+    session.skippedKeys.push(questionKey(aiQuestion.target)); setAiQuestion(null);
+    void continueRecommendation(current);
+  }
+  async function counsel(action: "message" | "recommend" | "followup", message?: string, continuingRecommendation = false) {
     const current = draftRef.current; if (!current) return;
+    const forRecommendation = action === "recommend" || (action === "followup" && continuingRecommendation);
     if (action === "recommend") { navigate("select"); toggleRecommendation(true); }
     if (action !== "followup") autoCalls.current = 0;
     const id = ++planSeq.current; setPlanLoading(true); setLoadingAction(action);
-    const result = await requestCounsel({ draft: current, action, message, history: counselHistory.current, consent, outOfScopeStreak: outOfScope.current });
+    const result = await requestCounsel({ draft: current, action, message, history: counselHistory.current, consent, outOfScopeStreak: outOfScope.current, recommendSession: action === "recommend" ? sessionPayload() : undefined });
     if (id !== planSeq.current) return;
     setPlanLoading(false);
     // 이력에는 원문 대신 짧은 표시만(설계 7.1). 서버도 사용자 원문 이력은 버린다.
@@ -316,45 +364,57 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     if (result.status === 403) {
       if (result.reason === "consent") { setConsent(false); say("AI 상담을 쓰려면 아래에서 ‘AI 상담 사용’에 동의해 주세요. 동의 전에는 조건 기준 질문과 추천만 보여 드려요."); return; }
       // 운영 스위치가 꺼진 경우: 다시 동의를 요구하지 않고 조건 기준 추천으로 넘어간다.
-      if (action === "recommend") setRecommendation({ source: "rule", summary: "", picks: current.evaluation.recommendations.map(c => ({ ...c, why: [] })), notice: "지금은 AI 상담이 꺼져 있어 조건 기준 경로를 표시해요" });
+      if (forRecommendation) showRuleRecommendation(current.evaluation, "지금은 AI 상담이 꺼져 있어 조건 기준 경로를 표시해요");
       say("지금은 AI 상담이 꺼져 있어요. 조건 기준 질문과 추천으로 안내해 드릴게요. 일정 바꾸기(“취업을 2월 19일로 옮겨줘”)와 기한 설명은 그대로 쓸 수 있어요.");
       return;
     }
-    if (result.kind === "question" && result.target) { setAiQuestion(result as CounselBody & { target: CounselTarget }); badAnswers.current = 0; remember({ role: "assistant", text: `질문: ${result.text}` }); return; }
-    if (result.kind === "parsed" && result.target && result.value) { await answerAi(result.target, result.value); return; }
+    if (result.kind === "question" && result.target && result.text) { const session = recommendSession.current; setAiQuestion({ ...result, target: result.target, forRecommendation, ...(action === "recommend" && session ? { preparedAnswers: new Set([...session.asked, ...session.skippedKeys]) } : {}) }); remember({ role: "assistant", text: `질문: ${result.text}` }); return; }
+    if (result.kind === "parsed" && result.target && result.value) { await answerAi(result.target, result.value, forRecommendation); return; }
     if (result.kind === "answer") { say(`${result.text}${result.citations?.length ? `\n근거: ${result.citations.map(c => c.label).join(" · ")}` : ""}${result.source === "ai" ? "\n(AI 정리)" : ""}`); remember({ role: "assistant", text: `답변: ${(result.text ?? "").slice(0, 120)}` }); return; }
     if (result.kind === "plan" || result.kind === "fallback") {
       // ‘추천해줘’가 아닌 대화에서는 추천 경로를 다시 띄우지 않는다(채팅마다 반복되던 문제).
-      const update = recommendationUpdate(action, result.kind, !!recommendation);
-      if (result.kind === "plan") say(`${result.summary}\n(AI 정리 · 판정은 카드의 코드 값 그대로예요)`); else if (update.set && result.notice) say(result.notice);
+      const update = recommendationUpdate(action, result.kind, !!recommendation, continuingRecommendation);
+      if (result.kind === "plan") say(`${result.summary}\n(AI 정리 · 판정은 카드의 코드 값 그대로예요)`);
+      else if (update.set) say(action === "followup" ? "답변을 판정에 반영했어요." : "추천 결과를 정리했어요.");
       else if (action === "message") say("지금은 AI 답변을 정리하지 못했어요. 정책 카드의 사유와 공고 원문을 확인해 주세요.");
       if (update.set) setRecommendation({ source: result.source === "ai" ? "ai" : "rule", summary: result.summary ?? "", picks: result.picks ?? [], notice: result.notice ?? null });
+      if (update.open && action === "followup") toggleRecommendation(true);
       remember({ role: "assistant", text: result.kind === "plan" ? `추천 ${result.picks?.length ?? 0}개` : "조건 기준 추천" });
       return;
     }
+    if (forRecommendation) showRuleRecommendation(current.evaluation, result.error ?? "지금까지 답한 조건으로 추천 경로를 표시해요.");
     if (result.text) say(result.text);
     else if (result.kind === "none") say(result.error ?? "지금은 더 여쭤볼 것이 없어요. 아래 질문 카드나 정책 카드에서 이어서 확인해 주세요.");
   }
-  async function answerAi(target: CounselTarget, value: string) {
+  async function answerAi(target: CounselTarget, value: string, forRecommendation = aiQuestion?.forRecommendation ?? false) {
     const current = draftRef.current; if (!current) return;
+    const inSession = aiQuestion?.target === target && !!aiQuestion.preparedAnswers && !!recommendSession.current;
     const valid = validateAnswer(target, value, current.evaluation.today);
     if (!valid.ok) {
-      badAnswers.current++;
-      if (badAnswers.current >= 2) { setAiQuestion(null); say(`${valid.message} 이 질문은 나중에 답해도 돼요.`); } else say(valid.message);
+      say(valid.message);
       return;
     }
-    setAiQuestion(null);
     const next = applyTarget(current.profileSnapshot, current.input, target, value);
-    remember({ role: "user", text: `답: ${target.kind === "benefit" ? target.answer : target.kind} = ${value}` });
-    const result = await commit({ ...current, profileSnapshot: next.profile, input: { ...next.input, revision: current.input.revision + 1 } }, undefined, "답을 반영해 다시 판정했어요");
-    if (!result) return;
-    const confirm = scheduleNeedsConfirm(next.input); if (confirm) say(confirm);
-    // AI 가 물은 질문에 답했으면 한 번 더 부른다. 연속 자동 호출은 3번까지.
-    if (autoCalls.current < 3) { autoCalls.current++; void counsel("followup"); }
+    await commit({ ...current, profileSnapshot: next.profile, input: { ...next.input, revision: current.input.revision + 1 } }, undefined, "답을 반영해 다시 판정했어요", resolved => {
+      setAiQuestion(null);
+      remember({ role: "user", text: `답: ${target.kind === "benefit" ? target.answer : target.kind} = ${value}` });
+      const confirm = scheduleNeedsConfirm(next.input); if (confirm) say(confirm);
+      if (inSession) { recommendSession.current!.asked.push(questionKey(target)); void continueRecommendation(resolved); return; }
+      if (autoCalls.current < 3) { autoCalls.current++; void counsel("followup", undefined, forRecommendation); }
+      else if (forRecommendation) {
+        const notice = "추가 질문을 마쳤어요. 지금까지 답한 조건으로 추천 경로를 표시해요.";
+        say(notice);
+        showRuleRecommendation(resolved.evaluation, notice);
+      } else say("답변을 반영했어요. 이어서 확인할 내용이 있으면 물어봐 주세요.");
+    });
   }
   function send(text: string) {
     say(text, "user"); const current = readOnly ? view : draftRef.current;
     if (!current) return;
+    if (aiQuestion?.preparedAnswers) {
+      if (wantsImmediateRecommendation(text)) { stopRecommendationQuestions(); return; }
+      say("추천을 계속하려면 질문 카드에서 답을 골라 주세요. 바로 추천받으려면 바로 추천해줘 라고 말해 주세요."); return;
+    }
     const turn = parseScheduleTurn(text, current.input.events ?? [], pendingCommand.current);
     const command = turn.command; pendingCommand.current = turn.pending;
     // 일정 명령은 코드가 먼저. 명령이 아니거나 설명을 묻는 글은 상담 에이전트로(시연 인물 · 동의한 사용자).
@@ -366,21 +426,11 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
         say("이 계획의 추천 경로를 보려면 ‘복사해 편집’을 눌러 주세요.");
         return;
       }
-      if (!draft) return;
-      if (canCounsel(draft)) { void counsel("recommend"); return; }
+      clearRecommendation();
+      if (recommend) toggleRecommendation(false);
       navigate("select");
-      toggleRecommendation(true);
-      const id = ++planSeq.current;
-      setPlanLoading(true); setLoadingAction("recommend");
-      void requestAiRecommendation({
-        profile: draft.profileSnapshot, events: draft.input.events ?? [], evaluation: draft.evaluation,
-        seq: id, currentSeq: () => planSeq.current,
-      }).then(result => {
-        if (result && id === planSeq.current) {
-          setRecommendation(result);
-          setPlanLoading(false);
-        }
-      });
+      setAgentOpen(true); setAgentHidden(false);
+      startRecommendation(current);
       return;
     }
     const named = findNamedCards(text, current.evaluation, current.input.choices);
@@ -423,7 +473,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const detailCard = detail && evaluation?.cards.find(c => cardKey(c) === cardKey(detail));
   const compareCard = compare && draft?.evaluation.cards.find(c => cardKey(c) === cardKey(compare));
   const stageLabel = (id: string) => evaluation?.stages.find(st => st.stageId === id)?.label ?? "시점 다시 선택";
-  const filteredCards = evaluation?.cards.filter(c => matchesSearch(c, query) && (filter.category === "all" || c.category === filter.category)) ?? [];
+  const boardCards = evaluation ? selectBoardCards(evaluation.stages, evaluation.cards) : [];
+  const filteredCards = boardCards.filter(c => matchesSearch(c, query) && (filter.category === "all" || c.category === filter.category));
   const uniqueFilteredCards = [...new Map(filteredCards.map(card => [cardKey(card), card])).values()];
   const eligibilityCounts = countEligibilityTabs(uniqueFilteredCards);
   const visibleCards = (stageId: string) => uniqueFilteredCards.filter(c => c.stageId === stageId && c.eligibility === eligibilityTab);
@@ -466,11 +517,12 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     {busy && <div className={s.banner} role="status">일정 반영 중… 직전 판정 결과를 표시합니다.</div>}{error && <div className={s.error} role="alert">{error}{retry.current && <button className={s.textButton} onClick={() => retry.current?.()}>다시 시도</button>}</div>}{storageNotice && <p className={s.warningText}>{storageNotice}</p>}
     <Schedule evaluation={evaluation} events={(pending && !readOnly ? pending : view).input.events ?? []} onEdit={setEventDialog} onAdd={() => setEventDialog("new")} onUndo={undo} canUndo={history.length > 0} readOnly={readOnly} busy={busy} focusedStage={focusedStage} onFocus={focusStage} />
     <section className={s.draftSummary} aria-label="내 계획"><div className={s.sectionHeader}><h2>내 계획 <span>{view.input.choices.length}</span></h2>{!readOnly && <button className={s.primaryButton} disabled={busy || !view.input.choices.length} onClick={() => void previewSave(false)}>계획 저장</button>}</div>{view.input.choices.length === 0 ? <p className={s.emptyHint}>카드에서 담기를 눌러 시작하세요. 내 계획이 비어 있어도 모든 정책을 둘러볼 수 있어요.</p> : <div className={s.choiceList}>{view.input.choices.map(choice => { const card = evaluation.cards.find(c => cardKey(c) === cardKey(choice)); const warning = evaluation.choiceWarnings.find(w => w.offeringId === choice.offeringId); return <div key={choice.offeringId} className={`${s.choiceChip} ${warning ? s.choiceWarning : ""}`}><div><button className={s.textButton} onClick={() => card ? setDetail(choice) : announce("저장한 회차나 시점을 찾을 수 없어요. 다시 선택해 주세요.")}>{card?.title ?? warning?.title ?? choice.offeringId}</button><small>{stageLabel(choice.stageId)}{card?.personalWindow?.end ? ` · ${dateLabel(card.personalWindow.end)}` : ""}</small>{warning && <p className={s.warningText}>{warning.message}</p>}</div>{!readOnly && <button className={s.iconButton} disabled={busy} aria-label={`${card?.title ?? choice.offeringId} 내 계획에서 빼기`} onClick={() => void mutate({ choices: draft.input.choices.filter(c => c.offeringId !== choice.offeringId) })}>×</button>}</div>; })}</div>}{evaluation.choiceWarnings.length > 0 && <p className={s.warningText}>확인할 정책 {evaluation.choiceWarnings.length}개 · 선택한 정책은 자동으로 삭제하지 않아요.</p>}</section>
-    {route === "select" ? <><div className={s.toolbar}><label className={s.srOnly} htmlFor="policy-search">정책 검색</label><input ref={searchRef} id="policy-search" className={s.search} type="search" placeholder="정책 이름 검색  ( / )" value={query} onChange={e => setQuery(e.target.value)} /><div className={s.categoryFilters} role="group" aria-label="분야 필터">{(["all", ...Object.keys(CATEGORIES)] as (Category | "all")[]).map(cat => <button key={cat} className={`${s.filter} ${filter.category === cat ? s.filterActive : ""}`} aria-pressed={filter.category === cat} onClick={() => setFilter({ ...filter, category: cat })}>{cat === "all" ? "전체" : CATEGORIES[cat].label}</button>)}</div><div className={s.inlineActions}><button className={recommend ? s.primaryButton : s.outlineButton} aria-pressed={recommend} onClick={() => toggleRecommendation()}>✦ {recommend ? "추천 경로 닫기" : "AI 추천 경로 보기"}</button></div></div><div className={s.categoryFilters} role="tablist" aria-label="수혜 가능성 분류">{ELIGIBILITY_TABS.map((item, index) => <button key={item.id} id={`eligibility-tab-${item.id}`} role="tab" aria-selected={eligibilityTab === item.id} aria-controls="eligibility-policy-board" tabIndex={eligibilityTab === item.id ? 0 : -1} className={`${s.filter} ${eligibilityTab === item.id ? s.filterActive : ""}`} onKeyDown={event => { if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? ELIGIBILITY_TABS.length - 1 : (index + (event.key === "ArrowRight" ? 1 : ELIGIBILITY_TABS.length - 1)) % ELIGIBILITY_TABS.length; setEligibilityTab(ELIGIBILITY_TABS[next].id); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus(); }} onClick={() => setEligibilityTab(item.id)}>{item.label} <span aria-label={`${eligibilityCounts[item.id]}개`}>{eligibilityCounts[item.id]}</span></button>)}</div><p className={s.emptyHint}>자격 분류와 공고 검증 배지는 별도로 표시해요. 탭 개수는 검색·분야 필터가 적용된 전체 회차·시점 수예요.</p>
-    {recommend && <section ref={recommendRef} className={s.recommendSummary} aria-label={recommendationLabel + " 경로"}><div className={s.sectionHeader}><button className={s.textButton} aria-expanded={recommendExpanded} onClick={() => setRecommendExpanded(v => !v)}><strong>{recommendationLabel} · {picks.length}개</strong> {recommendExpanded ? "접기" : "경로 보기"}</button><button className={s.primaryButton} disabled={busy || !picks.length} onClick={() => void previewSave(true)}>새 계획으로 저장</button></div><p className={s.emptyHint}>{activeRecommendation?.notice ?? activeRecommendation?.summary ?? "현재 조건으로 확인한 경로예요."}</p>{recommendExpanded && <div className={s.recommendLinks}>{picks.map(choice => { const card = evaluation.cards.find(c => cardKey(c) === cardKey(choice)); if (!card) return null; const hidden = eligibilityTab !== card.eligibility || (filter.category !== "all" && filter.category !== card.category); return <button key={cardKey(choice)} className={s.recommendLink} onClick={() => { if (hidden) { setDetail(choice); announce("현재 탭이나 분야 필터에서 숨김 상태예요. 상세에서 확인하거나 분류·분야를 바꿔 주세요."); } else locate(choice); }}>{card.title}<small>{stageLabel(choice.stageId)} · {hidden ? "현재 필터에서 숨김" : card.conflicts.length ? "별도 계획에서 가능" : deadlineText(card, evaluation.today)}</small></button>; })}{!picks.length && <p>현재 확인된 조건으로 추천할 수 있는 정책이 없어요. 확인 필요 정책은 직접 살펴보고 담을 수 있어요.</p>}</div>}</section>}
+    {route === "select" ? <><div className={s.toolbar}><label className={s.srOnly} htmlFor="policy-search">정책 검색</label><input ref={searchRef} id="policy-search" className={s.search} type="search" placeholder="정책 이름 검색  ( / )" value={query} onChange={e => setQuery(e.target.value)} /><div className={s.categoryFilters} role="group" aria-label="분야 필터">{(["all", ...Object.keys(CATEGORIES)] as (Category | "all")[]).map(cat => <button key={cat} className={`${s.filter} ${filter.category === cat ? s.filterActive : ""}`} aria-pressed={filter.category === cat} onClick={() => setFilter({ ...filter, category: cat })}>{cat === "all" ? "전체" : CATEGORIES[cat].label}</button>)}</div><div className={s.inlineActions}><button className={recommend ? s.primaryButton : s.outlineButton} aria-pressed={recommend} disabled={!!aiQuestion?.preparedAnswers} onClick={() => toggleRecommendation()}>✦ {recommend ? "추천 경로 닫기" : "AI 추천 경로 보기"}</button></div></div>
+    {recommend && !aiQuestion?.preparedAnswers && <section ref={recommendRef} className={s.recommendSummary} aria-label={recommendationLabel + " 경로"}><div className={s.sectionHeader}><button className={s.textButton} aria-expanded={recommendExpanded} onClick={() => setRecommendExpanded(v => !v)}><strong>{recommendationLabel} · {picks.length}개</strong> {recommendExpanded ? "접기" : "경로 보기"}</button><button className={s.primaryButton} disabled={busy || !picks.length} onClick={() => void previewSave(true)}>새 계획으로 저장</button></div><p className={s.emptyHint}>{activeRecommendation?.notice ?? activeRecommendation?.summary ?? "현재 조건으로 확인한 경로예요."}</p>{recommendExpanded && <div className={s.recommendLinks}>{picks.map(choice => { const card = evaluation.cards.find(c => cardKey(c) === cardKey(choice)); if (!card) return null; const hidden = eligibilityTab !== card.eligibility || (filter.category !== "all" && filter.category !== card.category); return <button key={cardKey(choice)} className={s.recommendLink} onClick={() => { if (hidden) { setDetail(choice); announce("현재 탭이나 분야 필터에서 숨김 상태예요. 상세에서 확인하거나 분류·분야를 바꿔 주세요."); } else locate(choice); }}>{card.title}<small>{stageLabel(choice.stageId)} · {choice.confirmation ? "확인 필요" : card.conflicts.length ? "별도 계획에서 가능" : deadlineText(card, evaluation.today)}</small>{choice.confirmation && <small>{choice.confirmation}</small>}{"filled" in choice && choice.filled === true && <small>조건 기준으로 채움</small>}</button>; })}{!picks.length && <p>현재 확인된 조건으로 추천할 수 있는 정책이 없어요. 확인 필요 정책은 직접 살펴보고 담을 수 있어요.</p>}</div>}</section>}
+    <div className={s.categoryFilters} role="tablist" aria-label="수혜 가능성 분류">{ELIGIBILITY_TABS.map((item, index) => <button key={item.id} id={`eligibility-tab-${item.id}`} role="tab" aria-selected={eligibilityTab === item.id} aria-controls="eligibility-policy-board" tabIndex={eligibilityTab === item.id ? 0 : -1} className={`${s.filter} ${eligibilityTab === item.id ? s.filterActive : ""}`} onKeyDown={event => { if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? ELIGIBILITY_TABS.length - 1 : (index + (event.key === "ArrowRight" ? 1 : ELIGIBILITY_TABS.length - 1)) % ELIGIBILITY_TABS.length; setEligibilityTab(ELIGIBILITY_TABS[next].id); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus(); }} onClick={() => setEligibilityTab(item.id)}>{item.label} <span aria-label={`${eligibilityCounts[item.id]}개`}>{eligibilityCounts[item.id]}</span></button>)}</div><p className={s.emptyHint}>이후 열에는 새로 신청할 수 있는 후보와 해당 시점에 담은 정책이 표시돼요. 탭 개수는 검색·분야 필터를 적용한 보드 기준이에요.</p>
     <div className={s.boardScroll} id="eligibility-policy-board" role="tabpanel" aria-labelledby={`eligibility-tab-${eligibilityTab}`} ref={boardRef} aria-label="시점별 정책 보드"><div className={s.board}>{evaluation.stages.map(stage => { const cards = visibleCards(stage.stageId); const limit = limits[stage.stageId] ?? 4; return <section key={stage.stageId} id={`stage-${stage.stageId}`} className={`${s.column} ${focusedStage === stage.stageId ? s.focusedColumn : ""}`}><button className={s.columnHeader} aria-label={`${stage.label}, 정책 ${cards.length}개 전체 보기`} onClick={() => setGridStage(stage.stageId)}><h2>{stage.label}<span>{cards.length}</span></h2><p>{dateLabel(stage.start)} {stage.endExclusive ? `~ ${dateLabel(addDays(stage.endExclusive, -1))}` : "이후"} <span aria-hidden="true">⊞</span></p></button><div className={s.columnCards}>{cards.slice(0, limit).map(card => renderCard(card))}</div>{cards.length === 0 && <div className={s.emptyState}>이 시점과 선택한 분류에 해당하는 정책이 없어요.<button className={s.textButton} onClick={() => { setQuery(""); setFilter({ category: "all" }); setEligibilityTab(ELIGIBILITY_TABS.find(item => eligibilityCounts[item.id] > 0)?.id ?? "needs_check"); }}>필터 해제</button></div>}{cards.length > limit && <button data-stage={stage.stageId} className={s.moreButton} onClick={() => setLimits(prev => ({ ...prev, [stage.stageId]: limit + 4 }))}>정책 더 보기 · {cards.length - limit}개 남음</button>}<p className={s.columnFooter}>{Math.min(limit, cards.length)} / {cards.length}개 표시</p></section>; })}</div></div></> : <Roadmap plan={view} onDetail={setDetail} />}
     <p className={s.notice}>기준일 {fullDate(evaluation.today)} · 공고 데이터 기준 {evaluation.asOf} · 현재 공고와 입력한 예정일을 기준으로 계산한 결과입니다. 신청 전 공식 공고를 확인해 주세요.</p>
-    </>}</main>{tab !== "account" && <Agent today={evaluation.today} recommendation={activeRecommendation} recommendationAt={recommendationAt} cards={evaluation.cards} planLoading={planLoading && !readOnly} loadingAction={loadingAction} aiQuestion={readOnly ? null : aiQuestion} onAiAnswer={value => { if (aiQuestion) void answerAi(aiQuestion.target, value); }} onAiSkip={() => setAiQuestion(null)}
+    </>}</main>{tab !== "account" && <Agent today={evaluation.today} recommendation={activeRecommendation} recommendationAt={recommendationAt} cards={evaluation.cards} planLoading={planLoading && !readOnly} loadingAction={loadingAction} aiQuestion={readOnly ? null : aiQuestion} onAiAnswer={value => { if (aiQuestion) void answerAi(aiQuestion.target, value); }} onAiSkip={() => { if (aiQuestion?.preparedAnswers) stopRecommendationQuestions(); else setAiQuestion(null); }} onAiLater={aiQuestion?.preparedAnswers ? laterRecommendationQuestion : undefined} onShowRecommendation={aiQuestion?.forRecommendation ? finishRecommendationWithCurrentAnswers : undefined}
       consentNeeded={!readOnly && !!draft && !draft.input.demoId && !consent} onConsent={() => { setConsent(true); say("AI 상담을 켰어요. 패널의 ‘AI 상담 끄기’로 언제든 끌 수 있어요."); }}
       consentOn={!readOnly && !!draft && !draft.input.demoId && consent} onConsentOff={() => { setConsent(false); setAiQuestion(null); counselHistory.current = []; say("AI 상담을 껐어요. 조건 기준 질문과 추천만 보여 드려요."); }}
       questions={readOnly ? [] : evaluation.questions} onAnswer={(question, answer) => {

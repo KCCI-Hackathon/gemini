@@ -30,6 +30,10 @@ test("overlap language in an official notice without a linked rule stays in need
   expect(card!.eligibilityReason).toContain("중복수혜");
 });
 test("rule recommendations use the same eligibility classification as the tabs", () => {
-  expect(ev.recommendations.every(choice => ev.cards.find(card => card.offeringId === choice.offeringId && card.stageId === choice.stageId)?.eligibility === "eligible")).toBe(true);
-  expect(ev.recommendations.some(choice => ev.cards.find(card => card.offeringId === choice.offeringId && card.stageId === choice.stageId)?.eligibility === "needs_check")).toBe(false);
+  expect(ev.recommendations.length).toBeGreaterThan(0);
+  expect(ev.recommendations.some(choice => !!choice.confirmation)).toBe(true);
+  for (const choice of ev.recommendations) {
+    const card = ev.cards.find(card => card.offeringId === choice.offeringId && card.stageId === choice.stageId);
+    expect(card?.eligibility).toBe(choice.confirmation ? "needs_check" : "eligible");
+  }
 });

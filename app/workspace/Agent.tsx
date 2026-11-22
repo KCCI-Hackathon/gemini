@@ -8,12 +8,12 @@ import { pickQuestion, questionKey } from "@/lib/planner/questions";
 import { answerOptions, type CounselTarget } from "@/lib/planner/counsel-target";
 
 /** 상담 에이전트가 고른 질문. 문장은 AI, 선택지 · 입력 칸은 target 에 맞춰 코드가 붙인다. */
-function AiQuestionCard({ text, target, onAnswer, onSkip, busy }: { text: string; target: CounselTarget; onAnswer: (value: string) => void; onSkip: () => void; busy: boolean }) {
+function AiQuestionCard({ text, target, onAnswer, onSkip, onLater, onShowRecommendation, busy, number }: { text: string; target: CounselTarget; onAnswer: (value: string) => void; onSkip: () => void; onLater?: () => void; onShowRecommendation?: () => void; busy: boolean; number?: number }) {
   const [value, setValue] = useState("");
   const options = answerOptions(target);
   return <fieldset className={s.questionCard} disabled={busy}>
     <legend className={s.questionTitle}>{text}</legend>
-    <p className={s.questionHint}>AI 질문 · 답하면 바로 다시 판정해요</p>
+    <p className={s.questionHint}>{number ? `추천 질문 ${number}` : "AI 질문"} · 답하면 바로 다시 판정해요</p>
     {Array.isArray(options) ? <div className={s.answerRow}>{options.map(o => <button key={o.value} className={s.answerButton} onClick={() => onAnswer(o.value)}>{o.label}</button>)}</div>
       : <form className={s.answerForm} onSubmit={e => { e.preventDefault(); onAnswer(value); }}>
         <label>{options === "date" ? "날짜" : `${target.kind === "benefit" && target.month ? `${Number(target.month.slice(5))}월에 ` : ""}받은 금액(원)`}
@@ -21,7 +21,9 @@ function AiQuestionCard({ text, target, onAnswer, onSkip, busy }: { text: string
         <div className={s.answerRow}><button className={s.answerButton} disabled={!value}>입력</button>
         {options === "amount" && <button type="button" className={s.answerButton} onClick={() => onAnswer("no")}>안 받아요</button>}</div>
       </form>}
-    <button className={s.textButton} onClick={onSkip}>나중에 답할게요</button>
+    {number && onLater && <button type="button" className={s.textButton} onClick={onLater}>나중에 답할게요</button>}
+    <button type="button" className={s.textButton} onClick={onSkip}>{number ? "추천 질문 그만하기" : "나중에 답할게요"}</button>
+    {!number && onShowRecommendation && <button type="button" className={s.textButton} onClick={onShowRecommendation}>지금 추천 보기</button>}
   </fieldset>;
 }
 import s from "./workspace.module.css";
@@ -66,9 +68,10 @@ function QuestionCard({ question, onAnswer, busy, month, targetTitle }: { questi
   </fieldset>;
 }
 
-export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, recommendationAt, cards, planLoading, loadingAction = "recommend", today, aiQuestion, onAiAnswer, onAiSkip, consentNeeded, onConsent, consentOn, onConsentOff }: {
+export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, recommendationAt, cards, planLoading, loadingAction = "recommend", today, aiQuestion, onAiAnswer, onAiSkip, onAiLater, onShowRecommendation, consentNeeded, onConsent, consentOn, onConsentOff }: {
   messages: Message[]; onSend: (text: string) => void; onClose: () => void; busy: boolean;
-  aiQuestion?: { text?: string; target: CounselTarget } | null; onAiAnswer?: (value: string) => void; onAiSkip?: () => void;
+  aiQuestion?: { text?: string; target: CounselTarget; preparedAnswers?: ReadonlySet<string> } | null; onAiAnswer?: (value: string) => void; onAiSkip?: () => void; onAiLater?: () => void;
+  onShowRecommendation?: () => void;
   consentNeeded?: boolean; onConsent?: () => void; consentOn?: boolean; onConsentOff?: () => void;
   recommendation?: AiRecommendation | null; recommendationAt?: number | null; cards?: Card[]; planLoading?: boolean; loadingAction?: "message" | "recommend" | "followup";
   questions?: BenefitQuestion[]; onAnswer: AnswerHandler; today?: string;
@@ -80,6 +83,9 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   const currentQuestionKey = first ? questionKey(first) : null;
   const aiQuestionText = aiQuestion?.text ?? null;
   const [text, setText] = useState(""); const endRef = useRef<HTMLDivElement>(null);
+  const [slow, setSlow] = useState(false);
+  // 30초가 넘으면 오래 걸린다고 알린다.
+  useEffect(() => { setSlow(false); if (!planLoading) return; const t = setTimeout(() => setSlow(true), 30_000); return () => clearTimeout(t); }, [planLoading]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" }); }, [messages.length, recommendation, planLoading, currentQuestionKey, aiQuestionText, skipped.size]);
   function send(value: string) { if (!value.trim() || busy) return; onSend(value.trim()); setText(""); }
   // 추천 블록은 만들어진 메시지 바로 아래에 한 번만 둔다. 뒤에 오는 대화 아래로 따라 내려오지 않게.
@@ -88,8 +94,10 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
     <strong>{recommendation.source === "ai" ? "AI 추천 경로" : "조건 기준 추천 경로"}</strong>
     {recommendation.summary && <p>{recommendation.summary}</p>}
     {recommendation.notice && <p>{recommendation.notice}</p>}
-    {recommendation.picks.filter(pick => pick.why.length > 0).map(pick => <div key={pick.offeringId}>
+    {recommendation.picks.map(pick => <div key={pick.offeringId}>
       <strong>{cards?.find(card => card.offeringId === pick.offeringId)?.title ?? pick.offeringId}</strong>
+      {pick.confirmation && <p>확인 필요 · {pick.confirmation}</p>}
+      {pick.filled && <p>조건 기준으로 채움</p>}
       {pick.why.map((why, i) => <p key={i}>{why}</p>)}
     </div>)}
   </div>;
@@ -110,14 +118,14 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
           <button className={s.primaryButton} onClick={onConsent}>AI 상담 사용</button>
         </div>}
         {consentOn && <button className={s.textButton} onClick={onConsentOff}>AI 상담 끄기</button>}
-        {aiQuestion?.text && <AiQuestionCard key={aiQuestion.text} text={aiQuestion.text} target={aiQuestion.target} busy={busy} onAnswer={v => onAiAnswer?.(v)} onSkip={() => onAiSkip?.()} />}
+        {aiQuestion?.text && <AiQuestionCard key={aiQuestion.text} text={aiQuestion.text} target={aiQuestion.target} busy={busy} number={aiQuestion.preparedAnswers ? aiQuestion.preparedAnswers.size + 1 : undefined} onAnswer={v => onAiAnswer?.(v)} onSkip={() => onAiSkip?.()} onLater={onAiLater} onShowRecommendation={onShowRecommendation} />}
         {!aiQuestion && first && <div className={s.questionWrap}>
           <p className={s.questionMeta}>질문 {pick.index}/{pick.total}</p>
           <QuestionCard key={questionKey(first)} question={first} onAnswer={onAnswer} busy={busy} month={first.month ?? (today ?? toKstDate(new Date())).slice(0, 7)} targetTitle={cards?.find(c => c.policyId === first.policyId)?.title} />
           <button className={s.textButton} disabled={busy} onClick={() => setSkipped(prev => new Set([...prev, questionKey(first)]))}>나중에 답할게요</button>
         </div>}
         {!first && pick.skipped > 0 && <button className={s.textButton} onClick={() => setSkipped(new Set())}>건너뛴 질문 {pick.skipped}개 다시 보기</button>}
-        {planLoading && <p role="status">{loadingAction === "recommend" ? "AI 추천 경로를 확인하고 있어요…" : "길잡이가 답을 정리하고 있어요…"}</p>}
+        {planLoading && <p role="status">{loadingAction === "recommend" ? "길잡이가 경로를 고르고 있어요…" : "길잡이가 답을 정리하고 있어요…"}{slow && loadingAction === "recommend" && " 전체 정책을 살펴보는 중이라 조금 걸려요(최대 3분)."}</p>}
         {!inlineRecommendation && recommendationBlock}
         <div ref={endRef} />
       </div>

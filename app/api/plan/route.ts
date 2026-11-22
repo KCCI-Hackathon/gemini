@@ -5,7 +5,7 @@ import { handlePlan } from "@/lib/plan/handler";
 import { handleCounsel } from "@/lib/plan/counsel";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 200;
 
 export async function POST(req: Request) {
   let body: unknown;
