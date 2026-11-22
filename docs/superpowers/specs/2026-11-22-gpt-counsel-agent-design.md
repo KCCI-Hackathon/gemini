@@ -1,6 +1,6 @@
 # 상담 · 추천 에이전트 재설계 (GPT)
 
-> 2026-11-22 · 작성 : Claude Code (Jongeume 와 협의) · 상태 : **승인 전 초안**
+> 2026-11-22 · 작성 : Claude Code (Jongeume 와 협의) · 상태 : **승인 (Jongeume, 11-22)**
 > 저장소 `KCCI-Hackathon/gemini` · 기준 브랜치 `agent/planner-backend-link` (메인 화면 연결 MVP)
 > 관련 : `2026-11-22 메인 화면 백엔드 연결 설계.md`, `01 팀 공유/11-22 메인 화면 연결 남은 문제.md`
 
