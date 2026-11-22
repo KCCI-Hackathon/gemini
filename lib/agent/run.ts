@@ -3,6 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { aiConfigured } from "@/lib/ai/client";
 import { toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
+import { BASIS_LABEL, pickRound } from "@/lib/judge/rules";
 import { takeQuota } from "@/lib/limits";
 import { judgeAll } from "@/lib/judge";
 import { PERSONAS, type PersonaId } from "@/lib/judge/personas";
@@ -131,12 +132,18 @@ async function runAgent(pid: PersonaId, ctx: { now: Date; makeClient: () => Anth
         results.push({ type: "tool_result", tool_use_id: u.id, content: JSON.stringify(payload.questions) });
       } else if (u.name === "get_policy_evidence") {
         const v = verified.get(String(input.policy_id));
+        const pick = v?.rounds?.length ? pickRound(v.rounds, toKstDate(ctx.now)) : null;
+        const round = pick?.state === "outside" ? null : pick?.round;
+        const conditions = round?.conditions.filter((condition) => condition.supportsConfirmed).map((condition) => ({ key: condition.key, kind: condition.kind, basis: BASIS_LABEL[condition.basis], quote: condition.quote.text }));
+        const evidence = pick
+          ? conditions?.length ? { name: v?.name, round: round?.notice.title, conditions } : null
+          : v ? { name: v.name, referenceDate: v.referenceDate, quotes: v.statusConditions.quotes.map((q) => q.text), restrictions: v.restrictionQuotes.map((q) => q.text), lookback: v.lookback?.quote.text ?? null } : null;
         log.push({ tool: u.name, summary: v ? v.name : "알 수 없는 정책" });
         results.push({
           type: "tool_result",
           tool_use_id: u.id,
-          content: v ? JSON.stringify({ name: v.name, referenceDate: v.referenceDate, quotes: v.statusConditions.quotes.map((q) => q.text), restrictions: v.restrictionQuotes.map((q) => q.text), lookback: v.lookback?.quote.text ?? null }) : "검증 정책이 아닙니다.",
-          ...(v ? {} : { is_error: true }),
+          content: evidence ? JSON.stringify(evidence) : "이번 신청 시점에 사람이 확인한 조건별 근거가 없습니다.",
+          ...(evidence ? {} : { is_error: true }),
         });
       } else if (u.name === "finish_cards") {
         log.push({ tool: u.name, summary: "카드 작성" });

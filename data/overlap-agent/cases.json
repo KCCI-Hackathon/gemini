@@ -1,0 +1,2203 @@
+[
+  {
+    "b": "20250122005400110346",
+    "phrase": "ㅇ 국민취업지원제도에 참여하여 수혜 중인 자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 11행",
+    "a": "20260710005400113256",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- 인천 재직청년 복지포인트, 뿌리기업 신규취업자 장려금, 지역 주도형 일자리 창업기업 청년일자리 장기근속 인센티브 지원 등 타 장려금 사업",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 12행",
+    "a": "20260406005400212410",
+    "condition": {
+      "type": "selected",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "selection_excluded",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 13행",
+    "a": "20260406005400212495",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 13행",
+    "a": "20260406005400212495",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": false
+    },
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260907005400213378",
+    "phrase": "국가근로장학생 / 해외파견자 / 휴직자 / 병역 복무 이행자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 14행",
+    "a": "20260821005400113348",
+    "condition": {
+      "type": "status_on_notice_date",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 국민취업지원제도, 실업급여, 기타 구직활동 수당 등 타 기관에서 시행 중인 유사사업에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 15행",
+    "a": "20260710005400113256",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "면접수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260928005400113623",
+    "phrase": "※국민내일배움카드의 발급 자체는 참여 제한 해당사항 없음.단,본 교육 참여 희망 시는 교육기간(7. 6(월) ~ 9.30(수)) 동안 국민내일배움카드를 통한 타 훈련 중복 참여 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 16행",
+    "a": "20250123005400110393",
+    "condition": {
+      "type": "period_overlap",
+      "params": {
+        "start": "2026-07-06",
+        "end": "2026-09-30",
+        "activity": "다른 훈련 실제 수강"
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260928005400113623",
+    "phrase": "※국민내일배움카드의 발급 자체는 참여 제한 해당사항 없음.단,본 교육 참여 희망 시는 교육기간(7. 6(월) ~ 9.30(수)) 동안 국민내일배움카드를 통한 타 훈련 중복 참여 불가",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 1 · 16행",
+    "a": "20250123005400110393",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20260928005400113623",
+    "phrase": "-국민취업지원제도 및 취업성공패키지 참여중인 자 :본 교육 참여 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 17행",
+    "a": "20260710005400113256",
+    "condition": {
+      "type": "period_overlap",
+      "params": {
+        "start": "2026-07-06",
+        "end": "2026-09-30"
+      },
+      "exception": true
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250122005400110346",
+    "phrase": "ㅇ 고용보험법에 따른 구직급여를 받고 있거나 구직급여의 지급이 끝난 날부터 6개월이 지나지 아니한 자*",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 18행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250122005400110346",
+    "phrase": "ㅇ 고용보험법에 따른 구직급여를 받고 있거나 구직급여의 지급이 끝난 날부터 6개월이 지나지 아니한 자*",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 18행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "within_months_after_end",
+      "params": {
+        "months": 6
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250122005400110346",
+    "phrase": "* 다만, 고용보험에 가입되어 구직급여 수급자격을 갖춘 경우라도 구직급여를 수급하지 않으면 참여 가능",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 1 · 18행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20261031005400214655",
+    "phrase": "*휴직자(육아휴직자)는 신청가능. 국가근로장학생은 신청불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 19행",
+    "a": "20260821005400113348",
+    "condition": {
+      "type": "status_on_notice_date",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260928005400113623",
+    "phrase": "가입내역서) 필수 제출 필요- 실업급여 수급 중인 자 : 본 교육 참여 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 20행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "period_overlap",
+      "params": {
+        "start": "2026-07-06",
+        "end": "2026-09-30"
+      },
+      "exception": true
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20261001005400113794",
+    "phrase": "국민취업지원제도 등 중복지원이 제한되는 사업에 참여 중인 자",
+    "expect_kind": [
+      "org_decides"
+    ],
+    "source_row": "표 1 · 21행",
+    "a": "20260710005400113256",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 과거 ‘청년월세 한시 특별지원사업’에 선정되어 이미 24개월을 수혜받은 자 등",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 22행",
+    "a": "20250502005400110774",
+    "condition": {
+      "type": null,
+      "params": {
+        "paid_months_at_least": 24
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212400",
+    "phrase": "○기존 청년월세 한시 특별지원에서 24회를 모두 지원받은 사람 등",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 23행",
+    "a": "20250502005400110774",
+    "condition": {
+      "type": null,
+      "params": {
+        "paid_months_at_least": 24
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 한국장학재단 사다리장학금(고교 취업연계장려금, 중소기업 취업연계 장학금 등)에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 24행",
+    "a": "20250612005400110914",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "근속장려수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 한국장학재단 사다리장학금(고교 취업연계장려금, 중소기업 취업연계 장학금 등)에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 24행",
+    "a": "20250612005400110914",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "취업성공수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 한국장학재단 사다리장학금(고교 취업연계장려금, 중소기업 취업연계 장학금 등)에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 25행",
+    "a": "20250612005400110912",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "근속장려수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 한국장학재단 사다리장학금(고교 취업연계장려금, 중소기업 취업연계 장학금 등)에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 25행",
+    "a": "20250612005400110912",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "취업성공수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250123005400110394",
+    "phrase": "◦ 실업급여 수급자는 수급기간동안 일경험에 참여시 미래내일일경험사업의 청년지원금을 받을 수 없습니다. 단, 프로젝트형 일경험의 팀 단위 지원금은 사용할 수 있습니다.",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 26행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "청년지원금",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250123005400110394",
+    "phrase": "◦ 실업급여 수급자는 수급기간동안 일경험에 참여시 미래내일일경험사업의 청년지원금을 받을 수 없습니다. 단, 프로젝트형 일경험의 팀 단위 지원금은 사용할 수 있습니다.",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 1 · 26행",
+    "a": "20250122005400110369",
+    "mention": "팀 단위 지원금"
+  },
+  {
+    "b": "20250123005400110394",
+    "phrase": "◦ 국민취업지원제도, 재학생 맞춤형 고용서비스 등 타 지원사업에서 참여수당을 지급받고 있는 청년은 일경험 프로그램 참여수당과 타지원사업 참여수당 중 1개 수당을 선택하여야 합니다.",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 27행",
+    "a": "20260710005400113256",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "program_type": "사회적가치형"
+      },
+      "exception": false
+    },
+    "expect_effect": "allowance_choice",
+    "expect_item": "참여수당",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20250123005400110394",
+    "phrase": "◦ 국민취업지원제도, 재학생 맞춤형 고용서비스 등 타 지원사업에서 참여수당을 지급받고 있는 청년은 일경험 프로그램 참여수당과 타지원사업 참여수당 중 1개 수당을 선택하여야 합니다.",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 28행",
+    "a": "20250207005400110410",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "program_type": "사회적가치형"
+      },
+      "exception": false
+    },
+    "expect_effect": "allowance_choice",
+    "expect_item": "참여수당",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212459",
+    "phrase": "○ 고용보험법에 따른 구직급여(실업급여)를 받고 있거나 구직급여의 지급이 끝난 날부터 6개월이 지나지 아니한 자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 29행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212459",
+    "phrase": "○ 고용보험법에 따른 구직급여(실업급여)를 받고 있거나 구직급여의 지급이 끝난 날부터 6개월이 지나지 아니한 자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 29행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "within_months_after_end",
+      "params": {
+        "months": 6
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212459",
+    "phrase": "○ 고용보험법에 따른 구직급여(실업급여)를 받고 있거나 구직급여의 지급이 끝난 날부터 6개월이 지나지 아니한 자",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 1 · 29행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20260406005400212464",
+    "phrase": "○ 기존 청년월세 한시 특별지원에서 24회를 모두 지원받은 사람 등",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 30행",
+    "a": "20250502005400110774",
+    "condition": {
+      "type": null,
+      "params": {
+        "paid_months_at_least": 24
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 31행",
+    "a": "20260930005400113738",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "service": "심리상담"
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 31행",
+    "a": "20260930005400113738",
+    "condition": {
+      "type": null,
+      "params": {
+        "service": "가사·식사"
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 32행",
+    "a": "20260930005400113739",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "service": "심리상담"
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 32행",
+    "a": "20260930005400113739",
+    "condition": {
+      "type": null,
+      "params": {
+        "service": "가사·식사"
+      },
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212462",
+    "phrase": "○ 주거급여수급자(부부합산, 사업신청일 기준)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 33행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212468",
+    "phrase": "○ 「국민기초생활 보장법」에 따른 주거급여수급자(배우자 포함)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 34행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 경상북도 청년복지사업(행복카드, 사랑채움 등)에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 35행",
+    "a": "20250828005400211530",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "근속장려수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 경상북도 청년복지사업(행복카드, 사랑채움 등)에 참여 중인 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 35행",
+    "a": "20250828005400211530",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "취업성공수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260305005400112100",
+    "phrase": "※ 생애 최초 1회 지원 (2025년 포인트 사용자 신청 불가)",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 36행",
+    "a": "20250228005400110573",
+    "condition": {
+      "type": null,
+      "params": {
+        "points_used_year": 2025
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20261031005400214660",
+    "phrase": "- 생애최초 1회 지원(2025년 포인트 사용자 신청 불가)",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 37행",
+    "a": "20250228005400110573",
+    "condition": {
+      "type": null,
+      "params": {
+        "points_used_year": 2025
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20240109005400100003",
+    "phrase": "대출접수일 현재 공공임대주택에 입주하고 있는 경우 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 38행",
+    "a": "20260922005400113532",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 공공주택특별법에 따른 공공임대주택(공무원임대주택 포함) 거주",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 39행",
+    "a": "20260922005400113532",
+    "condition": {
+      "type": null,
+      "params": {
+        "public_housing_residence": true,
+        "program": "국토부"
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212400",
+    "phrase": "○공공주택특별법에 따른 공공임대주택 거주자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 40행",
+    "a": "20260922005400113532",
+    "condition": {
+      "type": null,
+      "params": {
+        "public_housing_residence": true,
+        "program": "국토부"
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212464",
+    "phrase": "○ 공공주택특별법에 따른 공공임대주택 거주자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 41행",
+    "a": "20260922005400113532",
+    "condition": {
+      "type": null,
+      "params": {
+        "public_housing_residence": true,
+        "program": "국토부"
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20240109005400100004",
+    "phrase": "대출접수일 현재 공공임대주택에 입주하고 있는 경우 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 42행",
+    "a": "20260922005400113532",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20240109005400100002",
+    "phrase": "대출접수일 현재 공공임대주택에 입주하고 있는 경우 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 43행",
+    "a": "20260922005400113532",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": true
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 국토부 또는 지자체에서 시행하는 청년월세 지원사업 중복 수혜중인 자(수혜종료 후 신청 가능) 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 44행",
+    "a": "20260406005400212400",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 국토부 또는 지자체에서 시행하는 청년월세 지원사업 중복 수혜중인 자(수혜종료 후 신청 가능) 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 45행",
+    "a": "20260406005400212464",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 국토부 또는 지자체에서 시행하는 청년월세 지원사업 중복 수혜중인 자(수혜종료 후 신청 가능) 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 46행",
+    "a": "20261030005400214649",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 국토부 또는 지자체에서 시행하는 청년월세 지원사업 중복 수혜중인 자(수혜종료 후 신청 가능) 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 47행",
+    "a": "20261019005400213997",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212400",
+    "phrase": "○국토부 또는 지자체에서 시행하는 월세지원 수혜 중 인자 등(수혜종료 후 신청가능)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 48행",
+    "a": "20260319005400112218",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212464",
+    "phrase": "○ 국토부 또는 지자체에서 시행하는 월세지원 수혜 중 인자 등(수혜종료 후 신청가능)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 49행",
+    "a": "20260319005400112218",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212459",
+    "phrase": "○ 국민취업제도에 참여하여 수혜 중인 자",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 50행",
+    "a": "20260710005400113256",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (지 자 체) 서울시 희망두배 청년통장, 경기도 청년 노동자 통장, 대구 청년희망적금 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 51행",
+    "a": "20261031005400214655",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (지 자 체) 서울시 희망두배 청년통장, 경기도 청년 노동자 통장, 대구 청년희망적금 등",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 51행",
+    "a": "20261031005400214655",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": false
+    },
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 52행",
+    "a": "20260430005400113009",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 1 · 52행",
+    "a": "20260430005400113009",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": false
+    },
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212462",
+    "phrase": "○ 주택도시기금 대출상품 이용자(사업신청일 기준)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 53행",
+    "a": "20240109005400100002",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "fund_loan_in_use": true
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212462",
+    "phrase": "○ 주택도시기금 대출상품 이용자(사업신청일 기준)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 54행",
+    "a": "20240109005400100003",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "fund_loan_in_use": true
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212462",
+    "phrase": "○ 주택도시기금 대출상품 이용자(사업신청일 기준)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 55행",
+    "a": "20240109005400100004",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "fund_loan_in_use": true
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212462",
+    "phrase": "○ 주택도시기금 대출상품 이용자(사업신청일 기준)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 56행",
+    "a": "20240109005400100005",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "fund_loan_in_use": true
+      },
+      "exception": false
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260922005400113546",
+    "phrase": "- (주택도시기금대출) 성년인 세대원 전원이 기금 대출을 이용 중이면 대출 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 57행",
+    "a": "20240109005400100002",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "household_fund_loan": true
+      },
+      "exception": true
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260922005400113546",
+    "phrase": "- (주택도시기금대출) 성년인 세대원 전원이 기금 대출을 이용 중이면 대출 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 58행",
+    "a": "20240109005400100003",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "household_fund_loan": true
+      },
+      "exception": true
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260922005400113546",
+    "phrase": "- (주택도시기금대출) 성년인 세대원 전원이 기금 대출을 이용 중이면 대출 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 59행",
+    "a": "20240109005400100004",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "household_fund_loan": true
+      },
+      "exception": true
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260922005400113546",
+    "phrase": "- (주택도시기금대출) 성년인 세대원 전원이 기금 대출을 이용 중이면 대출 불가",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 60행",
+    "a": "20240109005400100005",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "household_fund_loan": true
+      },
+      "exception": true
+    },
+    "expect_effect": "apply_block",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212460",
+    "phrase": "※ 다른 기관, 부서, 단체 등에서 중개보수 지원을 받은 경우 지급 제외",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 61행",
+    "a": "20250718005400211407",
+    "condition": {
+      "type": null,
+      "params": {
+        "same_contract_broker_fee": true
+      },
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "중개보수",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20261031005400214659",
+    "phrase": "상근예비역, 의무경찰, 의무소방, 사회복무요원, 군무원 등 군복무 청년  상해보험 가입자, 자원봉사센터에 등록된 자원봉사자(조례 제6조)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 62행",
+    "a": "20261031005400214658",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20261014005400213946",
+    "phrase": "2. 지원대상: 경기도 내 재난복구 현장에 동원되는 군 장병 (현역 병·장교·준사관·부사관 및 군간부        후보생) / 제외대상: 상근예비역, 의무경찰, 의무소방, 사회복무요원, 군무원, 군복무 청년 상해보험 가입자 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 63행",
+    "a": "20261031005400214658",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212494",
+    "phrase": "- 신청자 본인이 생계·의료급여 수급자(주거·교육급여 수급자는 신청 가능)",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 64행",
+    "a": "20260930005400113740",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260406005400212494",
+    "phrase": "주거·교육급여 수급자는 신청 가능",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 1 · 64행",
+    "mention": "주거급여"
+  },
+  {
+    "b": "20260406005400212494",
+    "phrase": "주거·교육급여 수급자는 신청 가능",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 1 · 64행",
+    "mention": "교육급여"
+  },
+  {
+    "b": "20260930005400113726",
+    "phrase": "- 국민기초생활보장법에 의한 생계급여를 지원받는 경우",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 1 · 65행",
+    "a": "20260930005400113740",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "participation_block",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 중앙정부, 타 지자체 사업 중 유사사업(근속 유도사업, 청년(재직자)내일채움공제, 지역주도형 청년일자리사업, 일자리 채움 청년지원금 등)에 참여 중이거나 참여했던 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 66행",
+    "a": "20250430005400210731",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "근속장려수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 중앙정부, 타 지자체 사업 중 유사사업(근속 유도사업, 청년(재직자)내일채움공제, 지역주도형 청년일자리사업, 일자리 채움 청년지원금 등)에 참여 중이거나 참여했던 자",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 1 · 67행",
+    "a": "20250430005400210732",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "근속장려수당",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250618005400111001",
+    "phrase": "현재 청년희망적금을 가입 유지하고 있는 경우 가입 불가능",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 91행",
+    "mention": "청년희망적금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 국가근로장학생(한국장학재단) 참여 중인 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 92행",
+    "mention": "국가근로장학금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 중앙정부, 타 지자체 사업 중 유사사업(근속 유도사업, 청년(재직자)내일채움공제, 지역주도형 청년일자리사업, 일자리 채움 청년지원금 등)에 참여 중이거나 참여했던 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 93행",
+    "mention": "청년(재직자)내일채움공제",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 중앙정부, 타 지자체 사업 중 유사사업(국민취업지원제도, 취업성공패키지, 청년구직활동지원금 등)에 참여 중이거나 참여했던 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 94행",
+    "mention": "취업성공패키지",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 중앙정부, 타 지자체 사업 중 유사사업(국민취업지원제도, 취업성공패키지, 청년구직활동지원금 등)에 참여 중이거나 참여했던 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 94행",
+    "mention": "청년구직활동지원금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250516005400210832",
+    "phrase": "○ 중앙정부, 타 지자체 사업 중 유사사업(근속 유도사업, 청년(재직자)내일채움공제, 지역주도형 청년일자리사업, 일자리 채움 청년지원금 등)에 참여 중이거나 참여했던 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 94행",
+    "mention": "일자리 채움 청년지원금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250718005400211407",
+    "phrase": "○ 인천시, 군·구(중구, 동구 등) 부동산 중개보수 또는 이사비 지원사업 수혜자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 95행",
+    "mention": "인천시·군·구 중개보수 또는 이사비 지원",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260928005400113623",
+    "phrase": "- 청년구직활동지원금 등 수령중인 자 : 본 교육 참여 불가",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 96행",
+    "mention": "청년구직활동지원금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 97행",
+    "mention": "청년내일채움공제",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 97행",
+    "mention": "청년희망키움통장",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (지 자 체) 서울시 희망두배 청년통장, 경기도 청년 노동자 통장, 대구 청년희망적금 등",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 97행",
+    "mention": "서울시 희망두배 청년통장",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (지 자 체) 서울시 희망두배 청년통장, 경기도 청년 노동자 통장, 대구 청년희망적금 등",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 97행",
+    "mention": "대구 청년희망적금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- 인천 재직청년 복지포인트, 뿌리기업 신규취업자 장려금, 지역 주도형 일자리 창업기업 청년일자리 장기근속 인센티브 지원 등 타 장려금 사업",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 97행",
+    "mention": "뿌리기업 신규취업자 장려금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212442",
+    "phrase": "- (중앙부처) 고용노동부 청년내일채움공제, 보건복지부 청년희망키움통장, 청년내일저축계좌 등",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 97행",
+    "mention": "지역 주도형 일자리 장기근속 인센티브",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212506",
+    "phrase": "-보건복지부 공중보건장학사업 등 본 사업과 유사한 장학사업과의 중복지원 불가",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 98행",
+    "mention": "보건복지부 공중보건장학사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250718005400211429",
+    "phrase": "-보건복지부 공중보건장학사업 등 본 사업과 유사한 장학사업과의 중복지원 불가",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 98행",
+    "mention": "보건복지부 공중보건장학사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260324005400212251",
+    "phrase": "정부초청장학제도(GKS) 기수혜자",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 2 · 99행",
+    "mention": "정부초청장학제도(GKS)",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250624005400111132",
+    "phrase": "1. 소상공인 정책자금 지원제외 업종을 영위하는 경우, 2. 20~25년 로컬크리에이터 사업에 선정되어 지원받은 경우와 22~25년 강한소상공인 성장 지원 사업에 선정되어 지원 받은 경우, 3 기타 채무불이행자, 국세 및 지방세 미납자 등",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 2 · 100행",
+    "mention": "강한소상공인 성장 지원",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250624005400111132",
+    "phrase": "1. 소상공인 정책자금 지원제외 업종을 영위하는 경우, 2. 20~25년 로컬크리에이터 사업에 선정되어 지원받은 경우와 22~25년 강한소상공인 성장 지원 사업에 선정되어 지원 받은 경우, 3 기타 채무불이행자, 국세 및 지방세 미납자 등",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 2 · 100행",
+    "mention": "로컬크리에이터",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260918005400113441",
+    "phrase": "임관 시 최소 6~10년 의무복무 확정자[단, 군가산복무지원금(군 장학금) 수령자 제외]",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 101행",
+    "mention": "군가산복무지원금(군 장학금)",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260313005400212154",
+    "phrase": "아이돌봄서비스(영아종일제) 이용시 등 제한될 수 있음",
+    "expect_kind": [
+      "org_decides"
+    ],
+    "source_row": "표 2 · 102행",
+    "mention": "아이돌봄서비스(영아종일제)",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260313005400212155",
+    "phrase": "ㅇ (목적) 어린이집·유치원·종일제 아이돌봄서비스를 이용하지 않는 가정의 청년 부모에게 양육수당을 지원하여 양육비 부담 완화 및 보육서비스 간 형평성 제고",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 103행",
+    "mention": "어린이집·유치원·종일제 아이돌봄서비스",
+    "expect_link": "none"
+  },
+  {
+    "b": "20261019005400214055",
+    "phrase": "ㅇ (대상) 가정양육중인 24개월이상~86개월미만 미취학아동보호자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 103행",
+    "mention": "어린이집·유치원·종일제 아이돌봄서비스",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250403005400210687",
+    "phrase": "* 청년 마음건강 지원사업('22~'24년), 지역사회서비스 투자사업의 아동청소년 심리지원 서비스,",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "아동",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250403005400210687",
+    "phrase": "아동청소년 정서발달 지원 서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스를 받고 있는",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "정신건강토탈케어",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250403005400210687",
+    "phrase": "아동청소년 정서발달 지원 서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스를 받고 있는",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "성인 심리",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260107005400212076",
+    "phrase": "* 청년 마음건강 지원사업('22~'24년), 지역사회서비스 투자사업의 아동청소년 심리지원 서비스,",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "아동",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260107005400212076",
+    "phrase": "아동청소년 정서발달 지원 서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스를 받고 있는",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "정신건강토탈케어",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260107005400212076",
+    "phrase": "아동청소년 정서발달 지원 서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스를 받고 있는",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "성인 심리",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "아동",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "정신건강토탈케어",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260415005400112751",
+    "phrase": "2. 지역사회서비스 투자사업의 아동ㆍ청소년 심리지원서비스, 아동ㆍ청소년 정서발달 지원서비스, 정신건강토탈케어 서비스, 성인 심리지원서비스, 일상돌봄 서비스(심리상담), 발달장애인부모상담서비스를 지원받고 있는 경우",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 104행",
+    "mention": "성인 심리",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260930005400113726",
+    "phrase": "- 아동복지법에 의한 가정위탁양육보조금을 받는 경우",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 105행",
+    "mention": "가정위탁양육보조금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260930005400113726",
+    "phrase": "- 국민기초생활보장법에 의한 교육급여",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 105행",
+    "mention": "교육급여",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260930005400113726",
+    "phrase": "- 장애인복지법에 의한 교육비 지원",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 105행",
+    "mention": "교육비",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260930005400113726",
+    "phrase": "- 긴급복지지원법에 의한 교육지원",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 105행",
+    "mention": "긴급복지",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250122005400110346",
+    "phrase": "정부 또는 지자체로부터 유사한 성격의 사업에 참여하여 수당*을 지급받고 지급이 끝난 날부터 6개월이 지나지 아니한 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 106행",
+    "mention": "정부·지자체 유사 수당 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212459",
+    "phrase": "○ 정부 또는 지자체로부터 유사한 성격의 사업에 참여하여 수당을 지급받고 지급이 끝난 날부터 6개월이 지나지 아니한 자 등",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 106행",
+    "mention": "정부·지자체 유사 수당 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212494",
+    "phrase": "- 신청자 본인 및 해당 가구원이 정부 및 타 지자체의 유사 자산형성 지원사업에 현재 참여하고 있거나, 참가 이력이 있는 경우",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 2 · 107행",
+    "mention": "정부·타 지자체 유사 자산형성 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20261020005400214082",
+    "phrase": "누림통장 기가입자 및 유사사업 참여자 제외",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 2 · 108행",
+    "mention": "유사사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212452",
+    "phrase": "○ 중앙정부, 지방자치단체 또는 관련기관에서 지원하는 유사사업 수혜자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 109행",
+    "mention": "유사사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260406005400212410",
+    "phrase": "○ 중앙 정부, 지방자치단체, 유관기관에서 지원하는 장려금 수혜자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 110행",
+    "mention": "장려금 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260922005400113520",
+    "phrase": "· 신청일 기준 국가, 지자체, 공공기관에서 진행하는 일자리·인건비 지원사업에 참여 중인 경우",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 111행",
+    "mention": "일자리·인건비 지원사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20261001005400113794",
+    "phrase": "※ 기존 재직자, 프리랜서, 대표자 본인·친인척 및 타 정부지원사업 등을 통해 동일 인건비를 중복 지원받는 자 등은 지원대상에서 제외될 수 있음",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 112행",
+    "mention": "동일 인건비 재정지원사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260316005400112168",
+    "phrase": "⑦ 타 정부 부처 또는 공공기관의 인턴 사업에 참여 중인 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 113행",
+    "mention": "타 부처·공공기관 인턴 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250107005400110063",
+    "phrase": "⑦ 타 정부부처 또는 공공기관의 인턴 사업에 참여 중인 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 113행",
+    "mention": "타 부처·공공기관 인턴 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260625005400113245",
+    "phrase": "② 타 부처 또는 지방정부의 취업 관련 지원사업에 참여 중인 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 114행",
+    "mention": "취업 관련 지원사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260930005400113716",
+    "phrase": "ㅇ 타 정부 사업의 취ㆍ창업 프로그램에 참여 중인 자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 115행",
+    "mention": "취·창업 프로그램",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260928005400113625",
+    "phrase": "ㅇ (중복 지원 제한) 동일 또는 유사한 사업계획으로 한국문화예술위원회 및 관계기관의 보조금을 중복으로 받을 수 없음.",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 116행",
+    "mention": "문화예술위원회·관계기관 보조금",
+    "expect_link": "none"
+  },
+  {
+    "b": "20260928005400113612",
+    "phrase": "직접일자리사업 20개월 및 2회 초과 참여자 채용불가",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 2 · 117행",
+    "mention": "직접일자리사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20261006005400113908",
+    "phrase": "- 타 사업 중복 참여/중복 수급자",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 118행",
+    "mention": "타 사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250122005400110355",
+    "phrase": "□ 지원금에 신청한 동일한 해외취업사실로 지방자치단체 유사사업을 지원받은 경우",
+    "expect_kind": [
+      "blocks",
+      "partial"
+    ],
+    "source_row": "표 2 · 119행",
+    "mention": "지자체 유사사업",
+    "expect_link": "none"
+  },
+  {
+    "b": "20250123005400110393",
+    "phrase": "*실업급여 수급 중이거나 소득이 있는 경우 등에는 일부 또는 전액 부지급",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 129행",
+    "a": "20250122005400110369",
+    "condition": {
+      "type": "receiving",
+      "params": {},
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "훈련장려금",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 주거급여 수급자의 경우 주거급여액 중 월차임분(청년 주거급여 분리지급액 포함)을 차감한 금액만 지원합니다.",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "min_amount_won": 200000
+      },
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "해당 월 청년월세 지급액",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 주거급여 수급자의 경우 주거급여액 중 월차임분(청년 주거급여 분리지급액 포함)을 차감한 금액만 지원합니다.",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "min_amount_won": 1,
+        "max_amount_won": 199999
+      },
+      "exception": false
+    },
+    "expect_effect": "amount_deduction",
+    "expect_item": "해당 월 청년월세 지급액",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260319005400112218",
+    "phrase": "○ 주거급여 수급자의 경우 주거급여액 중 월차임분(청년 주거급여 분리지급액 포함)을 차감한 금액만 지원합니다.",
+    "expect_kind": [
+      "allowed",
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "max_amount_won": 0
+      }
+    }
+  },
+  {
+    "b": "20260406005400212464",
+    "phrase": "○  주거급여 수급자인 경우 전월(20일)에 지급한 주거급여를 차감하고 지급",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "min_amount_won": 200000
+      },
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "해당 월 청년월세 지급액",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212464",
+    "phrase": "○  주거급여 수급자인 경우 전월(20일)에 지급한 주거급여를 차감하고 지급",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "min_amount_won": 1,
+        "max_amount_won": 199999
+      },
+      "exception": false
+    },
+    "expect_effect": "amount_deduction",
+    "expect_item": "해당 월 청년월세 지급액",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212464",
+    "phrase": "○  주거급여 수급자인 경우 전월(20일)에 지급한 주거급여를 차감하고 지급",
+    "expect_kind": [
+      "allowed",
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "max_amount_won": 0
+      }
+    }
+  },
+  {
+    "b": "20260406005400212400",
+    "phrase": "○ 주거급여 수급자인 경우 전월(20일)에 지급한 주거급여를 차감하고 지급",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "min_amount_won": 200000
+      },
+      "exception": false
+    },
+    "expect_effect": "personal_payment_block",
+    "expect_item": "해당 월 청년월세 지급액",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212400",
+    "phrase": "○ 주거급여 수급자인 경우 전월(20일)에 지급한 주거급여를 차감하고 지급",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "min_amount_won": 1,
+        "max_amount_won": 199999
+      },
+      "exception": false
+    },
+    "expect_effect": "amount_deduction",
+    "expect_item": "해당 월 청년월세 지급액",
+    "expect_judgement": "blocked"
+  },
+  {
+    "b": "20260406005400212400",
+    "phrase": "○ 주거급여 수급자인 경우 전월(20일)에 지급한 주거급여를 차감하고 지급",
+    "expect_kind": [
+      "allowed",
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 130행",
+    "a": "20250617005400110952",
+    "condition": {
+      "type": "receiving",
+      "params": {
+        "max_amount_won": 0
+      }
+    }
+  },
+  {
+    "b": "20260316005400112168",
+    "phrase": "③ `24~`25년 노동시장이행형 직접일자리사업[별표 2]에 참여한 뒤 ‘실업급여’를 수급한 자",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 3 · 131행",
+    "a": "20250122005400110369",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20250113005400110180",
+    "phrase": "* 단, 취업지원대상자 본인이 제대군인과 국가유공자 자격의 중복으로 제대군인 직업능력개발교육비 지원을 받은 경우 그 차액에 대해 지원(중복 수혜 불가)",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 132행",
+    "mention": "제대군인 교육비",
+    "expect_item": "취업수강료"
+  },
+  {
+    "b": "20250113005400110180",
+    "phrase": "* 단, 취업지원대상자 본인이 제대군인과 국가유공자 자격의 중복으로 제대군인 직업능력개발교육비 지원을 받은 경우 그 차액에 대해 지원(중복 수혜 불가)",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 3 · 132행",
+    "mention": "제대군인 교육비",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20250521005400110863",
+    "phrase": "□ 지원금액: 월 최대 20만 원",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 133행",
+    "a": "20250617005400110952",
+    "expect_item": "해당 월 장학금"
+  },
+  {
+    "b": "20250521005400110863",
+    "phrase": "□ 지원금액: 월 최대 20만 원",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 3 · 133행",
+    "a": "20250617005400110952",
+    "mention": "청년 주거급여 분리지급",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20260528005400113227",
+    "phrase": "보건복지부 영양플러스 사업 이용자는 해당 기간 동안 가구원 수 산출에서 제외",
+    "expect_kind": [
+      "partial"
+    ],
+    "source_row": "표 3 · 134행",
+    "mention": "영양플러스",
+    "expect_item": "지원액 산정 인원"
+  },
+  {
+    "b": "20250321005400110645",
+    "phrase": "- 2023년 ~ 2024년 중앙행정기관(타부처 포함) 청년인턴 2회 이상 참여자",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 3 · 135행",
+    "mention": "중앙행정기관 청년인턴"
+  },
+  {
+    "b": "20260714005400113258",
+    "phrase": "④ 국가 또는 지방자치단체가 실시하거나 비용을 지원하는 직업능력개발훈련을 수강하고 있는 사람",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 3 · 136행",
+    "mention": "직업능력개발훈련"
+  },
+  {
+    "b": "20260714005400113258",
+    "phrase": "④ 국가 또는 지방자치단체가 실시하거나 비용을 지원하는 직업능력개발훈련을 수강하고 있는 사람",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 3 · 136행",
+    "mention": "직업능력개발훈련",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20250618005400211022",
+    "phrase": "-국민취업지원제도 참여이력 有",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 3 · 142행",
+    "mention": "국민취업지원제도"
+  },
+  {
+    "b": "20250618005400211022",
+    "phrase": "-실업급여 수급 6개월 이내",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 3 · 142행",
+    "mention": "실업급여",
+    "condition": {
+      "type": "within_months_after_end",
+      "params": {
+        "months": 6
+      }
+    }
+  },
+  {
+    "b": "20250125005400210403",
+    "phrase": "금전 · 물품 등 별도의 수당이나 대가를 받고 참여하는 자 및 타 제도와의 중복 수혜자는 제외",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 3 · 143행",
+    "mention": "참석수당"
+  },
+  {
+    "b": "20250304005400210588",
+    "phrase": "국비유학생 시험 합격자로 국비 장학금을 받거나 받을 예정인 사람 지원 불가 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 3 · 144행",
+    "mention": "국비 장학금"
+  },
+  {
+    "b": "20260410005400212663",
+    "phrase": "① 동일·유사사업으로 서울시, 자치구로부터 시비·구비 등을 지원받고 있거나 지원받을 예정인 동아리",
+    "expect_kind": [
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 145행",
+    "mention": "동아리"
+  },
+  {
+    "b": "20260410005400212663",
+    "phrase": "① 동일·유사사업으로 서울시, 자치구로부터 시비·구비 등을 지원받고 있거나 지원받을 예정인 동아리",
+    "expect_kind": [
+      "allowed"
+    ],
+    "source_row": "표 3 · 145행",
+    "mention": "동아리",
+    "condition": {
+      "type": null,
+      "params": {},
+      "exception": true
+    }
+  },
+  {
+    "b": "20260921005400113480",
+    "phrase": "- 산단근로자 천원의 아침밥 : 중소, 중견기업 재직 근로자",
+    "expect_kind": [
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 146행",
+    "mention": "산단 입주기업"
+  },
+  {
+    "b": "20250903005400211596",
+    "phrase": "(선정대상) 본사나 사업장이 도내 소재하며 「중소기업기본법」제2조제1항제1호에 따른 기업으로 19세이상 39세 이하 청년이 대표로서 경영한느 기업",
+    "expect_kind": [
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 147행",
+    "mention": "기업"
+  },
+  {
+    "b": "20250122005400110354",
+    "phrase": "□ 지원제외 대상 근로자(고용유지조치 대상자)",
+    "expect_kind": [
+      "not_restriction"
+    ],
+    "source_row": "표 3 · 148행",
+    "mention": "사업주"
+  },
+  {
+    "b": "20260922005400113546",
+    "phrase": "□ 중복대출 금지 : 주택도시기금대출 및 은행재원 주택담보대출 미이용자 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 3 · 149행",
+    "mention": "다른 주택의 담보대출"
+  },
+  {
+    "b": "20250514005400110811",
+    "phrase": "□ 중복대출 금지 : 주택도시기금대출 및 은행재원 주택담보대출 미이용자 등",
+    "expect_kind": [
+      "blocks"
+    ],
+    "source_row": "표 3 · 149행",
+    "mention": "다른 주택의 담보대출"
+  },
+  {
+    "b": "20260317005400212170",
+    "phrase": "동일 사업 기존 참여자 선정불가",
+    "expect_kind": [
+      "history"
+    ],
+    "source_row": "표 3 · 155행",
+    "mention": "기존 참여자",
+    "expect_judgement": "needs_check"
+  },
+  {
+    "b": "20260718005400113262",
+    "phrase": "\"o 한 명의 참여자가 동시에 다수의 경계선지능청년지원 사업 참여 제한",
+    "expect_kind": [
+      "history",
+      "blocks"
+    ],
+    "source_row": "표 3 · 156행",
+    "mention": "경계선지능청년지원",
+    "expect_judgement": "needs_check"
+  }
+]

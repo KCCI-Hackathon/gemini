@@ -15,6 +15,37 @@ const cardsOf = (p: ReturnType<typeof pipe>) => p.columns.flatMap((c) => c.cards
 const colOf = (p: ReturnType<typeof pipe>, id: string) => p.columns.find((c) => c.cards.some((x) => x.policyId === id) || c.allIds.includes(id))!;
 
 describe("buildPipeline: 마감월로 열을 자른다", () => {
+  test("AG-01 오늘과 수료 직후의 K-뉴딜 카드와 상세는 각 시점의 판정을 표시한다", () => {
+    function badges(date: string) {
+      const timeline = buildTimeline(PERSONA_A, new Date(date + "T12:00:00+09:00"), { employAfterMonths: 3 });
+      const roadmap = buildRoadmap(timeline);
+      const detail = roadmap.rows.find((r) => r.policyId === KNEWDEAL)!;
+      const card = cardsOf(buildPipeline(roadmap, allRelations())).find((c) => c.policyId === KNEWDEAL)!;
+      return { card: card.statusLabel, detail: detail.statusLabel };
+    }
+    expect(badges("2026-12-19")).toEqual({ card: "조건 충족", detail: "조건 충족" });
+    expect(badges("2026-11-20")).toEqual({ card: "확인 필요", detail: "확인 필요" });
+  });
+
+  test("AG-01 수료 후 조건이 충족돼도 K-뉴딜 오늘 카드와 상세 배지는 확인 필요다", () => {
+    const today = new Date("2026-11-20T12:00:00+09:00");
+    const verdicts = new Map<string, string>();
+    const timeline = buildTimeline(PERSONA_A, today, { employAfterMonths: 3 }, (date, policies) => {
+      verdicts.set(date, policies.get(KNEWDEAL)!.axes.personal.value);
+    });
+    expect(verdicts.get("2026-11-20")).toBe("needs_check");
+    expect(verdicts.get("2026-12-19")).toBe("eligible");
+
+    const roadmap = buildRoadmap(timeline);
+    const detail = roadmap.rows.find((r) => r.policyId === KNEWDEAL)!;
+    const card = cardsOf(buildPipeline(roadmap, allRelations())).find((c) => c.policyId === KNEWDEAL)!;
+    expect(card.source).toBe("now");
+    expect({ card: card.statusLabel, detail: detail.statusLabel }).toEqual({
+      card: "확인 필요",
+      detail: "확인 필요",
+    });
+  });
+
   test("열은 마감월 순서이고 기한 없는(상시) 정책은 마지막 열", () => {
     const keys = pipe().columns.map((c) => c.key);
     const months = keys.filter((k) => k !== "always" && k !== "beyond" && k !== "now_rest");

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "seed-demo-account",
+    "email": "song03621@gmail.com",
+    "displayName": "시연 계정",
+    "passwordHash": "scrypt$4u12woqaLkj627mJ8WX13g==$yEJMaampkNZGe8nRld3cMzVH27cqiibC3o2X1PQV+/nWM517EuwPcdN5wqq7dLPsZZb+kJNyobelZICeL0SzBw==",
+    "createdAt": "2026-11-23T00:00:00.000Z"
+  }
+]

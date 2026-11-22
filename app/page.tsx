@@ -1,540 +1,117 @@
-"use client";
+import Link from "next/link";
+import LandingEffects from "./LandingEffects";
+import styles from "./site.module.css";
 
-import { useMemo, useRef, useState } from "react";
-import { regionLabel, regionOptions } from "@/lib/data/regions";
-import type { Roadmap, RoadmapCat } from "@/lib/route/roadmap";
-import { ChatPanel, DetailPanel, PlanModal, type PlanDraft } from "./planner/Panels";
-import { isChanging, RoadmapGrid } from "./planner/Roadmap";
-import { PipelineBoard } from "./planner/PipelineBoard";
-import s from "./planner/planner.module.css";
-import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "./planner/shared";
+const P = "/pathfinder/";
 
-type Answers = Record<string, string>;
-type Session = { profile: Profile; plan: TimelinePlan; answers: Answers };
-
-const ALL_CATS: Record<RoadmapCat, boolean> = { job: true, startup: true, housing: true, edu: true, life: true };
-const MINE_KEY = "galimgil.mine.v1";
-
-function loadMine(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(MINE_KEY) ?? "[]") as string[]);
-  } catch {
-    return new Set();
-  }
-}
-function saveMine(ids: Set<string>) {
-  try {
-    localStorage.setItem(MINE_KEY, JSON.stringify([...ids]));
-  } catch {
-    /* 저장이 막혀도 화면은 동작한다 */
-  }
-}
-
-/** 판정이 바뀌는 정보만, 정해 둔 순서로 묻는다. 서버가 고른 질문(영향 큰 순)은 맨 뒤 */
-function nextQuestion(sess: Session, asked: Record<string, string>, data: Ok | null): ChatQuestion | null {
-  const st = new Set(sess.profile.currentStatus);
-  const base = st.has("in_training") && sess.profile.events.some((e) => e.type === "training_completion") ? "수료일" : "오늘";
-  if (!asked.status)
-    return {
-      key: "status",
-      text: "지금 어떤 상태인가요? 취업 조건이 있는 정책을 확정하는 데 써요.",
-      options: [
-        { label: "교육·훈련 수강 중", value: "training" },
-        { label: "구직 중", value: "seeking" },
-        { label: "재직 중", value: "employed" },
-        { label: "사업자등록 있음", value: "business" },
-        { label: "모름", value: "unknown" },
-      ],
-    };
-  if (st.has("in_training") && !asked.completion)
-    return {
-      key: "completion",
-      text: "수강 중인 교육은 언제 수료할 예정인가요?",
-      options: [
-        { label: "1개월 안", value: "1" },
-        { label: "3개월 안", value: "3" },
-        { label: "6개월 안", value: "6" },
-        { label: "모름", value: "unknown" },
-      ],
-    };
-  if (!st.has("employed") && !asked.employ)
-    return {
-      key: "employ",
-      text: `취업은 언제쯤으로 가정해 볼까요? (${base} 기준) 그 시점 앞뒤로 신청 구간이 어떻게 바뀌는지 보여 드려요.`,
-      options: [
-        { label: `${base} 바로`, value: "0" },
-        { label: "3개월 뒤", value: "3" },
-        { label: "6개월 뒤", value: "6" },
-        { label: "1년 뒤", value: "12" },
-        { label: "계획 없음", value: "none" },
-      ],
-    };
-  if (!st.has("business_registered") && !asked.business)
-    return {
-      key: "business",
-      text: "창업(사업자등록)도 계획에 넣어 볼까요?",
-      options: [
-        { label: "6개월 뒤", value: "6" },
-        { label: "1년 뒤", value: "12" },
-        { label: "계획 없음", value: "none" },
-      ],
-    };
-  const examPending = data?.roadmap.rows.some((r) => r.reasons.includes("응시일 확인 필요")) || data?.items.some((i) => i.reasons.includes("응시일 확인 필요"));
-  if (examPending && !asked.exam)
-    return {
-      key: "exam",
-      text: "응시일을 기준으로 보는 정책이 있어요. 시험을 본(또는 볼) 날짜를 알려 주시면 그날의 상태로 판정해요.",
-      options: [{ label: "모름", value: "unknown" }],
-      date: true,
-    };
-  if (!asked.move)
-    return {
-      key: "move",
-      text: "이사할 계획이 있나요? 이사하면 그 달부터 새 지역의 정책으로 다시 계산해요.",
-      options: [{ label: "이사 계획 없음", value: "none" }],
-      move: true,
-    };
-  const q = data?.questions.find((x) => !asked[x.key]);
-  if (q) return { key: q.key, text: `${q.question} (답하면 정책 ${q.mayChangeCount}개의 판정이 바뀔 수 있어요)`, options: q.options.map((o) => ({ label: o, value: o })) };
-  return null;
-}
-
-function applyAnswer(sess: Session, key: string, value: string, today: string): Session {
-  const profile: Profile = structuredClone(sess.profile);
-  const plan = { ...sess.plan };
-  const answers = { ...sess.answers };
-  const months = (v: string) => (v === "none" || v === "unknown" ? null : Number(v));
-  switch (key) {
-    case "status": {
-      const map: Record<string, Profile["currentStatus"]> = { training: ["in_training", "unemployed"], seeking: ["unemployed"], employed: ["employed"], business: ["business_registered"], unknown: [] };
-      profile.currentStatus = map[value];
-      if (value !== "training") profile.events = profile.events.filter((e) => e.type !== "training_completion");
-      break;
-    }
-    case "completion": {
-      profile.events = profile.events.filter((e) => e.type !== "training_completion");
-      const n = months(value);
-      if (n != null) profile.events.push({ type: "training_completion", date: addMonthsYmd(today, n), status: "scheduled" });
-      break;
-    }
-    case "exam":
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) profile.examDate = value;
-      else delete profile.examDate;
-      break;
-    case "move": {
-      const m = /^(\d{5}):(\d{1,2})$/.exec(value);
-      plan.move = m ? { sigungu: m[1], afterMonths: Number(m[2]) } : null;
-      break;
-    }
-    case "employ":
-      plan.employAfterMonths = months(value);
-      break;
-    case "business":
-      plan.businessAfterMonths = months(value);
-      break;
-    default:
-      answers[key] = value;
-  }
-  profile.interest = plan.businessAfterMonths != null && plan.employAfterMonths == null ? "startup" : "job";
-  return { profile, plan, answers };
-}
-
-function countLine(r: Roadmap): string {
-  const n = (st: string) => r.rows.filter((x) => x.status === st).length;
-  return `조건 충족 ${n("ok")} · 확인 필요 ${n("check")} · 기간 조건 남음 ${n("wait")}`;
-}
-
-export default function Page() {
-  const regions = useMemo(() => regionOptions(), []);
-  const [form, setForm] = useState({ birth: "", sigungu: "", school: "" });
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const [sess, setSess] = useState<Session | null>(null);
-  const [data, setData] = useState<Ok | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const seq = useRef(0);
-
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const nextId = useRef(1);
-  const [asked, setAsked] = useState<Record<string, string>>({});
-  const [stopped, setStopped] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
-
-  const [filterCats, setFilterCats] = useState<Record<RoadmapCat, boolean>>(ALL_CATS);
-  const [onlyMine, setOnlyMine] = useState(false);
-  const [onlyChanging, setOnlyChanging] = useState(false);
-  const [view, setView] = useState<"stage" | "gantt">("stage");
-  const [aiPicks, setAiPicks] = useState<AiPicks>({});
-  const [onlyAi, setOnlyAi] = useState(false);
-  const [mine, setMine] = useState<Set<string>>(new Set());
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [modal, setModal] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  function showToast(t: string) {
-    clearTimeout(toastTimer.current);
-    setToast(t);
-    toastTimer.current = setTimeout(() => setToast(null), 2400);
-  }
-  const push = (m: { role: "ai"; text: string; question?: ChatQuestion } | { role: "user"; text: string }) => {
-    const msg = { ...m, id: nextId.current++ } as ChatMessage;
-    setMessages((ms) => [...ms, msg]);
-  };
-
-  async function judge(next: Session): Promise<Ok | null> {
-    const id = ++seq.current;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/judge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(next) });
-      const body = await res.json();
-      if (!res.ok || "error" in body) throw new Error(body.error ?? `HTTP ${res.status}`);
-      if (id !== seq.current) return null; // 더 늦게 보낸 요청이 있으면 버린다
-      setData(body as Ok);
-      setSess(next);
-      return body as Ok;
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      return null;
-    } finally {
-      if (id === seq.current) setBusy(false);
-    }
-  }
-
-  function askNext(nextSess: Session, nextAsked: Record<string, string>, body: Ok | null, lead: string) {
-    const q = stopped ? null : nextQuestion(nextSess, nextAsked, body);
-    push({ role: "ai", text: q ? lead : `${lead}\n더 여쭤볼 것이 없어요. 로드맵에서 정책을 눌러 근거를 확인해 보세요.`, question: q ?? undefined });
-  }
-
-  async function start(profile: Profile) {
-    setMine(loadMine());
-    const first: Session = { profile, plan: {}, answers: {} };
-    setMessages([]);
-    const preAsked: Record<string, string> = profile.source === "demo_persona" ? { status: "교육·훈련 수강 중", completion: "2026-12-19 수료 예정" } : {};
-    setAsked(preAsked);
-    setStopped(false);
-    const body = await judge(first);
-    if (!body) return;
-    const who = profile.source === "demo_persona" ? "가상 인물(인천 연수구, 대학 졸업, 국비 교육 수강 중)" : `${regionLabel(profile.sigungu)} · ${SCHOOLS.find((x) => x[0] === profile.school)?.[1] ?? ""}`;
-    askNext(first, preAsked, body, `${who} 기준으로 앞으로 12개월 동안 확인할 정책 ${body.roadmap.rows.length}개를 로드맵에 올렸어요.\n${countLine(body.roadmap)}`);
-  }
-
-  function submitForm(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.birth || !form.sigungu || !form.school) {
-      setFormError("세 가지를 모두 입력해 주세요.");
-      return;
-    }
-    setFormError(null);
-    void start({ birthYm: form.birth.slice(0, 7), sigungu: form.sigungu, school: form.school, currentStatus: [], interest: "job", events: [], participating: [], source: "user" });
-  }
-
-  async function answer(q: ChatQuestion, value: string, label: string) {
-    if (!sess || !data) return;
-    setMessages((ms) => ms.map((m) => (m.role === "ai" && m.question?.key === q.key && !m.answered ? { ...m, answered: label } : m)));
-    push({ role: "user", text: label });
-    const nextSess = applyAnswer(sess, q.key, value, data.today);
-    const nextAsked = { ...asked, [q.key]: label };
-    setAsked(nextAsked);
-    const body = await judge(nextSess);
-    if (!body) return;
-    askNext(nextSess, nextAsked, body, `로드맵을 다시 계산했어요. ${countLine(body.roadmap)}`);
-  }
-
-  function reask(key: string) {
-    if (!sess) return;
-    const rest = { ...asked };
-    delete rest[key];
-    setAsked(rest);
-    setStopped(false);
-    setMessages((ms) => ms.map((m) => (m.role === "ai" && m.question && !m.answered ? { ...m, answered: "건너뜀" } : m)));
-    const q = nextQuestion(sess, rest, data);
-    push({ role: "ai", text: "다시 답해 주세요.", question: q ?? undefined });
-  }
-
-  const [planBusy, setPlanBusy] = useState(false);
-  async function runPlanAgent() {
-    if (!sess) return;
-    setPlanBusy(true);
-    try {
-      const res = await fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "replan", persona: true, session: sess }) });
-      const body = await res.json();
-      if (res.status === 503) push({ role: "ai", text: "AI가 꺼져 있어 계획 정리를 할 수 없어요(서버에 API 키가 필요해요). 로드맵과 코드 질문은 그대로 쓸 수 있어요." });
-      else if (!res.ok) push({ role: "ai", text: body.error ?? "AI 계획 정리에 실패했어요." });
-      else if (body.fallback || !body.plan) push({ role: "ai", text: "AI가 만든 계획에 확인할 수 없는 내용이 있어 쓰지 않았어요. 로드맵을 그대로 봐 주세요." });
-      else {
-        const stations = body.plan.stations as { label: string; items: { policyId: string; name: string; why: string }[] }[];
-        const picks: AiPicks = {};
-        let rank = 0;
-        for (const st of stations) for (const i of st.items) if (!picks[i.policyId]) picks[i.policyId] = { rank: ++rank, station: st.label, why: i.why };
-        setAiPicks(picks);
-        setOnlyAi(true);
-        showToast(`AI가 정책 ${rank}개를 골라 로드맵에 표시했어요`);
-        const lines = stations.flatMap((st) => [`■ ${st.label}`, ...st.items.map((i) => `${CIRCLED[picks[i.policyId].rank - 1] ?? ""} ${i.name} — ${i.why}`)]);
-        push({ role: "ai", text: ["[AI 계획 정리 · 판정은 코드 결과 그대로]", body.plan.summary, ...lines].join("\n") });
-      }
-    } catch {
-      push({ role: "ai", text: "AI 계획 정리에 실패했어요." });
-    } finally {
-      setPlanBusy(false);
-    }
-  }
-
-  function toggleMine(id: string) {
-    const next = new Set(mine);
-    const name = data?.roadmap.rows.find((r) => r.policyId === id)?.name ?? "정책";
-    if (next.has(id)) {
-      next.delete(id);
-      showToast(`${name}을(를) 내 계획에서 뺐어요`);
-    } else {
-      next.add(id);
-      showToast(`${name}을(를) 내 계획에 추가했어요`);
-    }
-    setMine(next);
-    saveMine(next);
-  }
-
-  async function savePlan(d: PlanDraft) {
-    if (!sess) return;
-    setModal(false);
-    const nextSess: Session = { ...sess, plan: { ...sess.plan, employAfterMonths: d.employ, businessAfterMonths: d.business } };
-    nextSess.profile = { ...sess.profile, interest: d.business != null && d.employ == null ? "startup" : "job" };
-    setFilterCats(Object.fromEntries(CAT_ORDER.map((k) => [k, d.interests.includes(k)])) as Record<RoadmapCat, boolean>);
-    const nextAsked = { ...asked, employ: d.employ == null ? "취업 가정 안 함" : `취업 ${d.employ}개월 뒤`, business: d.business == null ? "창업 가정 안 함" : `창업 ${d.business}개월 뒤` };
-    setAsked(nextAsked);
-    const body = await judge(nextSess);
-    if (body) {
-      showToast("계획을 반영해 로드맵을 다시 계산했어요");
-      push({ role: "ai", text: `계획 수정을 반영했어요. ${countLine(body.roadmap)}` });
-    }
-  }
-
-  function reset() {
-    setSess(null);
-    setData(null);
-    setMessages([]);
-    setSelectedId(null);
-  }
-
-  /* ---------------- 첫 화면: 폼 3개 ---------------- */
-  if (!sess || !data) {
-    return (
-      <div className={s.page}>
-        <Header />
-        <main className={s.intakeWrap}>
-          <section className={s.intake} aria-labelledby="intake-title">
-            <h1 id="intake-title">기본 정보 입력</h1>
-            <p className={s.muted}>세 가지만 입력하면 앞으로 12개월의 정책 로드맵을 먼저 보여 드려요. 나머지는 상담에서 선택지로 여쭤볼게요.</p>
-            <form className={s.form} onSubmit={submitForm}>
-              <label>
-                생년월일
-                <input type="date" value={form.birth} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setForm({ ...form, birth: e.target.value })} required />
-              </label>
-              <label>
-                현재 시·군·구
-                <select value={form.sigungu} onChange={(e) => setForm({ ...form, sigungu: e.target.value })} required>
-                  <option value="">시·군·구 선택</option>
-                  {regions.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                최종 학력
-                <select value={form.school} onChange={(e) => setForm({ ...form, school: e.target.value })} required>
-                  <option value="">학력 선택</option>
-                  {SCHOOLS.map(([code, label]) => (
-                    <option key={code} value={code}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {(formError || error) && <p className={s.error}>{formError ?? error}</p>}
-              <button className={s.primary} type="submit" disabled={busy}>
-                {busy ? "계산 중…" : "기본 계획 보기"}
-              </button>
-              <button className={s.outline} type="button" disabled={busy} onClick={() => void start(DEMO)}>
-                가상 인물로 둘러보기
-              </button>
-            </form>
-            <p className={s.footNote}>입력한 정보는 판정에만 쓰고 저장하거나 외부 AI로 보내지 않아요. 판정은 온통청년 데이터와 사람이 확인한 공고로 계산해요.</p>
-          </section>
-        </main>
-      </div>
-    );
-  }
-
-  /* ---------------- 대시보드 ---------------- */
-  const roadmap = data.roadmap;
-  const selected = roadmap.rows.find((r) => r.policyId === selectedId) ?? null;
-  const st = new Set(sess.profile.currentStatus);
-  const chips = Object.entries(asked).map(([key, label]) => ({ key, label }));
-  const offCount = CAT_ORDER.filter((k) => !filterCats[k]).length + (onlyMine ? 1 : 0) + (onlyChanging ? 1 : 0);
-
+// 소개 페이지 : 시안 index.html 의 마크업과 문구
+export default function Landing() {
+  const rv = (extra = "") => `${styles.reveal} ${extra}`.trim();
   return (
-    <div className={s.page}>
-      <Header onReset={reset} />
-      <div className={s.shell}>
-        {chatOpen ? (
-          <ChatPanel
-            messages={messages}
-            busy={busy}
-            chips={chips}
-            stopped={stopped}
-            onAnswer={(q, v, l) => void answer(q, v, l)}
-            onReask={reask}
-            onStop={() => {
-              setStopped(true);
-              setMessages((ms) => ms.map((m) => (m.role === "ai" && m.question && !m.answered ? { ...m, answered: "건너뜀" } : m)));
-              push({ role: "ai", text: "질문을 멈췄어요. 모르는 정보는 '확인 필요'로 남겨 둘게요." });
-            }}
-            onResume={() => {
-              setStopped(false);
-              const q = nextQuestion(sess, asked, data);
-              push({ role: "ai", text: q ? "이어서 여쭤볼게요." : "더 여쭤볼 것이 없어요.", question: q ?? undefined });
-            }}
-            onCollapse={() => setChatOpen(false)}
-            aiPlan={sess.profile.source === "demo_persona" ? { busy: planBusy, onRun: () => void runPlanAgent() } : undefined}
-          />
-        ) : (
-          <div className={s.rail}>
-            <button type="button" className={s.ghost} aria-label="상담 패널 펼치기" onClick={() => setChatOpen(true)}>
-              ⇥
-            </button>
-            <span className={s.railLabel}>정책 상담</span>
-          </div>
-        )}
+    <div className={styles.page}>
+      <LandingEffects />
+      <header className={styles.header}>
+        <a className={styles.logo} href="#"><img src={`${P}robot-face.png`} alt="" />PathFinder</a>
+        <nav className={styles.nav}><a href="#story">이런 적 있나요</a><a href="#how">쓰는 법</a><a href="#crew">길잡이들</a><Link href="/login">로그인</Link><Link className={styles.pill} href="/login">내 경로 그려 보기</Link></nav>
+      </header>
 
-        <main className={s.main}>
-          <div className={s.mainHead}>
-            <div>
-              <h1>내 정책 로드맵</h1>
-              <p className={s.muted}>
-                기준 {roadmap.months[0]} · 데이터 {data.asOf} · 내 상태 {roadmap.stateLabels[0]}
-              </p>
-            </div>
-            <div className={s.toolbar}>
-              <button type="button" className={s.outline} onClick={() => setModal(true)}>
-                계획 수정
-              </button>
-            </div>
+      <section className={styles.hero}>
+        <div>
+          <p className={styles.eyebrow}>청년을 위한 정책 길잡이 · PathFinder</p>
+          <h1 className={styles.title}>졸업 다음 달,<br /><span className={styles.grad}>나는 무엇을 받을 수 있을까?</span></h1>
+          <p className={styles.lead}>앞으로의 계획을 들려주세요. 그 계획이 지나가는 길목마다 어떤 지원이 열리고 언제 닫히는지, 미리 펼쳐 보여 드릴게요.</p>
+          <a className={styles.follow} href="#story">길잡이를 따라가 보세요 ↓</a>
+        </div>
+        <div className={styles.stage} aria-hidden="true">
+          <div className={styles.arch}></div>
+          <div className={`${styles.float} ${styles.p1}`}><img src={`${P}prop-calendar.png`} alt="" /></div>
+          <div className={`${styles.float} ${styles.p2}`}><img src={`${P}prop-magnifier.png`} alt="" /></div>
+          <div className={`${styles.float} ${styles.p3}`}><img src={`${P}prop-document.png`} alt="" /></div>
+          <div className={`${styles.float} ${styles.ground} ${styles.b1}`}><img src={`${P}robot-magnifier.png`} alt="" /></div>
+          <div className={`${styles.float} ${styles.ground} ${styles.b2}`}><img src={`${P}robot-map.png`} alt="" /></div>
+        </div>
+        <span className={styles.scroll}>아래로 스크롤 ↓</span>
+      </section>
+
+      <section className={`${styles.story} ${rv()}`} id="story">
+        <div>
+          <p className={styles.kicker}>이런 적 있나요?</p>
+          <h2 className={styles.h2}>알고 보니<br /><em>지난달에 마감</em>된 지원.</h2>
+          <p className={styles.desc}>자격은 됐는데 신청 기간이 지났거나, 교육을 듣는 동안은 안 된다는 조건을 뒤늦게 알게 되는 일. 지원은 많지만, 그걸 내 일정에 맞춰 보는 건 늘 혼자의 몫이었어요.</p>
+        </div>
+        <div className={`${styles.visual} ${styles.stack}`}>
+          <div className={`${styles.bubble} ${styles.me}`}><small>나</small>이 지원, 저도 받을 수 있었던 거죠?</div>
+          <div className={styles.bubble}><small>담당 창구</small>네, 조건은 맞으셨는데… 접수는 지난주에 끝났어요.</div>
+          <div className={`${styles.bubble} ${styles.me}`}><small>나</small>미리 알았으면 좋았을 텐데요.</div>
+          <img className={styles.deco} src={`${P}prop-calendar.png`} alt="" style={{ right: -24, bottom: -40 }} />
+        </div>
+      </section>
+
+      <section className={`${styles.story} ${rv(styles.flip)}`} id="how">
+        <div>
+          <p className={styles.kicker}>대화하듯 계획을 말하면</p>
+          <h2 className={styles.h2}>길목마다<br /><em>깃발을 꽂아</em> 드려요.</h2>
+          <p className={styles.desc}>수료하는 날, 일을 시작할 즈음, 이사 계획처럼 앞으로 바뀔 일을 골라 답하면 충분해요. 바뀌는 날마다 받을 수 있는 지원을 다시 따져서, 마감이 빠른 것부터 달력 위에 놓아 드려요.</p>
+        </div>
+        <div className={`${styles.visual} ${styles.stack}`}>
+          <div className={styles.bubble}><small>PathFinder</small>지금 듣는 교육은 언제 끝나나요?</div>
+          <div className={`${styles.bubble} ${styles.me}`}><small>나</small>12월 19일이요. 그 다음엔 바로 일자리를 찾을 거예요.</div>
+          <div className={styles.pipe}>
+            <div className={styles.colm}><h4>12월에 마감</h4><div className={styles.card}>자격증 응시료 지원</div><div className={styles.card}>국민취업지원제도</div></div>
+            <div className={styles.marker}>교육 끝 12/19</div>
+            <div className={styles.colm}><h4>1월에 마감</h4><div className={`${styles.card} ${styles.g}`}>K-뉴딜 아카데미</div></div>
+            <div className={styles.colm}><h4>언제든</h4><div className={`${styles.card} ${styles.g}`}>청년도전지원사업</div></div>
           </div>
-          <div className={s.filters} aria-label="분류 필터">
-            <span className={s.segment} role="group" aria-label="보기">
-              <button type="button" aria-pressed={view === "stage"} onClick={() => setView("stage")}>
-                파이프라인
-              </button>
-              <button type="button" aria-pressed={view === "gantt"} onClick={() => setView("gantt")}>
-                기간표
-              </button>
-            </span>
-            {CAT_ORDER.map((k) => (
-              <button key={k} type="button" aria-pressed={filterCats[k]} className={filterCats[k] ? s.optionOn : s.option} onClick={() => setFilterCats({ ...filterCats, [k]: !filterCats[k] })}>
-                <span className={s.catDot} style={{ background: CATS[k].fill, borderColor: CATS[k].stroke }} />
-                {CATS[k].label}
-              </button>
-            ))}
-            {Object.keys(aiPicks).length > 0 && (
-              <button type="button" aria-pressed={onlyAi} className={onlyAi ? s.optionOn : s.option} onClick={() => setOnlyAi(!onlyAi)}>
-                AI 추천만 ({Object.keys(aiPicks).length})
-              </button>
-            )}
-            <button type="button" aria-pressed={onlyChanging} className={onlyChanging ? s.optionOn : s.option} onClick={() => setOnlyChanging(!onlyChanging)} title="가정한 수료·취업·창업·이사로 신청 구간이 열리거나 닫히거나 판정이 바뀌는 정책">
-              가정으로 바뀌는 정책만 ({roadmap.rows.filter((r) => isChanging(r, roadmap.months)).length})
-            </button>
-            <button type="button" aria-pressed={onlyMine} className={onlyMine ? s.optionOn : s.option} onClick={() => setOnlyMine(!onlyMine)}>
-              내 계획만 ({mine.size})
-            </button>
-            {offCount > 0 && (
-              <button
-                type="button"
-                className={s.linkButton}
-                onClick={() => {
-                  setFilterCats(ALL_CATS);
-                  setOnlyMine(false);
-                  setOnlyChanging(false);
-                }}
-              >
-                필터 초기화
-              </button>
-            )}
-            <span className={s.legend}>
-              <span className={s.legendOff} /> 공식 신청 기간 <span className={s.legendOk} /> 내 조건 구간 <span className={s.legendCheck} /> 확인 필요
-            </span>
-          </div>
-          {error && <p className={s.error}>{error}</p>}
-          <div className={s.mainBody}>
-            {view === "stage" ? (
-              <PipelineBoard
-                pipeline={data.pipeline}
-                aiPicks={aiPicks}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                onShowAll={() => setView("gantt")}
-              />
-            ) : (
-            <RoadmapGrid
-              roadmap={roadmap}
-              filterCats={filterCats}
-              onlyMine={onlyMine}
-              onlyChanging={onlyChanging}
-              aiPicks={aiPicks}
-              onlyAi={onlyAi}
-              mine={mine}
-              collapsed={collapsed}
-              selectedId={selectedId}
-              groupBy="cat"
-              onToggleGroup={(key, open) => setCollapsed({ ...collapsed, [key]: !open })}
-              onSelect={setSelectedId}
-            />
-            )}
-            {selected && <DetailPanel row={selected} mine={mine.has(selected.policyId)} pick={aiPicks[selected.policyId]} onClose={() => setSelectedId(null)} onToggleMine={() => toggleMine(selected.policyId)} />}
-          </div>
-          <p className={s.notice}>{roadmap.notice}</p>
-          {toast && (
-            <div className={s.toast} role="status">
-              {toast}
-            </div>
-          )}
-        </main>
-      </div>
-      {modal && (
-        <PlanModal
-          initial={{ employ: sess.plan.employAfterMonths ?? null, business: sess.plan.businessAfterMonths ?? null, interests: CAT_ORDER.filter((k) => filterCats[k]) }}
-          baseLabel={roadmap.baseLabel}
-          canEmploy={!st.has("employed")}
-          canBusiness={!st.has("business_registered")}
-          onClose={() => setModal(false)}
-          onSave={(d) => void savePlan(d)}
-        />
-      )}
+          <img className={styles.deco} src={`${P}robot-flag.png`} alt="" style={{ left: -30, bottom: -56, width: 130 }} />
+        </div>
+      </section>
+
+      <section className={`${styles.story} ${rv()}`} id="trust">
+        <div>
+          <p className={styles.kicker}>왜 그렇게 판단했는지까지</p>
+          <h2 className={styles.h2}>추천에는 늘<br /><em>공고 원문</em>이 따라와요.</h2>
+          <p className={styles.desc}>PathFinder의 AI는 기관 공고를 직접 찾아 읽고, 판단에 쓴 문장을 그대로 보여 줘요. 근거를 못 찾은 추천은 내보내지 않고, 받을 수 있는지는 정해진 규칙으로만 계산해요.</p>
+        </div>
+        <div className={`${styles.visual} ${styles.stack}`}>
+          <div className={styles.quote}>“신청일로부터 6개월 이내 취업 및 직업훈련 참여 이력이 없어야 신청 가능합니다.”<br /><small>고용24 · 청년도전지원사업 안내 · 기준일: 신청일</small></div>
+          <div className={styles.bubble}><small>PathFinder</small>그래서 이 지원은 교육이 끝나고 6개월 뒤부터 보시면 돼요. 그 전에는 응시료 지원을 먼저 챙기세요.</div>
+          <img className={styles.deco} src={`${P}prop-document.png`} alt="" style={{ right: -20, top: -64, width: 110 }} />
+          <img className={styles.deco} src={`${P}robot-magnifier.png`} alt="" style={{ right: 10, bottom: -60, width: 140 }} />
+        </div>
+      </section>
+
+      <section className={`${styles.crew} ${rv()}`} id="crew">
+        <p className={styles.kicker}>함께 길을 찾는</p>
+        <h2 className={styles.h2}>PathFinder <em>길잡이들</em></h2>
+        <div className={styles.grid}>
+          <div><img src={`${P}robot-magnifier.png`} alt="돋보기를 든 로봇" /><b>찾아보는 길잡이</b><span>흩어진 공고를 찾아 조건을 꼼꼼히 확인해요</span></div>
+          <div><img src={`${P}robot-map.png`} alt="지도를 든 로봇" /><b>그려 주는 길잡이</b><span>내 계획을 날짜 위의 경로로 바꿔 그려요</span></div>
+          <div><img src={`${P}robot-wave.png`} alt="손 흔드는 로봇" /><b>물어보는 길잡이</b><span>어렵지 않은 질문 몇 개로 상황을 알아들어요</span></div>
+          <div><img src={`${P}robot-flag.png`} alt="깃발을 든 로봇" /><b>알려 주는 길잡이</b><span>신청할 때가 오면 놓치지 않게 짚어 줘요</span></div>
+        </div>
+      </section>
+
+      <section className={`${styles.process} ${rv()}`}>
+        <p className={styles.kicker}>처음 써 본다면</p>
+        <h2 className={styles.h2}>3분이면 <em>내 경로</em>가 보여요.</h2>
+        <div className={styles.steps}>
+          <div className={styles.step}><i>01</i><h3>지금 나를 알려 주세요</h3><p>생년월일, 사는 곳, 학력. 이 세 가지면 시작할 수 있어요.</p></div>
+          <div className={styles.step}><i>02</i><h3>앞으로를 골라 주세요</h3><p>교육이 끝나는 때, 일을 시작할 즈음, 창업이나 이사 계획을 선택지로 답해요.</p></div>
+          <div className={styles.step}><i>03</i><h3>달력에서 확인하세요</h3><p>지금 챙길 것과 나중에 챙길 것이 마감 순서대로 놓여요. 카드를 누르면 근거 문장이 보여요.</p></div>
+        </div>
+      </section>
+
+      <section className={`${styles.cta} ${rv()}`} id="cta">
+        <div>
+          <p className={styles.kicker}>다음 달의 나를 위해</p>
+          <h2 className={styles.h2}>오늘, <em>3분만</em> 써 볼까요?</h2>
+          <p className={styles.desc}>놓치고 나서 아쉬워하기 전에, 받을 수 있는 지원을 먼저 만나 보세요.</p>
+          <Link className={styles.pill} href="/app#signup">내 경로 시뮬레이션하기</Link>
+        </div>
+        <div className={`${styles.float} ${styles.ground}`}><img src={`${P}robot-wave.png`} alt="손 흔드는 PathFinder 로봇" /></div>
+      </section>
+
+      <footer className={styles.footer}><span>PathFinder · 팀 이쁜사과</span><span>2026 대한민국 청년 CAREER FAIR AI 해커톤 출품작</span></footer>
     </div>
-  );
-}
-
-function Header({ onReset }: { onReset?: () => void }) {
-  return (
-    <header className={s.header}>
-      <div className={s.brand}>
-        <span className={s.logo} aria-hidden="true">
-          ⑂
-        </span>
-        <span>
-          <strong>PathFinder</strong>
-          <small>청년 정책 플래너</small>
-        </span>
-      </div>
-      {onReset && (
-        <button type="button" className={s.ghostText} onClick={onReset}>
-          기본 정보 다시 입력
-        </button>
-      )}
-    </header>
   );
 }

@@ -2,6 +2,8 @@
 import { z } from "zod";
 import { toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { overlapDataVersion } from "@/lib/data/overlap";
+import { BenefitsSchema, type Restriction } from "./overlap";
 import { loadVerified, StatusKey } from "@/lib/data/verified";
 import { assembleCards, type ActionCard } from "@/lib/agent/assemble";
 import { rankOpenQuestions, type Question } from "@/lib/agent/questions";
@@ -9,11 +11,14 @@ import { applyTransition, CHANGE_LABEL, needsVerification, simulateTransition, t
 import { buildRoute, type Route } from "@/lib/route/build";
 import { allRelations } from "@/lib/route/build";
 import { buildPipeline, type Pipeline } from "@/lib/route/pipeline";
-import { buildRoadmap, type Roadmap } from "@/lib/route/roadmap";
-import { buildTimeline, type Timeline } from "@/lib/route/timeline";
+import { buildRoadmap, policyNotice, type Roadmap, type VerifyLabel } from "@/lib/route/roadmap";
+import { buildTimeline, type StationObserver, type Timeline } from "@/lib/route/timeline";
 import { selectDefaultVisible } from "@/lib/ui/select";
 import { judgeAll, type Profile, type PersonalValue } from "./index";
 import { baselineOpts } from "./personal";
+import { PlannerInputSchema } from "@/lib/planner/schema";
+import { evaluateRequest } from "@/lib/planner/catalog";
+import type { Evaluation } from "@/lib/planner/types";
 
 const NATIONAL = "20260710005400113256";
 
@@ -30,8 +35,10 @@ const ProfileSchema = z.object({
   source: z.enum(["demo_persona", "user"]),
 });
 
-const RequestSchema = z.object({
+export const JudgeRequestSchema = z.object({
   profile: ProfileSchema,
+  benefits: BenefitsSchema.optional(),
+  plannerV2: PlannerInputSchema.optional(),
   transitions: z.array(z.enum(["complete_training", "get_employed", "register_business"])).max(3).optional(),
   answers: z
     .object({
@@ -54,6 +61,7 @@ export type JudgeItem = {
   name: string;
   org: string;
   verified: boolean;
+  verifyLabel: VerifyLabel;
   personal: PersonalValue;
   reasons: string[];
   recruitment: string;
@@ -61,15 +69,18 @@ export type JudgeItem = {
   timeNote: string | null;
   restriction: string;
   restrictionQuotes: string[];
+  restrictions: Restriction[];
+  planned_conflicts: Restriction[];
   link: string | null;
   change: string | null;
   changeKey: string | null;
 };
 
 export type JudgeBody =
-  | { error: string }
+  | { error: string; field?: string; code?: string }
   | {
       asOf: string;
+      dataVersion: string;
       today: string;
       lastTransition: Transition | null;
       summary: Record<PersonalValue, number>;
@@ -83,12 +94,14 @@ export type JudgeBody =
       roadmap: Roadmap;
       pipeline: Pipeline;
       needsVerification: string[];
+      plannerV2?: Evaluation;
     };
 
-export function handleJudge(body: unknown, now: Date): { status: number; body: JudgeBody } {
-  const parsed = RequestSchema.safeParse(body);
-  if (!parsed.success) return { status: 400, body: { error: "프로필 형식이 잘못됐습니다." } };
+export function handleJudge(body: unknown, now: Date, onStation?: StationObserver): { status: number; body: JudgeBody } {
+  const parsed = JudgeRequestSchema.safeParse(body);
+  if (!parsed.success) return { status: 400, body: { error: parsed.error.issues[0]?.message ?? "프로필 형식이 잘못됐습니다.", field: parsed.error.issues[0]?.path.join("."), code: "INVALID_INPUT" } };
   let profile: Profile = structuredClone(parsed.data.profile);
+  if (parsed.data.benefits) profile.benefits = parsed.data.benefits;
   if (parsed.data.answers?.participating_national_employment_support === "예" && !profile.participating.includes(NATIONAL)) {
     profile.participating.push(NATIONAL);
   }
@@ -108,30 +121,34 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
   } else {
     results = judgeAll(profile, now);
   }
-  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {});
+  const timeline = buildTimeline(origin, now, parsed.data.plan ?? {}, onStation);
   const roadmap = buildRoadmap(timeline);
   const answered = new Set(Object.entries(parsed.data.answers ?? {}).filter(([, v]) => v && v !== "모름").map(([k]) => k));
   const changeById = new Map(changes.map((c) => [c.policyId, c]));
   const verified = loadVerified();
 
   const current = results.filter((r) => r.layer !== "history");
+  const today = toKstDate(now);
   const items: JudgeItem[] = current.map((r) => {
     const v = verified.get(r.policy.id);
     const c = changeById.get(r.policy.id);
-    const end = v ? v.apply.end : r.policy.applyEnd;
+    const notice = policyNotice(r.policy, v, today);
     return {
       id: r.policy.id,
       name: v?.name ?? r.policy.name,
       org: r.policy.supervisingOrg,
       verified: r.verified,
+      verifyLabel: notice.verifyLabel,
       personal: r.axes.personal.value,
       reasons: r.axes.personal.reasons,
       recruitment: r.axes.recruitment,
-      deadline: r.axes.recruitment === "open" ? end : null,
+      deadline: r.axes.recruitment === "open" ? notice.official.end : null,
       timeNote: r.axes.time.note ?? null,
       restriction: r.axes.restriction.value,
       restrictionQuotes: r.axes.restriction.quotes,
-      link: v?.sources[0]?.url ?? r.policy.links.apply ?? r.policy.links.ref,
+      restrictions: r.axes.restriction.current_restrictions ?? [],
+      planned_conflicts: r.axes.restriction.planned_conflicts ?? [],
+      link: notice.link?.url ?? null,
       change: c && c.change !== "unchanged" ? CHANGE_LABEL[c.change] : null,
       changeKey: c && c.change !== "unchanged" ? c.change : null,
     };
@@ -143,7 +160,8 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
     status: 200,
     body: {
       asOf: loadSnapshot().asOf,
-      today: toKstDate(now),
+      dataVersion: overlapDataVersion(),
+      today,
       lastTransition: last,
       summary,
       items,
@@ -157,6 +175,7 @@ export function handleJudge(body: unknown, now: Date): { status: number; body: J
       roadmap,
       pipeline: buildPipeline(roadmap, allRelations()),
       needsVerification: last ? needsVerification(changes, new Set()) : [],
+      ...(parsed.data.plannerV2 ? { plannerV2: evaluateRequest(origin, parsed.data.plannerV2, now, parsed.data.plan) } : {}),
     },
   };
 }

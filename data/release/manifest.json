@@ -1,0 +1,30 @@
+{
+ "dataVersion": "dd9153edea47",
+ "snapshotAsOf": "2026-11-16",
+ "counts": {
+  "policies": 4020,
+  "verified": 6,
+  "results": 6,
+  "supporting": 5,
+  "rules": 74,
+  "evidence": 74,
+  "clauses": 0,
+  "approvedRules": 74
+ },
+ "files": {
+  "data/overlap/approved.json": "76748288831169640b7c1fb75b02a8a8a966ade3aeda4e1362da96a690e30007",
+  "data/regions.json": "697995f7c56fb60e831d3169b1da533859a9f81a78d6c0bbc085191f1fffe706",
+  "data/route-links.json": "34834468f109deca1fc2f8ac157da3e67e2be5a9d0bbdec855037a54582bd32d",
+  "data/snapshot/current.json": "f4e8075fdbe7204045f4f9c0821a05a204e3e5b8fa0d0d1ba7a3f87cc26bd39d",
+  "data/verified/20250122005400110346.json": "12d6f60b20f095b66f4548c0e384cd21a00e58edc0996d994b7c7c9539b55414",
+  "data/verified/20260406005400212442.json": "6cc602eb6beb4e0e6118a72a133f5576115a9c26ae349c5e9c0d9b73158612ca",
+  "data/verified/20260406005400212445.json": "d8514c9a9f9b380d6633d9d3fc90df57ea04233551d21474b28a55619582a285",
+  "data/verified/20260710005400113256.json": "446f87bb28947b4d6c0fb4138b59cec4dc24b45cb48055692fd158d48cf0eb09",
+  "data/verified/20260714005400113258.json": "7fe1f38b0cce467b131ed502dc9f3c78528cce9805de5fcd1addbf28ca58d0b0",
+  "data/verified/20260921005400113480.json": "97e59817260cd280222b3b5faa2f804b07d0589e4f5762b9ced9c4369092d67a",
+  "data/verified/candidates.json": "47add151472dff8df75a6de5ed006b6adb57793f7df1b23b50423bc5323f8e4a",
+  "data/verify-eval/answers.json": "b6f360aa88370be5de7b542c8dfdc086381b4db0d016fbb988853dbceb8230d6",
+  "data/verify-replay/turns.json": "78267bff7013a3a190ada6069bbd87f91a3833add1de11542409259fae7c86b6",
+  "data/verify-results/index.json": "ae5affef8eeeef418bef061506ce742a4aec1beeac945e62f19751328cdb6472"
+ }
+}
