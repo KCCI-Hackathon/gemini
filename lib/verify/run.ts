@@ -4,6 +4,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { withDeadline, type Deadline } from "@/lib/ai/deadline";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { movedLink } from "@/lib/data/dead-links";
 import { loadVerified, type Round } from "@/lib/data/verified";
 import { containsNoticeDate, supportsComparedValue, supportsEvidence } from "./evidence";
 import { verificationVersion, type VerifyVersion } from "./version";
@@ -253,9 +254,14 @@ function hostOf(url: string | null): string | null {
   }
 }
 
+/** 공식 링크 목록: 옮겨진 공고 주소를 찾아 뒀으면 맨 앞에 둔다 */
+function officialLinks(p: Policy): (string | null)[] {
+  return [movedLink(p.id), p.links.apply, p.links.ref, p.links.ref2];
+}
+
 /** 정책의 링크 도메인(민간 제외는 web.ts가 강제) */
 export function policyHosts(p: Policy): string[] {
-  return [p.links.apply, p.links.ref, p.links.ref2].map(hostOf).filter((h): h is string => !!h);
+  return officialLinks(p).map(hostOf).filter((h): h is string => !!h);
 }
 
 type State = {
@@ -432,7 +438,7 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
   // 공식 링크를 동시에 미리 열어 둔다(agent 모드)
   let prefetched = false;
   if (mode === "agent") {
-    const links = [...new Set([policy.links.apply, policy.links.ref, policy.links.ref2].filter((l): l is string => !!l))].slice(0, 3);
+    const links = [...new Set(officialLinks(policy).filter((l): l is string => !!l))].slice(0, 3);
     if (links.length) {
       deadline.remainingMs();
       const opened = await Promise.all(links.map(async (url) => ({ url, r: await deps.web.openPage(url, deadline.signal) })));

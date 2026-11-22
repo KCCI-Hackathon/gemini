@@ -100,7 +100,20 @@ export function robotsAllows(robots: string, target: string): boolean {
   return best ? best.allow : true;
 }
 
+/** 원본 HTML 의 <a href> 를 절대 주소와 글자로 뽑는다(http 계열만) */
+export function extractLinks(html: string, baseUrl: string): { href: string; text: string }[] {
+  const out: { href: string; text: string }[] = [];
+  for (const m of html.matchAll(/<a\s[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    try {
+      const href = new URL(m[1].trim(), baseUrl).toString();
+      if (/^https?:/.test(href)) out.push({ href, text: normalizeSpace(htmlToText(m[2])) });
+    } catch { /* 잘못된 주소는 건너뛴다 */ }
+  }
+  return out;
+}
+
 export type Web = {
+  pageLinks(url: string): { href: string; text: string }[];
   openPage(url: string, signal?: AbortSignal): Promise<{ ok: boolean; text: string }>;
   pageText(url: string): string | undefined;
   opened(): number;
@@ -109,6 +122,7 @@ export type Web = {
 export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }): Web {
   const fetchFn = opts.fetchFn ?? fetch;
   const pages = new Map<string, string>();
+  const links = new Map<string, { href: string; text: string }[]>();
   const robotsCache = new Map<string, string>();
   let opens = 0;
 
@@ -169,6 +183,7 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
         signal?.throwIfAborted();
         const text = htmlToText(body).slice(0, LIMITS.maxChars);
         pages.set(url, text);
+        links.set(url, extractLinks(body, current));
         return { ok: true, text };
       } catch (e) {
         signal?.throwIfAborted();
@@ -176,6 +191,7 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
         return { ok: false, text: `접속 실패: ${String(e)}` };
       }
     },
+    pageLinks: (url) => links.get(url) ?? [],
     pageText: (url) => pages.get(url),
     opened: () => opens,
   };

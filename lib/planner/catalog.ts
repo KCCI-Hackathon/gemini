@@ -1,6 +1,7 @@
 import { addMonths, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
+import { loadDeadLinks } from "@/lib/data/dead-links";
 import { hasOverlapIssue, loadOverlap, loadOverlapNotices } from "@/lib/data/overlap";
 import { blocksParticipation, evaluateRules, type Benefit } from "@/lib/judge/overlap";
 import { judgePolicy, type Profile } from "@/lib/judge";
@@ -51,7 +52,8 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
   const snapshot = loadSnapshot();
   const verified = loadVerified();
   const regions = new Set([profile.sigungu, ...(input.events ?? []).flatMap(e => e.sigungu ? [e.sigungu] : [])]);
-  const policies = snapshot.policies.filter(p => verified.has(p.id) || (p.applyPeriodType !== "closed" && p.zipCodes.some(c => regions.has(c)) && !/컨소시엄|조성|센터|조사|위원회|인프라|협의체/.test(p.name)));
+  const dead = loadDeadLinks();
+  const policies = snapshot.policies.filter(p => !dead.has(p.id) && (verified.has(p.id) || (p.applyPeriodType !== "closed" && p.zipCodes.some(c => regions.has(c)) && !/컨소시엄|조성|센터|조사|위원회|인프라|협의체/.test(p.name))));
   const policyMap = new Map(policies.map(p => [p.id, p]));
   const catalog: Offering[] = policies.flatMap(p => {
     const v = verified.get(p.id);

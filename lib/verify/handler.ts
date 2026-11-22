@@ -4,6 +4,7 @@ import { DeadlineExceeded } from "@/lib/ai/deadline";
 import { toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
+import { loadDeadLinks } from "@/lib/data/dead-links";
 import { pickRound } from "@/lib/judge/rules";
 import { resetLimits, takeQuota } from "@/lib/limits";
 import { runVerification, policyHosts, type AnthropicLike, type VerifyResult } from "./run";
@@ -38,6 +39,13 @@ function verificationFailure(error: unknown): Out {
   return { status: 502, body: { error: "AI 검증 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요." } };
 }
 
+/** 공고 링크가 끊긴 정책은 AI 없이 notice_not_found 로 답한다 */
+function deadLinkResult(policyId: string, now: Date): VerifyResult {
+  const usage = { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 };
+  const trail = [{ step: 1, action: "stop" as const, target: "", reason: "공고 링크가 없어졌어요(HTTP 404)" }];
+  return { policyId, mode: "agent", outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(now), trail, usage };
+}
+
 export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
   const startedAt = Date.now();
   if (!body || typeof body !== "object" || Array.isArray(body)) return { status: 400, body: { error: "요청 형식이 잘못됐습니다." } };
@@ -48,6 +56,7 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
 
   const policy = loadSnapshot().policies.find((p) => p.id === policyId);
   if (!policy) return { status: 404, body: { error: "정책을 찾을 수 없습니다." } };
+  if (loadDeadLinks().has(policyId)) return { status: 200, body: { source: "saved", result: deadLinkResult(policyId, ctx.now) } };
   const v = loadVerified().get(policyId);
   const date = toKstDate(ctx.now);
   const version = verificationVersion(policy, v, date);
