@@ -1,0 +1,145 @@
+/* 소개 · 로그인 시안(docs/design/mvp2)의 CSS 를 모듈로 옮긴 것. 요소 선택자는 .page / .loginPage 아래로 가둔다 */
+.page{--ink:#16224A;--soft:#5E6782;--line:rgba(22,34,74,.08);--sky1:#F6F9FF;--sky2:#E6F0FF;--sky3:#CFE2FF;--blue:#2C64DB;--green:#12965A;
+ margin:0;font-family:var(--font-noto),'Noto Sans KR',system-ui,sans-serif;color:var(--ink);background:var(--sky1);letter-spacing:-.3px;word-break:keep-all;overflow-x:hidden}
+.page *{box-sizing:border-box}
+.page a{color:inherit;text-decoration:none}
+.page img{display:block}
+.page h1,.page h2{font-weight:800}
+
+.header{position:fixed;inset:0 0 auto 0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px clamp(16px,4vw,56px);backdrop-filter:blur(14px);background:rgba(246,249,255,.65);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}
+.logo img{width:38px;height:38px;object-fit:contain}
+.nav{display:flex;gap:28px;align-items:center;font-size:15px;color:var(--soft)}
+.nav a:hover{color:var(--ink)}
+.pill{background:var(--ink);color:#fff;border-radius:999px;padding:10px 20px;font-weight:700;font-size:15px}
+.page .nav a.pill{color:#fff}
+@media(max-width:720px){.nav a:not(.pill){display:none}}
+
+.hero{min-height:100vh;position:relative;display:grid;grid-template-columns:1fr 1.05fr;align-items:center;gap:24px;padding:120px clamp(16px,6vw,96px) 80px;
+ background:radial-gradient(1100px 620px at 72% 35%,#fff 0,transparent 62%),linear-gradient(180deg,var(--sky1),var(--sky2) 60%,var(--sky3));overflow:hidden}
+.eyebrow{font-size:14px;font-weight:700;color:var(--blue);letter-spacing:.5px;margin:0}
+.page h1.title{font-size:clamp(40px,5.6vw,80px);line-height:1.14;margin:16px 0 22px;letter-spacing:-2px}
+.grad{color:var(--blue)}
+
+.loader{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:linear-gradient(180deg,#F6F9FF,#E6F0FF 70%,#CFE2FF);transition:opacity .6s ease,visibility .6s;color:#16224A;font-family:var(--font-noto),'Noto Sans KR',system-ui,sans-serif}
+.loader.done{opacity:0;visibility:hidden}
+.crewRow{display:flex;align-items:flex-end;gap:18px}
+.crewRow img{height:120px;width:auto;opacity:0;transform:translateY(30px);animation:arrive .6s cubic-bezier(.2,.8,.2,1) forwards}
+.crewRow img:nth-child(2){animation-delay:.25s}
+.crewRow img:nth-child(3){animation-delay:.5s}
+.crewRow img:nth-child(4){animation-delay:.75s}
+@keyframes arrive{to{opacity:1;transform:none}}
+.loader p{margin:0;font-weight:700;font-size:17px}
+.bar{width:min(320px,70vw);height:6px;border-radius:3px;background:rgba(44,100,219,.15);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#2C64DB;border-radius:3px;transition:width .2s linear}
+.loader small{color:#5E6782;font-size:14px;font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:reduce){.crewRow img{animation:none;opacity:1;transform:none}}
+.lead{font-size:clamp(16px,1.35vw,19px);line-height:1.75;color:var(--soft);max-width:520px;margin:0}
+.follow{display:inline-flex;gap:8px;margin-top:34px;font-weight:700;border-bottom:2px solid var(--ink);padding-bottom:4px}
+.stage{position:relative;height:min(600px,76vw)}
+.arch{position:absolute;inset:4% 2% 0 6%;border-radius:300px 300px 40px 40px;background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(255,255,255,.35));box-shadow:0 40px 90px -40px rgba(44,100,219,.4),inset 0 0 0 1px #fff}
+.float{position:absolute}
+.float img{width:100%;height:auto;filter:drop-shadow(0 22px 22px rgba(22,34,74,.16))}
+.ground{position:absolute}
+.b1{width:42%;left:6%;bottom:6%}
+.b2{width:34%;right:8%;bottom:14%}
+.p1{width:15%;left:2%;top:8%}
+.p2{width:14%;left:44%;top:0}
+.p3{width:13%;right:4%;top:12%}
+.scroll{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);font-size:13px;color:var(--soft)}
+@media(max-width:900px){.hero{grid-template-columns:1fr}.stage{height:86vw}}
+
+.story{padding:140px clamp(16px,6vw,96px);display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+.flip .visual{order:-1}
+.kicker{font-size:15px;font-weight:700;color:var(--soft);margin:0}
+.page h2.h2{font-size:clamp(32px,4vw,54px);line-height:1.22;margin:12px 0 18px;letter-spacing:-1.5px}
+.h2 em{font-style:normal;background:linear-gradient(transparent 62%,#CFE2FF 62%)}
+.desc{font-size:18px;line-height:1.8;color:var(--soft);max-width:520px;margin:0}
+.visual{position:relative;border-radius:32px;background:linear-gradient(160deg,#fff,#EAF2FF);border:1px solid #fff;box-shadow:0 30px 60px -30px rgba(22,34,74,.25);padding:36px;min-height:380px}
+.deco{position:absolute;width:150px;filter:drop-shadow(0 18px 18px rgba(22,34,74,.18));pointer-events:none}
+.visual:has(.deco){padding-bottom:120px}
+.visual:has(.deco[style*="top:"]){padding-top:96px}
+@media(max-width:900px){.story{grid-template-columns:1fr;padding:96px 16px}.flip .visual{order:0}}
+
+.stack{display:flex;flex-direction:column;gap:14px}
+.bubble{background:#fff;border-radius:20px 20px 20px 6px;padding:14px 18px;box-shadow:0 10px 24px -14px rgba(22,34,74,.3);font-size:15px;line-height:1.6;max-width:78%}
+.bubble.me{margin-left:auto;border-radius:20px 20px 6px 20px;background:var(--ink);color:#fff}
+.bubble small{display:block;color:var(--soft);font-size:12px;margin-bottom:4px}
+.bubble.me small{color:#AEB8D6}
+.pipe{display:flex;gap:12px;margin-top:6px}
+.colm{flex:1;min-width:0}
+.colm h4{margin:0 0 10px;font-size:13px;color:var(--soft)}
+.card{background:#fff;border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:8px;border-left:4px solid var(--blue)}
+.card.g{border-left-color:var(--green)}
+.marker{writing-mode:vertical-rl;font-size:12px;font-weight:700;color:var(--green);background:#DFF5E9;border-radius:12px;padding:10px 6px}
+.quote{border-left:3px solid var(--green);padding:10px 0 10px 16px;font-size:15px;line-height:1.7;background:#F3FBF6;border-radius:0 14px 14px 0}
+.quote small{color:var(--soft)}
+
+.crew{padding:120px clamp(16px,6vw,96px);text-align:center}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:56px}
+.grid > div{background:#fff;border-radius:28px;padding:28px 18px 26px;box-shadow:0 20px 40px -28px rgba(22,34,74,.3);display:flex;flex-direction:column;align-items:center}
+.crew img{height:200px;width:100%;object-fit:contain;margin:0 auto 18px;filter:drop-shadow(0 14px 14px rgba(22,34,74,.15))}
+.crew b{display:block;font-size:19px;margin-bottom:8px}
+.crew span{color:var(--soft);font-size:16px;line-height:1.6;min-height:3.2em}
+@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}
+
+.process{padding:40px clamp(16px,6vw,96px) 120px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:40px}
+.step{border-top:2px solid var(--ink);padding-top:20px}
+.step i{font-style:normal;font-weight:800;color:var(--blue)}
+.step h3{font-size:22px;margin:10px 0}
+.step p{color:var(--soft);line-height:1.7;margin:0}
+@media(max-width:900px){.steps{grid-template-columns:1fr}}
+
+.cta{margin:0 clamp(16px,4vw,56px) 64px;border-radius:40px;padding:80px clamp(16px,6vw,96px);background:linear-gradient(180deg,#E6F0FF,#CFE2FF);display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:32px;overflow:hidden}
+.page .cta a.pill{display:inline-block;margin-top:28px;padding:16px 28px;font-size:17px}
+.cta .float{position:relative;width:min(320px,70%);margin:0 auto}
+@media(max-width:900px){.cta{grid-template-columns:1fr}}
+.footer{padding:40px clamp(16px,6vw,96px);color:var(--soft);font-size:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+/* 스크롤로 내려올 때만 아래 내용이 차례로 생겨난다 */
+.reveal > *, .reveal .visual > *, .reveal .grid > *, .reveal .steps > *{opacity:0;transform:translateY(28px);transition:opacity .9s ease,transform .9s cubic-bezier(.2,.8,.2,1)}
+.reveal.in > *, .reveal.in .visual > *, .reveal.in .grid > *, .reveal.in .steps > *{opacity:1;transform:none}
+.reveal.in > *:nth-child(2){transition-delay:.15s}
+.reveal.in .visual > *:nth-child(2), .reveal.in .grid > *:nth-child(2), .reveal.in .steps > *:nth-child(2){transition-delay:.3s}
+.reveal.in .visual > *:nth-child(3), .reveal.in .grid > *:nth-child(3), .reveal.in .steps > *:nth-child(3){transition-delay:.45s}
+.reveal.in .visual > *:nth-child(4), .reveal.in .grid > *:nth-child(4){transition-delay:.6s}
+.reveal.in .visual > *:nth-child(5){transition-delay:.75s}
+.reveal.in .visual > *:nth-child(6){transition-delay:.9s}
+@media(prefers-reduced-motion:reduce){.reveal > *, .reveal .visual > *, .reveal .grid > *, .reveal .steps > *{opacity:1!important;transform:none!important;transition:none!important}}
+
+/* 로그인 */
+.loginPage{--ink:#16224A;--soft:#5E6782;--line:rgba(22,34,74,.1);--sky1:#F6F9FF;--sky2:#E6F0FF;--sky3:#CFE2FF;--blue:#2C64DB;--green:#12965A;--card:#fff;
+ margin:0;min-height:100vh;font-family:var(--font-noto),'Noto Sans KR',system-ui,sans-serif;color:var(--ink);letter-spacing:-.3px;word-break:keep-all;
+ background:linear-gradient(180deg,var(--sky1),var(--sky2) 60%,var(--sky3));display:grid;grid-template-columns:1fr 1fr}
+.loginPage *{box-sizing:border-box}
+.loginPage a{color:inherit;text-decoration:none}
+.loginPage img{display:block}
+.side{position:relative;display:flex;flex-direction:column;justify-content:space-between;padding:40px clamp(24px,5vw,72px);overflow:hidden}
+.side h1{font-size:clamp(30px,3.4vw,46px);line-height:1.25;margin:0 0 14px;font-weight:800;letter-spacing:-1.2px}
+.side h1 span{color:var(--blue)}
+.side p{margin:0;color:var(--soft);font-size:16px;line-height:1.7;max-width:380px}
+.robot{width:min(300px,60%);margin:24px 0 0 auto}
+.main{display:flex;align-items:center;justify-content:center;padding:40px 16px}
+.loginCard{width:100%;max-width:420px;background:var(--card);border-radius:24px;padding:40px 36px;box-shadow:0 20px 60px rgba(22,34,74,.08);border:1px solid var(--line)}
+.loginCard h2{margin:0 0 6px;font-size:26px;font-weight:800}
+.sub{margin:0 0 28px;color:var(--soft);font-size:15px}
+.loginCard label{display:block;font-size:14px;font-weight:700;margin:0 0 8px}
+.loginCard input[type=email],.loginCard input[type=password]{width:100%;height:50px;border:1px solid var(--line);border-radius:12px;padding:0 16px;font:inherit;font-size:15px;color:var(--ink);background:#FAFBFF;outline:none;transition:border-color .2s,box-shadow .2s}
+.loginCard input:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(44,100,219,.12);background:#fff}
+.field{margin-bottom:18px}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--soft);margin:-4px 0 24px}
+.loginCard .row label{display:flex;gap:8px;align-items:center;font-weight:500;margin:0}
+.row a:hover{color:var(--blue)}
+.btn{width:100%;height:52px;border:0;border-radius:999px;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
+.primary{background:var(--ink);color:#fff}
+.primary:hover{background:#0F1836}
+.or{display:flex;align-items:center;gap:12px;color:var(--soft);font-size:13px;margin:22px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.social{display:grid;gap:10px}
+.kakao{background:#FEE500;color:#191919}
+.naver{background:#03C75A;color:#fff}
+.join{text-align:center;margin:26px 0 0;font-size:14px;color:var(--soft)}
+.join a{color:var(--blue);font-weight:700}
+.msg{margin:14px 0 0;font-size:14px;color:var(--green);text-align:center}
+@media(max-width:860px){.loginPage{grid-template-columns:1fr}.side{padding:24px 16px 0}.copy,.robot{display:none}.main{padding:24px 16px 48px}.loginCard{padding:32px 22px}}
