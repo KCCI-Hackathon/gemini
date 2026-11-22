@@ -351,3 +351,42 @@ test("stale plan response is dropped", () => { /* requestPlan 을 순번 1 로 �
 - [ ] **Step 2:** `npm run lint` → 통과
 - [ ] **Step 3:** `npx vitest run --maxWorkers=4 --testTimeout=60000` → 전부 PASS
 - [ ] **Step 4:** 독립 검증 (구현과 다른 실행 맥락) — 설계 7장 I1~I8 과 이 계획의 Review Focus 를 브라우저와 API 로 확인
+
+---
+
+## 후속 수정 (11-22 추가, Task 6 뒤 · Task 7 전)
+
+Task 1~6 진행 중 찾은 것. 통합 설계대로 동작하는 것이 최우선이라 Task 7(전체 확인 · 독립 검증) 전에 끝낸다.
+
+### Task 6a: Task 2 의 테스트 맞춤 코드 제거와 I2 테스트 입력 바로잡기 (추천 : 반드시)
+
+- 원인 : 계획의 I2 테스트가 "받는 중" 상태만 줬다. 청년월세 규칙은 그 달 지급액이 있어야 적용된다. Codex 는 이 테스트를 통과하려고 `lib/planner/overlap-bridge.ts` 에 "해당 월 지급액 확인 필요" 문구를 보고 `PARTIAL_RESTRICTION` 을 하나 더 붙이는 3줄을 넣었다 (`be12ab0`).
+- Files : `lib/planner/overlap-bridge.ts`, `tests/planner/overlap-bridge.test.ts`
+- 할 일 : 그 3줄을 지운다. I2 테스트 입력을 다음으로 바꾼다. 기대값(부분 제한 사유 · 판정을 낮추지 않음)은 그대로.
+
+```ts
+const before = card(run([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 0 } }]), RENT_YEONSU, "current");
+const after = card(run([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 200000 } }]), RENT_YEONSU, "current");
+expect(after.reasons.some(r => r.code === "PARTIAL_RESTRICTION" && r.message.includes("청년월세"))).toBe(true);
+expect(before.reasons.some(r => r.code === "PARTIAL_RESTRICTION")).toBe(false);
+expect(after.availability).toBe(before.availability);
+```
+
+  - 근거 : `judgePolicy` 직접 실행 결과 — 0원은 `not_applies`, 20만 원은 `applies · 해당 월 청년월세 지급액 미지급`.
+
+### Task 6b: 이번 달 받은 금액 입력 (추천 : 넣는다)
+
+- 이유 : 승인 규칙 74개 중 6개(주거급여 → 국토부 · 인천시 · 연수구 청년월세)가 그 달 지급액으로 판정한다. 백엔드는 이미 `Benefit.monthlyPayment` 와 판정을 갖고 있다. 입력이 없으면 주거급여 수급자의 청년월세 카드는 끝까지 "정보 필요"로 남는다. 설계 10장의 "월 지급액은 묻지 않음"을 이 Task 로 바꾼다.
+- Files : `lib/planner/overlap-bridge.ts`, `lib/planner/answers.ts`, `lib/planner/types.ts`, `app/workspace/Dialogs.tsx`(프로필 폼), `app/workspace/Agent.tsx`
+- Interfaces :
+  - `AnswerKind` 에 `"monthly_amount"` 추가. 규칙 `condition_type === "receiving"` 이고 `condition_params` 에 `min_amount_won` 또는 `payment_month` 가 있으면 이 종류
+  - `BenefitAnswer` 에 `{ kind: "monthly_amount"; month: string; amountWon: number }` 추가 → `applyAnswer` 가 `status: "receiving"`, `monthlyPayment: { month, amountWon }` 로 저장
+  - 프로필 폼 : 상태가 "받는 중"이고 그 정책이 금액 규칙의 원인 정책이면 "이번 달 받은 금액(원)" 칸. 달은 오늘 기준 `YYYY-MM`
+- 테스트 :
+  - `applyAnswer([], q("monthly_amount"), { kind: "monthly_amount", month: "2026-11", amountWon: 200000 })` → `[{ policyId: SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 200000 } }]`
+  - 실데이터 평가에 `[{ policyId: RENT_SRC, status: "receiving" }]` 만 넣으면 `questions` 에 `{ policyId: RENT_YEONSU, sourcePolicyId: RENT_SRC, answerKind: "monthly_amount" }` 인 질문이 있다
+- 에이전트 질문 버튼 : 금액 입력칸 + "입력" 버튼. 숫자만, 0 이상.
+
+### Task 6c: 화면 변경 공유 (추천 : 사람이 한다)
+
+- HeoJunekang 에게 바뀐 화면 목록(검증 배지 · 수혜 입력 칸 · 질문 카드 · 예시 입구 · AI 추천 표시) 공유. 코드 작업 아님.
