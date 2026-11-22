@@ -73,3 +73,17 @@ it("분류되지 않은 429가 세 번 이어지면 일일 한도로 기록하�
     expect(s.state.attempts?.["verify:" + reviewModels[1]]).toEqual({ success: 1, failed: 0, retries: 0 });
   } finally { f.cleanup(); }
 });
+
+it.each([
+  ["사용할 수 없는 모델(404)", [new Response("", { status: 404 })], 1],
+  ["503·응답 없음 반복", [new Response("", { status: 503 }), null, new Response("", { status: 503 })], 3],
+])("재검증이 %s로 막히면 다음 Flash 모델로 검증한다", async (_label, blocked, sent) => {
+  const f = runFixture([...blocked, success()]);
+  try {
+    const s = makeSession({ ...f.input, compact: true });
+    expect((await s.ask({ ...req, stage: "verify" }, reviewModels)).model).toBe(reviewModels[1]);
+    expect(f.sends.map(x => x.model)).toEqual([...Array(sent).fill(reviewModels[0]), reviewModels[1]]);
+    expect(s.state.exhausted).toEqual({});
+    expect(s.state.cooldown?.[reviewModels[0]]).toBeGreaterThan(f.sends[sent].time);
+  } finally { f.cleanup(); }
+});

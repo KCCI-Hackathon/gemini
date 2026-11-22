@@ -55,6 +55,19 @@ describe("중복수혜 에이전트 단계", () => {
     expect(out.clauses.map(c => c.field)).toEqual([accepted.field, field.field]);
     expect(out.complete).toBe(true);
   });
+  it("응답에서 빠진 필드는 그 필드만 다시 묻고 관계 없음 표시로 완료한다", async () => {
+    const skipped: PublicField = { ...field, field: "plcySprtCn", text: "월 50만원 지원 (빠진 필드)" };
+    const post = vi.fn<Ask>(async req => ({
+      model, hash: String(req.repair), text: JSON.stringify(req.repair
+        ? [{ b_policy_id: b, field: skipped.field, kind: "none" }] : [raw]),
+    }));
+    const out = await extract([field, skipped], 1, post, model, true);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post.mock.calls[1][0].prompt).toContain("빠진 필드");
+    expect(post.mock.calls[1][0].prompt).not.toContain("첨부 지침 참조");
+    expect(out.clauses.map(c => c.field)).toEqual([field.field]);
+    expect(out.complete).toBe(true);
+  });
   it("중간에 모델이 바뀐 묶음만 두 표를 같은 모델로 얻는다", async () => {
     const post = vi.fn<Ask>(async req => ({ model: req.pass === 2 ? other : req.model ?? model, hash: (req.model ?? model) + req.pass, text: JSON.stringify([raw]) }));
     const pair = await extractPair([field], post);

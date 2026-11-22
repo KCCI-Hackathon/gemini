@@ -24,7 +24,10 @@ const instructions = [
   "effect_type: participation_block=참여 제한, apply_block=신청·응시·대출 불가, selection_excluded=선정·심사 제외, personal_payment_block=특정 수당 미지급, allowance_choice=택일, amount_deduction=차감·차액. 뒤 세 효과는 partial이며 restricted_item을 원문에서 반드시 복사.",
   "condition_type: receiving=받고 있거나 참여 중, selected=선정, within_months_after_end=지급 종료 후 N개월(condition_params.months는 양의 정수), status_on_notice_date=공고일 현재, period_overlap=기간 겹침.",
   "exception과 period_text는 예외·기간·연도·순서 표현을 원문에서 그대로 복사. 사실이 없으면 null. 수급 자격과 실제 수급을 나누세요.",
+  "입력의 모든 b_policy_id·field 쌍을 빠짐없이 검토하세요. 관계가 없는 쌍은 {\"b_policy_id\",\"field\",\"kind\":\"none\"} 한 행만 반환하세요.",
 ].join("\n");
+const OMITTED = "필드 응답 누락";
+const fieldKey = (b: string, field: string) => b + ":" + field;
 
 export function parseExtractionRows(batch: PublicField[], saved: Awaited<ReturnType<Ask>>, pass: Pass) {
   const clauses: Clause[] = [], failures: Extraction["failures"] = [];
@@ -38,11 +41,15 @@ export function parseExtractionRows(batch: PublicField[], saved: Awaited<ReturnT
   }
   let rows: unknown;
   try { rows = JSON.parse(saved.text); } catch { /* malformed response recorded below */ }
+  const covered = new Set<string>();
   if (!Array.isArray(rows)) {
     fail(-1, "JSON 배열 형식 오류");
-    return { clauses, failures };
+    return { clauses, failures, covered };
   }
   rows.forEach((row, i) => {
+    const marker = z.object({ b_policy_id: z.string(), field: z.string(), kind: z.literal("none") }).safeParse(row);
+    if (marker.success && batch.some(f => f.b_policy_id === marker.data.b_policy_id && f.field === marker.data.field))
+      return void covered.add(fieldKey(marker.data.b_policy_id, marker.data.field));
     const parsed = schema.safeParse(row);
     if (!parsed.success) return fail(i, "조항 필수 필드 또는 열거값 오류");
     const c = parsed.data;
@@ -59,7 +66,11 @@ export function parseExtractionRows(batch: PublicField[], saved: Awaited<ReturnT
     }
     clauses.push({ ...c, ...position, pass, response_hash: saved.hash, model: saved.model });
   });
-  return { clauses, failures };
+  for (const f of [...clauses, ...failures]) if (f.b_policy_id && f.field) covered.add(fieldKey(f.b_policy_id, f.field));
+  // Lite models silently skip fields in long batches; an unanswered field is a failure, not "no relation".
+  for (const f of batch) if (!covered.has(fieldKey(f.b_policy_id, f.field)))
+    failures.push({ index: -1, reason: OMITTED, response_hash: saved.hash, pass, b_policy_id: f.b_policy_id, field: f.field });
+  return { clauses, failures, covered };
 }
 
 export function extractionPrompt(batch: PublicField[]) {
@@ -93,8 +104,12 @@ export async function extract(batch: PublicField[], pass: Pass, ask: Ask, model?
     void _hash;
     clauses.set(digest(record), c);
   }
-  const repaired = repairFields === batch ? b.clauses.length > 0 : repairFields.every(field =>
-    b.clauses.some(c => c.b_policy_id === field.b_policy_id && c.field === field.field));
+  // A field whose row was rejected must yield a clause on repair; a field that was only skipped may answer "none".
+  const rejected = new Set(a.failures.filter(f => f.reason !== OMITTED && f.b_policy_id && f.field).map(f => fieldKey(f.b_policy_id!, f.field!)));
+  const repaired = repairFields === batch ? b.clauses.length > 0 : repairFields.every(field => {
+    const key = fieldKey(field.b_policy_id, field.field);
+    return rejected.has(key) ? b.clauses.some(c => fieldKey(c.b_policy_id, c.field) === key) : b.covered.has(key);
+  });
   return {
     ...out, clauses: [...clauses.values()], failures: [...a.failures, ...b.failures],
     complete: b.failures.length === 0 && repaired, hashes: [initial.hash, correction.hash]

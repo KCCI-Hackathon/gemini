@@ -37,9 +37,11 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
         : data.assertions
         ? data.assertions.map((a:{index:number,quote:string})=>({index:a.index,evidence_quote:a.quote,
           verdict:a.quote===quote?"supported":"contradicted",reason:"항목 확인"}))
-        : item?[{b_policy_id:b,field,quote,mentions:[{text:"국민취업지원제도",org:null,type:"program"}],
+        : data.filter((v:{b_policy_id:string,field:string})=>v!==item).map((v:{b_policy_id:string,field:string})=>
+          ({b_policy_id:v.b_policy_id,field:v.field,kind:"none"})).concat(item?[{b_policy_id:b,field,quote,
+          mentions:[{text:"국민취업지원제도",org:null,type:"program"}],
           kind:"blocks",effect_type:"participation_block",condition_type:"receiving",condition_params:{},
-          restricted_item:null,period_text:null,exception:null}]:[];
+          restricted_item:null,period_text:null,exception:null}]:[]);
       return Response.json({candidates:[{finishReason:"STOP",content:{parts:[{text:JSON.stringify(rows)}]}}]});
     });
     const options={runId:"test-run",live:true,root,apiKey:"fixture",now:()=>now,sleep:async(ms:number)=>{now+=ms;},fetchFn:fake};

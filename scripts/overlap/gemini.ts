@@ -136,7 +136,8 @@ export function makeSession(o:Options) {
           else stats.failed++;
           persist();
         }
-        consecutive429 = res?.status === 429 ? consecutive429 + 1 : 0;
+        const rotate = !!state.cooldown && spec.stage === "verify" && fallbackModels.length > 1;
+        consecutive429 = !res || [429,500,502,503,504].includes(res.status) ? consecutive429 + 1 : 0;
         if(res?.status===429) {
           let error:unknown; try {error=JSON.parse(raw!);} catch {}
           if(dailyExhausted(error,model)) {
@@ -145,12 +146,19 @@ export function makeSession(o:Options) {
             console.error("Gemini 일일 한도 도달 "+model+" "+new Date(state.exhausted[model]).toISOString());
             continue;
           }
-          if (state.cooldown && spec.stage === "verify" && fallbackModels.length > 1 && consecutive429 >= 3) {
-            state.cooldown[model]=now()+600000;
-            persist();
-            console.error("Gemini 반복 429로 모델 일시 대기 "+model);
-            continue;
-          }
+        }
+        // A review model this project cannot use, or one that keeps failing, hands over to the next Flash model.
+        if (rotate && (res?.status === 403 || res?.status === 404)) {
+          state.cooldown![model]=nextPacificMidnight(now());
+          persist();
+          console.error("Gemini 모델 사용 불가 HTTP "+res.status+" "+model+" · 다음 재검증 모델로 전환");
+          continue;
+        }
+        if (rotate && consecutive429 >= 3) {
+          state.cooldown![model]=now()+600000;
+          persist();
+          console.error("Gemini 반복 실패로 모델 일시 대기 "+model+(res ? " HTTP "+res.status : " 응답 없음"));
+          continue;
         }
         if(!res || [429,500,502,503,504].includes(res.status)) {
           if (stats) {stats.retries++;persist();}
