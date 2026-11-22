@@ -188,8 +188,8 @@ html:has(.app) { zoom:.75; }
 .periodLegend span:nth-child(2) i { background:#2C64DB; }
 .periodLegend span:nth-child(3) i { background:#e1aa74; width:8px; height:8px; border-radius:50%; }
 .roadmapScroll { overflow-x:auto; background:#fff; border-radius:13px; border:1px solid #dfe5ee; scrollbar-width:thin; }
-.roadmapTable { width:100%; min-width:1050px; position:relative; }
-.roadmapRow,.roadmapTicks { display:grid; grid-template-columns:245px minmax(760px,1fr); border-bottom:1px solid #e8edf3; }
+.roadmapTable { width:100%; position:relative; }
+.roadmapRow,.roadmapTicks { display:grid; grid-template-columns:210px minmax(0,1fr); border-bottom:1px solid #e8edf3; }
 .roadmapTicks { min-height:54px; }
 .roadmapTicks>strong { padding:15px; position:sticky; left:0; background:#f7f9fc; z-index:3; font-size:14px; }
 .tickTrack { position:relative; }
@@ -273,7 +273,7 @@ html:has(.app) { zoom:.75; }
 /* 길잡이 패널 : 넓은 화면에서 접기, 좁은 화면에서 서랍 (지금 화면 기능) */
 @media(min-width:1101px) { .agentHidden .shell { grid-template-columns:118px minmax(0,1fr); } .agentHidden .agent { display:none; } .agentHidden .agentOpen { display:block; } }
 @media(max-width:1100px) { .app { padding:12px; } .shell,.shell.noagent { grid-template-columns:minmax(0,1fr); } .nav { position:static; min-height:0; flex-direction:row; padding:6px 12px; border-radius:14px; align-items:center; gap:8px; } .brand { flex-direction:row; margin:0 auto 0 0; gap:7px; } .brand img { width:39px; height:39px; } .brand small { display:none; } .navButton { flex-direction:row; padding:7px 12px; } .accountButton { margin:0; } .agent { display:none; } .agentOpen { display:block; } .agentDrawer .agent { display:flex; position:fixed; right:0; top:0; width:min(320px,91vw); height:133.333dvh; border-radius:18px 0 0 18px; z-index:91; box-shadow:-20px 0 100px #19265550; } .agentDrawer:before { content:""; position:fixed; inset:0; background:#19265566; z-index:90; } .agentClose { display:block; margin-left:auto; } }
-@media(max-width:760px) { .app { padding:8px; } .navButton span { display:none; } .workspace { padding:20px 12px; } .app h1 { font-size:25px; } .toolbar { display:block; } .toolbar>.inlineActions { margin-top:10px; } .column { width:73vw; min-width:232px; flex:0 0 73vw; } .dialogGrid,.compareGrid,.accountGrid { grid-template-columns:1fr; } .entry { display:block; } .entryHero { padding:32px 26px; } .entryHero img { width:80px; height:80px; } .entryHero h1 { font-size:30px; margin-top:13px; } .entryContent { padding:32px 22px; } .pageHeader { flex-wrap:wrap; } .backdrop { padding:12px; } .dialog { padding:18px; max-height:94dvh; border-radius:16px; } .dialogHeader h2 { font-size:20px; } .facts { grid-template-columns:110px minmax(0,1fr); } .recommendLinks { flex-direction:column; } .choiceChip { width:100%; justify-content:space-between; } .roadmapRow,.roadmapTicks { grid-template-columns:180px minmax(760px,1fr); } .roadmapPolicy { padding:12px; } .sectionHeader { align-items:flex-start; } .scheduleAxis { height:177px; } }
+@media(max-width:760px) { .app { padding:8px; } .navButton span { display:none; } .workspace { padding:20px 12px; } .app h1 { font-size:25px; } .toolbar { display:block; } .toolbar>.inlineActions { margin-top:10px; } .column { width:73vw; min-width:232px; flex:0 0 73vw; } .dialogGrid,.compareGrid,.accountGrid { grid-template-columns:1fr; } .entry { display:block; } .entryHero { padding:32px 26px; } .entryHero img { width:80px; height:80px; } .entryHero h1 { font-size:30px; margin-top:13px; } .entryContent { padding:32px 22px; } .pageHeader { flex-wrap:wrap; } .backdrop { padding:12px; } .dialog { padding:18px; max-height:94dvh; border-radius:16px; } .dialogHeader h2 { font-size:20px; } .facts { grid-template-columns:110px minmax(0,1fr); } .recommendLinks { flex-direction:column; } .choiceChip { width:100%; justify-content:space-between; } .roadmapRow,.roadmapTicks { grid-template-columns:120px minmax(0,1fr); } .roadmapPolicy { padding:12px; } .sectionHeader { align-items:flex-start; } .scheduleAxis { height:177px; } }
 @media(min-width:761px) and (max-width:1250px) { .dialogGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(prefers-reduced-motion:reduce) { .walker,.walker img,.trail .drawn,.pin,.buildBar i { animation-duration:.01s; } .flag,.flag i { animation:none; opacity:1; } .skeleton,.typing i { animation:none; } }
 
@@ -321,3 +321,15 @@ html:has(.app) { zoom:.75; }
 .agentAvatar { width:48px; height:48px; flex:none; object-fit:contain; }
 .agentAvatarFallback { width:48px; height:48px; flex:none; display:grid; place-items:center; border-radius:50%; background:#eaf1ff; font-size:27px; }
 @media(max-width:520px) { .regionPicker { grid-template-columns:1fr; } .dateCalendar { width:min(320px,calc(100vw - 40px)); } }
+
+/* 저장 계획 로드맵: 한 화면에 들어가게 축을 늘리고, 일정과 내 기한에 깃발을 꽂는다. */
+.roadmapTrack { background:none; min-height:78px; }
+.roadmapTicks .periodTrack { min-height:70px; }
+.roadmapEventFlag { position:absolute; bottom:4px; transform:translateX(-2px); display:flex; align-items:flex-end; gap:2px; font-size:11px; font-weight:800; white-space:nowrap; z-index:2; }
+.roadmapEventLine { position:absolute; top:0; bottom:0; border-left:2px dashed currentColor; opacity:.35; pointer-events:none; }
+.flag_training_completion { color:#2C64DB; }
+.flag_employment { color:#12965A; }
+.flag_business_registration { color:#9474B3; }
+.flag_relocation { color:#E1AA74; }
+.deadlineFlag { position:absolute; top:6px; transform:translateX(-2px); color:#12965A; z-index:2; line-height:0; }
+.deadlineFlagCheck { color:#E1AA74; }

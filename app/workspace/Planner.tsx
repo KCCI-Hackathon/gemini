@@ -44,9 +44,9 @@ async function fetchEvaluation(profile: Profile, input: PlannerInput): Promise<E
 }
 const initialMessage: Message = { id: 0, role: "assistant", text: "안녕하세요! 함께 다음 갈림길을 준비해 봐요.\n\n일정을 바꾸면 신청할 수 있는 정책과 내 기한을 다시 확인해 드릴게요. 마음에 드는 정책은 카드의 ‘담기’를 눌러 주세요." };
 type Filter = { category: Category | "all" };
-type EligibilityTab = Card["eligibility"];
+// 신청 제한 칸은 두지 않는다. 확인 필요가 기본 탭이다.
+type EligibilityTab = Exclude<Card["eligibility"], "blocked">;
 const ELIGIBILITY_TABS: { id: EligibilityTab; label: string }[] = [
-  { id: "blocked", label: "신청 제한" },
   { id: "needs_check", label: "확인 필요" },
   { id: "eligible", label: "신청 가능" },
 ];
@@ -105,7 +105,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const starStore = useRef<ReturnType<typeof createStarStore> | null>(null);
   const [stars, setStars] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>({ category: "all" });
-  const [eligibilityTab, setEligibilityTab] = useState<EligibilityTab>("blocked");
+  const [eligibilityTab, setEligibilityTab] = useState<EligibilityTab>("needs_check");
   const [recommend, setRecommend] = useState(false), [recommendExpanded, setRecommendExpanded] = useState(true);
   const previousFilter = useRef<Filter | null>(null), previousScroll = useRef(0), boardRef = useRef<HTMLDivElement>(null), recommendRef = useRef<HTMLElement>(null);
   const [limits, setLimits] = useState<Record<string, number>>({});
@@ -283,7 +283,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   function locate(choice: Choice) {
     const card = boardCards.find(item => cardKey(item) === cardKey(choice));
     if (!card) { setDetail(choice); return; }
-    navigate("select"); setFilter({ category: "all" }); setEligibilityTab(card.eligibility); setLimits(prev => ({ ...prev, [choice.stageId]: 10000 })); setFocusedStage(choice.stageId);
+    navigate("select"); setFilter({ category: "all" }); setEligibilityTab(card.eligibility === "eligible" ? "eligible" : "needs_check"); setLimits(prev => ({ ...prev, [choice.stageId]: 10000 })); setFocusedStage(choice.stageId);
     requestAnimationFrame(() => { const el = document.getElementById(`board-${choice.stageId}-${choice.offeringId}`); el?.scrollIntoView({ block: "center", inline: "center", behavior: "auto" }); el?.querySelector<HTMLButtonElement>("button")?.focus(); });
   }
   async function openCopy(plan: SavedPlan) {
