@@ -3,6 +3,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { z } from "zod";
+import seedAccounts from "@/data/account/seed-accounts.json";
 import type { SavedPlan } from "@/lib/planner/types";
 
 export type User = { id: string; email: string; displayName: string; passwordHash: string; createdAt: string };
@@ -36,6 +38,8 @@ export interface AccountStore {
   planByKey(ownerId: string, idempotencyKey: string): PlanRecord | null;
   /** 정기 알림 작업용: 가장 오래 확인하지 않은 계획부터 ID만 */
   plansToCheck(limit: number): string[];
+  /** 한 사용자의 계획 중 staleBefore 이전에 확인했거나 확인한 적 없는 것, 오래된 순 */
+  ownerPlansToCheck(ownerId: string, staleBefore: string, limit: number): string[];
   planById(id: string): PlanRecord | null;
   markChecked(id: string, at: string): void;
   /** 같은 (사용자, dedupeKey)는 한 번만 쌓는다. 새로 쌓았으면 true */
@@ -123,6 +127,9 @@ export function sqliteStore(path: string): AccountStore {
     countPlans(ownerId) { return Number(one("SELECT count(*) AS n FROM plans WHERE owner_id=?", ownerId)!.n); },
     // 확인한 적 없는 계획 먼저, 그다음 가장 오래전에 확인한 계획. 시간 안에 못 끝낸 계획이 다음 실행에서 앞에 온다.
     plansToCheck(limit) { return all("SELECT id FROM plans ORDER BY checked_at IS NOT NULL, checked_at, created_at LIMIT ?", limit).map(r => str(r.id)); },
+    ownerPlansToCheck(ownerId, staleBefore, limit) {
+      return all("SELECT id FROM plans WHERE owner_id=? AND (checked_at IS NULL OR checked_at<?) ORDER BY checked_at IS NOT NULL, checked_at, created_at LIMIT ?", ownerId, staleBefore, limit).map(r => str(r.id));
+    },
     planById(id) { const r = one("SELECT * FROM plans WHERE id=?", id); return r ? toPlan(r) : null; },
     markChecked(id, at) { run("UPDATE plans SET checked_at=? WHERE id=?", at, id); },
     addNotification(n, dedupeKey) {
@@ -147,13 +154,23 @@ export function sqliteStore(path: string): AccountStore {
   };
 }
 
+// 시연 계정. 비밀번호는 scrypt 해시만 저장소에 있다. 저장소를 새로 열 때마다(새 인스턴스 포함) 넣어 두어
+// /tmp 가 비어도 이 계정으로는 항상 로그인할 수 있게 한다. 이 계정이 저장한 계획·알림은 다른 계정처럼 사라질 수 있다.
+const SeedSchema = z.array(z.object({ id: z.string().min(1), email: z.string().email(), displayName: z.string().min(1), passwordHash: z.string().startsWith("scrypt$"), createdAt: z.string() }));
+export function seedUsers(store: AccountStore, seeds: unknown = seedAccounts) {
+  for (const u of SeedSchema.parse(seeds)) store.createUser({ ...u, email: u.email.toLowerCase() });
+}
+
 let shared: AccountStore | undefined;
 /**
  * 서버 전체에서 쓰는 저장소.
  * shortcut: Vercel 함수의 /tmp는 인스턴스가 바뀌면 사라진다. 운영 DB를 정하면 그 구현으로 바꾼다.
  */
 export function accountStore(env: Record<string, string | undefined> = process.env): AccountStore {
-  shared ??= sqliteStore(env.ACCOUNT_DB_PATH || (env.VERCEL ? "/tmp/pathfinder-accounts.sqlite" : "data/db/accounts.sqlite"));
+  if (!shared) {
+    shared = sqliteStore(env.ACCOUNT_DB_PATH || (env.VERCEL ? "/tmp/pathfinder-accounts.sqlite" : "data/db/accounts.sqlite"));
+    seedUsers(shared);
+  }
   return shared;
 }
 /** 영구 저장인지. 화면이 "다른 기기에서 열기"를 약속해도 되는지 판단한다 */

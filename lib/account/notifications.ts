@@ -56,7 +56,20 @@ const label = (c: Card) => c.availability === "eligible" ? "수혜 가능" : c.a
  * 못 끝낸 계획은 다음 실행에서 먼저 처리된다. 같은 알림은 dedupe 키로 한 번만 쌓인다.
  */
 export function runDailyNotifications(store: AccountStore, at: Date, budgetMs = 45_000, clock = () => Date.now()) {
-  const started = clock(), ids = store.plansToCheck(10_000);
+  return checkPlans(store, store.plansToCheck(10_000), at, budgetMs, clock, 10_000);
+}
+
+/**
+ * 알림 목록을 열 때 그 사용자의 계획만 확인한다. 정기 작업(cron)이 없는 배포에서도 알림이 쌓이게 한다.
+ * 한 시간 안에 확인한 계획은 건너뛰고, 응답이 늦지 않게 한 번에 3개까지만 다시 판정한다.
+ */
+export function refreshUserNotifications(store: AccountStore, userId: string, at: Date, limit = 3) {
+  const ids = store.ownerPlansToCheck(userId, new Date(at.getTime() - 3_600_000).toISOString(), limit);
+  return checkPlans(store, ids, at, Infinity, () => 0, limit);
+}
+
+function checkPlans(store: AccountStore, ids: string[], at: Date, budgetMs: number, clock: () => number, limit: number) {
+  const started = clock();
   let plans = 0, created = 0, failed = 0, stopped = false;
   for (const id of ids) {
     if (clock() - started > budgetMs) { stopped = true; break; }
@@ -73,7 +86,7 @@ export function runDailyNotifications(store: AccountStore, at: Date, budgetMs = 
     } catch { failed++; } // 한 계획이 깨져도 다른 사용자의 알림은 만든다
     store.markChecked(id, at.toISOString());
   }
-  return { plans, created, failed, complete: !stopped && ids.length < 10_000 };
+  return { plans, created, failed, complete: !stopped && ids.length < limit };
 }
 
 export function listNotifications(user: User | null, store: AccountStore): Result {
