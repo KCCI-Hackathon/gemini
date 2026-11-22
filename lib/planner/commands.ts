@@ -41,6 +41,22 @@ export function parseScheduleTurn(text: string, events: PlanEvent[], pending: st
   const command = parseScheduleCommand(source, events);
   return { command, pending: command.type === "clarify" ? source : null };
 }
+/** 내 기한이 공고 마감보다 빠른 카드: "왜 제 기한은 더 빠른가요?" 가 가리키는 대상 */
+const ownDeadlineEarlier = (c: Card) => !!c.personalWindow?.end && !!c.official.end && c.personalWindow.end < c.official.end;
+
+/**
+ * 이름을 대지 않은 설명 요청의 대상. 열린 상세 → 담은 정책 중 내 기한이 더 빠른 것 → 담은 첫 정책
+ * → 담을 수 있는 카드 중 내 기한이 더 빠른 것(기한 빠른 순) → 개인 추정 기한 카드. 실데이터에는 개인 추정 기한 카드가 없을 수 있다.
+ */
+export function pickExplainTarget(evaluation: Evaluation, choices: Choice[], detail?: Choice | null): Card | null {
+  const { cards } = evaluation;
+  const open_ = detail && cards.find(c => c.offeringId === detail.offeringId && c.stageId === detail.stageId);
+  if (open_) return open_;
+  const chosen = choices.map(p => cards.find(c => c.offeringId === p.offeringId && c.stageId === p.stageId)).filter((c): c is Card => !!c);
+  const open = cards.filter(c => c.availability !== "blocked" && ownDeadlineEarlier(c)).sort((a, b) => a.personalWindow!.end!.localeCompare(b.personalWindow!.end!));
+  return chosen.find(ownDeadlineEarlier) ?? chosen[0] ?? open[0] ?? cards.find(c => c.deadlineKind === "personal_estimate") ?? null;
+}
+
 export function findNamedCards(text: string, evaluation: Evaluation, choices: Choice[]): Card[] {
   const compact = text.replace(/\s/g, "");
   const matches = evaluation.cards.filter(c => compact.includes(c.title.replace(/\s/g, "")) || c.title.split(/\s+/).some(token => token.length >= 2 && !["지원", "청년", "정책"].includes(token) && compact.includes(token)));

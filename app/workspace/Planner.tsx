@@ -6,7 +6,7 @@ import type { Profile } from "@/lib/judge/types";
 import { addDays, dateLabel, fullDate } from "@/lib/planner/dates";
 import { PERSONA_A } from "@/lib/judge/personas";
 import { PERSONA_DEMO_EVENTS } from "@/lib/planner/fixtures";
-import { findNamedCards, parseScheduleTurn } from "@/lib/planner/commands";
+import { findNamedCards, parseScheduleTurn, pickExplainTarget } from "@/lib/planner/commands";
 import { acceptRevision, applySavedRecheck, changeEvents, createDraft, newId, preserveMissingChoices, savedSnapshot, undoEvents, withChoices } from "@/lib/planner/state";
 import { createPlanRepository, DRAFT_KEY, isSavedPlan, readLegacyPolicies, readLegacySitePlans } from "@/lib/planner/storage";
 import { CATEGORIES, EVENT_NAMES, type Card, type Category, type Choice, type Draft, type Evaluation, type PlanEvent, type PlannerInput, type SavedPlan } from "@/lib/planner/types";
@@ -252,6 +252,9 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       return;
     }
     if (command.type === "explain") {
+      const target = named[0] ?? pickExplainTarget(current.evaluation, current.input.choices, detail);
+      const eul = (w: string) => { const c = w.charCodeAt(w.length - 1) - 0xac00; return c >= 0 && c < 11172 && c % 28 === 0 ? "를" : "을"; };
+      const picked = !named[0] && !detail && target ? `${target.title}${eul(target.title)} 예로 설명할게요. 다른 정책은 제목을 말씀해 주세요.\n` : "";
       if (target) {
         setDetail(target);
         if (named.length > 1) {
@@ -259,7 +262,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
           const relation = [...target.restrictions, ...other.restrictions].find(r => [other.offeringId, other.policyId, target.offeringId, target.policyId].includes(r.otherId));
           const evidence = [...target.evidence, ...other.evidence].find(e => e.evidenceId === relation?.evidenceId);
           say(`${target.title} · ${other.title}\n${relation?.reviewed && (relation.action === "application" || (relation.period && relation.otherPeriod)) ? `공고의 ${relation.action === "benefit" ? "동시 수혜" : "중복 신청"} 제한을 확인해 주세요.` : "확정할 수 있는 중복 제한·수혜 기간 정보가 부족해요. 기관에 적용 기간과 대상을 확인해 주세요."}${evidence ? `\n근거: ${evidence.quote}` : ""}`);
-        } else say(`${target.title}\n공식 접수: ${target.official.start ?? "시작 미정"} ~ ${target.official.end ?? "상시 또는 미정"}\n${deadlineText(target, current.evaluation.today)}\n${target.reasons.map(r => r.message).join("\n") || "이 계획의 조건과 공식 접수 기간을 교차한 결과예요."}`);
+        } else say(`${picked}${target.title}\n공식 접수: ${target.official.start ?? "시작 미정"} ~ ${target.official.end ?? "상시 또는 미정"}\n${deadlineText(target, current.evaluation.today)}\n${target.reasons.map(r => r.message).join("\n") || "이 계획의 조건과 공식 접수 기간을 교차한 결과예요."}`);
       } else say("정책 제목을 눌러 대상을 선택해 주세요. 상세에서 계산 이유와 제한 근거를 함께 확인할 수 있어요.");
       return;
     }
