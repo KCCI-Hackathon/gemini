@@ -138,7 +138,7 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
       }
       const end = personalWindow?.end ?? null;
       const deadlineKind: Card["deadlineKind"] = officialClosed ? "closed" : o.official.kind === "budget" || o.official.kind === "unknown" || (!o.reviewed && end !== o.official.end) ? "unknown" : end ? (end === o.official.end ? "official" : "personal_estimate") : o.official.kind === "rolling" ? "rolling" : "unknown";
-      cards.push({ ...o, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
+      cards.push({ ...o, verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
     }
   }
   for (const card of cards) card.otherStageIds = cards.filter(c => c.offeringId === card.offeringId && c.stageId !== card.stageId && c.availability !== "blocked").map(c => c.stageId);

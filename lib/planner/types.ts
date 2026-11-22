@@ -18,10 +18,11 @@ export type Restriction = { otherId: string; reviewed: boolean; action: "applica
 export type Offering = {
   policyId: string; offeringId: string; roundLabel: string; title: string; category: Category;
   summary: string; support: string; org: string; official: OfficialPeriod; rules: Rule[]; evidence: Evidence[];
-  regions?: string[]; restrictions: Restriction[]; reviewed: boolean; dataVersion: string;
+  verifyLabel?: string | null; regions?: string[]; restrictions: Restriction[]; reviewed: boolean; dataVersion: string;
 };
 export type Reason = { code: string; message: string; evidenceId?: string; eventId?: string; relatedOfferingId?: string };
 export type Card = Offering & {
+  verifyLabel: string | null;
   stageId: string; personalWindow: Period | null; stageWindow: Period | null; applicationWindows: Period[];
   deadlineKind: "official" | "personal_estimate" | "rolling" | "unknown" | "closed";
   daysLeft: number | null; availability: "eligible" | "needs_check" | "blocked";

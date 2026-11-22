@@ -2,7 +2,7 @@ import { addMonths, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
 import { judgePolicy, type Profile } from "@/lib/judge";
-import { categoryOf } from "@/lib/route/roadmap";
+import { categoryOf, policyNotice } from "@/lib/route/roadmap";
 import { evaluatePlanner, type BaseEvaluator } from "./evaluate";
 import { DEMO_PROFILE, demoCatalog } from "./fixtures";
 import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
@@ -32,6 +32,7 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
     const rounds = v?.rounds?.length ? v.rounds : [null];
     return rounds.map(round => ({
       policyId: p.id, offeringId: `${p.id}:${round?.id ?? `${(v?.apply.start ?? p.applyStart ?? today).slice(0, 4)}-current`}`, roundLabel: round?.notice.title ?? "현재 수집된 공고", title: v?.name ?? p.name,
+      verifyLabel: policyNotice(p, v, round?.notice.applyStart ?? today).verifyLabel,
       category: categoryOf(p.category), summary: p.texts.description || p.texts.support, support: p.texts.support, org: p.supervisingOrg,
       official: { kind: v?.apply.type === "always" || (!v && p.applyPeriodType === "always") ? "rolling" as const : (round?.notice.applyEnd ?? v?.apply.end ?? p.applyEnd) ? "fixed" as const : "unknown" as const, start: round ? round.notice.applyStart : v ? v.apply.start : p.applyStart, end: round ? round.notice.applyEnd : v ? v.apply.end : p.applyEnd, closeAt: v?.apply.endTime ?? null },
       rules: [], regions: p.zipCodes, restrictions: (v?.confirmedRelations ?? []).flatMap(r => r.otherId ? [{ otherId: r.otherId, reviewed: true, action: "benefit" as const, direction: "both" as const, period: null, otherPeriod: null, evidenceId: `restriction:${p.id}:${r.otherId}` }] : []),
@@ -43,9 +44,9 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
     const p = policyMap.get(o.policyId)!;
     const v = verified.get(p.id);
     const axes = judgePolicy(p, v, atProfile, new Date(`${date}T12:00:00+09:00`));
-    let availability = axes.personal.value === "ineligible" || axes.time.value === "unmet" ? "blocked" as const : axes.personal.value === "eligible" && o.reviewed ? "eligible" as const : "needs_check" as const;
+    let availability = axes.personal.value === "ineligible" ? "blocked" as const : axes.personal.value === "eligible" ? "eligible" as const : "needs_check" as const;
     const reasons = [...axes.personal.reasons, ...(axes.fieldNotes ?? []), ...(axes.time.note ? [axes.time.note] : [])].map(message => ({ code: message.includes("지역") ? "RESIDENCE" : message.includes("취업") || message.includes("수강") ? "STATUS" : "BASE_CONDITION", message }));
-    if (!o.reviewed && availability !== "blocked") reasons.unshift({ code: "UNREVIEWED", message: "일부 조건 충족 · 공고 확인 필요" });
+    if (axes.personal.value === "code_met_unreviewed") reasons.unshift({ code: "UNREVIEWED", message: "일부 조건 충족 · 공고 확인 필요" });
     if (axes.recruitment === "unknown" && availability !== "blocked") { availability = "needs_check"; reasons.push({ code: "UNKNOWN_RECRUITMENT", message: "최신 공고의 접수 기간 확인 필요" }); }
     if (axes.restriction.value === "applies" && availability !== "blocked") { availability = "needs_check"; reasons.push({ code: "RESTRICTION_REVIEW", message: "현재 수혜 정책과 제한 범위·수혜 기간 확인 필요" }); }
     return { availability, reasons };
