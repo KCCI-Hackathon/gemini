@@ -4,10 +4,11 @@ import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { CaseSchema, ClauseRowSchema, ResearchSchema } from "@/lib/data/overlap-schema";
+import { ApprovedSchema, CaseSchema, ClauseRowSchema, ResearchSchema } from "@/lib/data/overlap-schema";
 import { openDb } from "@/lib/db/sqlite";
 import { artifactPaths, snapshotPath } from "@/lib/db/sources";
-import { batchFields, selectFields, selectRegion } from "./overlap/select";
+import { compareSnapshots, parseSnapshot } from "./compare-snapshots";
+import { batchFields, screenPolicyIds, selectFields, selectRegion } from "./overlap/select";
 import { extract, extractPair } from "./overlap/extract";
 import { linkMentions } from "./overlap/link";
 import { verifyClaims } from "./overlap/verify";
@@ -18,7 +19,7 @@ import { isScanModel, jsonBytes, makeSession, reviewModels, safeId, scanModel, s
 import type { Ask, Clause } from "./overlap/types";
 import type { ClauseRow } from "@/lib/data/overlap-schema";
 
-type AgentOptions = {root:string,live:boolean,runId?:string,scanWith?:ScanModel} & Pick<Parameters<typeof makeSession>[0],"apiKey"|"fetchFn"|"now"|"sleep">;
+type AgentOptions = {root:string,live:boolean,runId?:string,scanWith?:ScanModel,previousSnapshot?:string} & Pick<Parameters<typeof makeSession>[0],"apiKey"|"fetchFn"|"now"|"sleep">;
 export async function runOverlap(o:AgentOptions) {
   const dir=join(o.root,"data/overlap-agent");
   const read=(file:string)=>readFileSync(join(o.root,file));
@@ -37,21 +38,37 @@ export async function runOverlap(o:AgentOptions) {
       JSON.parse(readFileSync(pointer,"utf8")).run_id!==runId)
       throw Error("이전 실행은 별도 작업 폴더에서 재생하세요. 최신 실행을 보존합니다.");
     const inputs={snapshotSha256:sha(snapshot),casesSha256:sha(casesFile),researchSha256:sha(researchFile)};
-    const session=makeSession({...o,dir,inputs,runId});
+    const path=join(dir,"runs",runId+".json");
+    let candidateIds: string[] | undefined;
+    if (o.live && !existsSync(path)) {
+      const approved = ApprovedSchema.parse(JSON.parse(read("data/overlap/approved.json").toString("utf8")));
+      const known = new Set(approved.rules.flatMap(rule => [rule.source_policy_id, rule.target_policy_id, ...rule.a_group_ids]));
+      let changed: Set<string> | undefined;
+      if (o.previousSnapshot) {
+        const before = parseSnapshot(JSON.parse(readFileSync(o.previousSnapshot, "utf8")));
+        const after = parseSnapshot(JSON.parse(snapshot.toString("utf8")));
+        if (before.asOf !== approved.snapshotId || after.asOf < before.asOf)
+          throw Error("이전 스냅샷과 배포 근거의 기준일이 맞지 않습니다.");
+        changed = new Set(compareSnapshots(before, after, approved.rules).revalidatePolicyIds);
+      }
+      candidateIds = screenPolicyIds(records, known, changed);
+    }
+    const session=makeSession({...o,dir,inputs,runId,compact:true,candidateIds,incremental:!!o.previousSnapshot});
     const initialModel = session.state.requests[0]?.model;
     const legacy = !!initialModel && !isScanModel(initialModel);
     const scanner = isScanModel(initialModel) ? initialModel : o.scanWith ?? scanModel;
     const fields = selectFields(records, !legacy);
-    const batches = batchFields(fields), region = legacy ? selectRegion(records) : records;
+    const selected = session.state.candidateIds ? new Set(session.state.candidateIds) : undefined;
+    const scanned = selected ? fields.filter(field => selected.has(field.b_policy_id)) : fields;
+    const batches = batchFields(scanned, session.state.compact ? 12000 : 6000), region = legacy ? selectRegion(records) : records;
     if(!batches.length) throw Error("중복수혜 검증 대상 정책이 없습니다.");
     const ask: Ask = legacy ? session.ask : req => req.stage === "verify"
       ? session.ask(req, reviewModels)
       : session.ask({ ...req, model: scanner }, [scanner]);
-    const path=join(dir,"runs",runId+".json");
     const votes:[Clause[],Clause[]]=[[],[]],proofs:BatchProof[]=[],failures:ClauseRow[]=[];
     if(o.live) writeAtomic(pointer,jsonBytes({run_id:runId}));
     for(const batch of batches){
-      const pair=legacy ? await extractPair(batch,ask) : [await extract(batch,1,ask)];
+      const pair=legacy ? await extractPair(batch,ask) : [await extract(batch,1,ask,undefined,session.state.compact)];
       proofs.push({first:pair[0].hashes,second:pair[1]?.hashes ?? [],complete:pair.every(x=>x.complete)});
       pair.forEach((result,i)=>{
         votes[i].push(...result.clauses);
@@ -90,7 +107,7 @@ export async function runOverlap(o:AgentOptions) {
 }
 
 async function main(){
-  const {values}=parseArgs({options:{live:{type:"boolean"},replay:{type:"boolean"},"run-id":{type:"string"}}});
+  const {values}=parseArgs({options:{live:{type:"boolean"},replay:{type:"boolean"},"run-id":{type:"string"},"previous-snapshot":{type:"string"}}});
   if(values.live && values.replay) throw Error("--live와 --replay 중 하나를 선택하세요.");
   if(!values.live && !values["run-id"] && !existsSync("data/overlap-agent/latest.json"))
     throw Error("재생할 중복수혜 실행이 없습니다. 연구본은 npm run db:build -- --research-only 로 적재할 수 있습니다.");
@@ -99,7 +116,7 @@ async function main(){
   const scanner = process.env.OVERLAP_SCAN_MODEL;
   if (scanner && !isScanModel(scanner)) throw Error("OVERLAP_SCAN_MODEL은 2.5 또는 3.5 Flash-Lite여야 합니다.");
   const r=await runOverlap({root:process.cwd(),live:!!values.live,runId:values["run-id"],apiKey:values.live?process.env.GEMINI_API_KEY:undefined,
-    scanWith: isScanModel(scanner) ? scanner : undefined});
+    scanWith: isScanModel(scanner) ? scanner : undefined, previousSnapshot:values["previous-snapshot"]});
   console.log(JSON.stringify({run_id:r.run_id,complete:r.complete,passed:r.passed,covered:r.covered,total:r.total,falseBlocked:r.falseBlocked,wrongSupported:r.wrongSupported}));
   if(!r.passed) process.exitCode=2;
 }

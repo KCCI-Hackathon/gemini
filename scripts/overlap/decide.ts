@@ -131,7 +131,7 @@ export function decide(first: LinkedMention[], second: LinkedMention[], checks: 
         quote: quote?.quote ?? null, valid_quote: !!quote, mention: vote.mention.text, mention_type: vote.mention.type, a: vote.a, method: vote.method,
         kind: v.kind, effect_type: v.effect_type, condition_type: v.condition_type, condition_params: v.condition_params, exception: v.exception,
         restricted_item: v.restricted_item, period_text: v.period_text, verdict: check?.verdict ?? null, verify_quote: validVerify ? check!.verify_quote : null,
-        reason: check?.reason ?? null, link_hash: vote.link_hash, verify_hash: check?.response_hash ?? null, model: v.model,
+        reason: vote.link_issue ?? check?.reason ?? null, link_hash: vote.link_hash, verify_hash: check?.response_hash ?? null, model: v.model,
       });
     }
     if (hasBadQuote || contradicted || isTraceOnly || !a || !b) continue;

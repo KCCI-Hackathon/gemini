@@ -47,7 +47,11 @@ export function verifySaved(value:unknown, expected:{hash:string,model:string,st
 const Entry=z.object({model:z.enum(models),stage:Spec.shape.stage,hash:z.string(),logicalKey:z.string(),completed:z.boolean(),responseSha256:z.string().optional(),durationMs:duration});
 const State=z.object({
   run_id:z.string(),startedAt:z.iso.datetime(),snapshotSha256:z.string(),casesSha256:z.string(),researchSha256:z.string(),
-  requests:z.array(Entry), exhausted:z.record(z.string(),z.number()),complete:z.boolean(),lastCall:z.number()
+  requests:z.array(Entry), exhausted:z.record(z.string(),z.number()),complete:z.boolean(),lastCall:z.number(),
+  compact:z.boolean().optional(),
+  candidateIds:z.array(z.string()).optional(), incremental:z.boolean().optional(),
+  cooldown:z.record(z.string(),z.number()).optional(),
+  attempts:z.record(z.string(),z.object({success:z.int(),failed:z.int(),retries:z.int()})).optional()
 });
 export type RunState=z.infer<typeof State>;
 export function safeId(id:string) {
@@ -68,7 +72,8 @@ function dailyExhausted(error:unknown,model:ModelId) {
   return payload.success && payload.data.error.details.some(d=>d.violations?.some(v=>
     (!v.quotaDimensions?.model || v.quotaDimensions.model===model) && /requests.*per.?day|requests.*daily/i.test([v.quotaId,v.quotaMetric].join(" "))));
 }
-type Options={dir:string,runId:string,inputs:Pick<RunState,"snapshotSha256"|"casesSha256"|"researchSha256">,
+type Options={dir:string,runId:string,inputs:Pick<RunState,"snapshotSha256"|"casesSha256"|"researchSha256">,compact?:boolean,
+  candidateIds?:string[],incremental?:boolean,
   live:boolean,apiKey?:string,fetchFn?:typeof fetch,now?:()=>number,sleep?:(ms:number)=>Promise<void>};
 export function makeSession(o:Options) {
   const now=o.now??Date.now;
@@ -76,7 +81,9 @@ export function makeSession(o:Options) {
   const path=join(o.dir,"runs",safeId(o.runId)+".json");
   if(!o.live && !existsSync(path)) throw Error("재생할 실행 기록 없음: "+path);
   const state:RunState=existsSync(path)?State.parse(JSON.parse(readFileSync(path,"utf8"))):{
-    ...o.inputs,run_id:o.runId,startedAt:new Date(now()).toISOString(),requests:[],exhausted:{},complete:false,lastCall:0
+    ...o.inputs,run_id:o.runId,startedAt:new Date(now()).toISOString(),requests:[],exhausted:{},complete:false,lastCall:0,
+    ...(o.compact ? { compact: true, attempts: {}, cooldown: {} } : {}),
+    ...(o.candidateIds ? { candidateIds: o.candidateIds, incremental: !!o.incremental } : {})
   };
   if(state.run_id!==o.runId || Object.entries(o.inputs).some(([k,v])=>state[k as keyof RunState]!==v)) throw Error("실행 입력 해시 불일치");
   const persist=()=>writeAtomic(path,jsonBytes(state));
@@ -88,18 +95,20 @@ export function makeSession(o:Options) {
     if(recorded && recorded.logicalKey!==logicalKey) throw Error("실행 순서 또는 프롬프트 변경 "+spec.stage+" "+logicalKey);
     let model=recorded?.model??spec.model;
     let retries=0;
+    let consecutive429=0;
+    const unavailableUntil = (candidate:ModelId) => Math.max(state.exhausted[candidate] ?? 0,state.cooldown?.[candidate] ?? 0);
     for(;;) {
       const hash=requestHash({...spec,model});
       const file=join(o.dir,"responses",hash+".json");
       if(recorded?.completed && recorded.hash!==hash) throw Error("실행 요청 불일치 "+hash);
       if(!o.live && (!recorded || recorded.hash!==hash || !existsSync(file))) throw Error("재생 응답 누락 "+spec.stage+" "+hash);
-      if(!existsSync(file) && (state.exhausted[model]??0)>now()) {
-        const alternative=fallbackModels.find(m=>(state.exhausted[m]??0)<=now());
-        if(alternative) { model=alternative; continue; }
-        const resetAt=Math.min(...fallbackModels.map(m=>state.exhausted[m]));
-        console.error("Gemini 일일 한도 초기화 대기 "+new Date(resetAt).toISOString());
+      if(!existsSync(file) && unavailableUntil(model)>now()) {
+        const alternative=fallbackModels.find(m=>unavailableUntil(m)<=now());
+        if(alternative) { model=alternative; retries=0; consecutive429=0; continue; }
+        const resetAt=Math.min(...fallbackModels.map(unavailableUntil));
+        console.error("Gemini 모델 재사용 대기 "+new Date(resetAt).toISOString());
         await sleep(Math.max(0,resetAt-now()));
-        model=fallbackModels[0]; continue;
+        model=fallbackModels[0]; retries=0; consecutive429=0; continue;
       }
       const entry={logicalKey,model,stage:spec.stage,hash,completed:false};
       if(o.live && !recorded?.completed) {state.requests[cursor]=entry;persist();}
@@ -121,6 +130,14 @@ export function makeSession(o:Options) {
           });
           raw=await res.text();
         } catch { res=undefined; }
+        const stats = state.attempts && (state.attempts[spec.stage + ":" + model] ??= {success:0,failed:0,retries:0});
+        if (stats) {
+          if (res?.ok) stats.success++;
+          else stats.failed++;
+          persist();
+        }
+        const rotate = !!state.cooldown && spec.stage === "verify" && fallbackModels.length > 1;
+        consecutive429 = !res || [429,500,502,503,504].includes(res.status) ? consecutive429 + 1 : 0;
         if(res?.status===429) {
           let error:unknown; try {error=JSON.parse(raw!);} catch {}
           if(dailyExhausted(error,model)) {
@@ -130,7 +147,21 @@ export function makeSession(o:Options) {
             continue;
           }
         }
+        // A review model this project cannot use, or one that keeps failing, hands over to the next Flash model.
+        if (rotate && (res?.status === 403 || res?.status === 404)) {
+          state.cooldown![model]=nextPacificMidnight(now());
+          persist();
+          console.error("Gemini 모델 사용 불가 HTTP "+res.status+" "+model+" · 다음 재검증 모델로 전환");
+          continue;
+        }
+        if (rotate && consecutive429 >= 3) {
+          state.cooldown![model]=now()+600000;
+          persist();
+          console.error("Gemini 반복 실패로 모델 일시 대기 "+model+(res ? " HTTP "+res.status : " 응답 없음"));
+          continue;
+        }
         if(!res || [429,500,502,503,504].includes(res.status)) {
+          if (stats) {stats.retries++;persist();}
           const retryMs=60000*Math.min(10,2**Math.min(retries++,4));
           console.error("Gemini "+(res ? "HTTP "+res.status : "응답 없음")+" "+model+" "+spec.stage+
             " · 재시도 "+new Date(now()+retryMs).toISOString());

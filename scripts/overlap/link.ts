@@ -1,4 +1,5 @@
 import type { RawPolicy } from "@/lib/data/types";
+import { looksLocalGov, sidoOfOrg } from "@/lib/data/regions";
 import { normalizeSpace } from "@/lib/verify/web";
 import { digest, indexedRows, type Ask, type Clause, type LinkedMention, type Mention } from "./types";
 
@@ -36,6 +37,21 @@ function orgMatches(org: string | null, policy: RawPolicy): boolean {
   const names = [policy.sprvsnInstCdNm, policy.rgtrHghrkInstCdNm];
   return names.some(n => typeof n === "string" && compact(n).includes(compact(org)));
 }
+// Only records with the same full title are the same program; parentheses often name a different sub-program.
+const title = (p: RawPolicy) => p.plcyNm.replace(/\s/g, "");
+const orgText = (p: RawPolicy) => [p.rgtrHghrkInstCdNm, p.sprvsnInstCdNm].filter(n => typeof n === "string").join(" ");
+// Same-name records differ only by region and round: prefer B's region, then the latest national record.
+// Another region's local record is never preferred over the model's own pick.
+export function preferredRecord(records: RawPolicy[], b: RawPolicy, chosen: RawPolicy): RawPolicy {
+  const sido = sidoOfOrg(orgText(b));
+  const national = (p: RawPolicy) => {
+    const org = String(p.sprvsnInstCdNm ?? "");
+    return !looksLocalGov(org) && /^[가-힣]+(?:부|처|청|위원회)(?:\s|$)/.test(org);
+  };
+  const latest = (list: RawPolicy[]) => [...list].sort((x, y) => y.plcyNo.localeCompare(x.plcyNo))[0];
+  const local = sido ? records.filter(p => sidoOfOrg(orgText(p)) === sido) : [];
+  return latest(local) ?? latest(records.filter(national)) ?? chosen;
+}
 export async function linkMentions(clauses: Clause[], region: RawPolicy[], ask: Ask): Promise<LinkedMention[]> {
   const policies = new Map(region.map(p => [p.plcyNo, p]));
   const groups = new Map<string, RawPolicy[]>();
@@ -64,27 +80,43 @@ export async function linkMentions(clauses: Clause[], region: RawPolicy[], ask: 
       Object.assign(link, { a: exact.plcyNo, method: "exact", orgMatches: true }); continue;
     }
     const ngrams = grams(name);
-    const candidates = index.filter(r => r.name !== own && isNamedRound(mention, clause, r.policy, b))
-      .map(r => ({ policy: r.policy, score: r.name === name ? 1 : dice(ngrams, r.grams) }))
-      .filter(r => r.score > 0).sort((a, b) => b.score - a.score || a.policy.plcyNo.localeCompare(b.policy.plcyNo)).slice(0, 5).map(r => r.policy);
+    // One slot per program title, so regional copies of one program cannot crowd out other programs.
+    const byTitle = new Map<string, { policies: RawPolicy[]; score: number }>();
+    for (const r of index) {
+      if (r.name === own || !isNamedRound(mention, clause, r.policy, b)) continue;
+      const score = r.name === name ? 1 : dice(ngrams, r.grams);
+      if (!score) continue;
+      const entry = byTitle.get(title(r.policy)) ?? { policies: [], score };
+      entry.policies.push(r.policy); byTitle.set(title(r.policy), entry);
+    }
+    const candidates = [...byTitle.values()].map(e => ({ policy: preferredRecord(e.policies, b, e.policies[0]), score: e.score }))
+      .sort((x, y) => y.score - x.score || y.policy.plcyNo.localeCompare(x.policy.plcyNo)).slice(0, 8).map(r => r.policy);
     if (candidates.length) pending.push({ link, candidates });
   }
   for (let start = 0; start < pending.length; start += 40) {
     const batch = pending.slice(start, start + 40);
     const input = batch.map(({ link, candidates }, i) => ({
-      index: i + 1, b: link.clause.b_policy_id, quote: link.clause.quote, mention: link.mention,
+      index: i + 1, b: { id: link.clause.b_policy_id, name: policies.get(link.clause.b_policy_id)!.plcyNm, org: policies.get(link.clause.b_policy_id)!.sprvsnInstCdNm },
+      quote: link.clause.quote, mention: link.mention,
       candidates: candidates.map(p => ({ id: p.plcyNo, name: p.plcyNm, org: p.sprvsnInstCdNm, registry: p.rgtrHghrkInstCdNm, application: p.aplyYmd }))
     }));
-    const prompt = "자료에 적힌 사업·기관·회차를 확인하세요. 동일한 사업이 후보에 있으면 하나를 고르고 없거나 판단할 수 없으면 none. JSON 배열 [{index,policy_id}]만 답하세요.\n" + JSON.stringify(input);
+    const prompt = "자료에 적힌 사업·기관·회차를 확인하세요. 동일한 사업이 후보에 있으면 하나를 고르세요. 이름이 비슷하기만 한 다른 사업은 고르지 마세요. 같은 이름이 여러 지역에 있으면 B와 같은 지역이나 전국 사업을 고르세요. 없거나 판단할 수 없으면 none. JSON 배열 [{index,policy_id}]만 답하세요.\n" + JSON.stringify(input);
     const saved = await ask({ stage: "link", pass: batch[0].link.clause.pass, repair: 0, prompt });
     indexedRows(saved.text, batch.length).forEach((row, i) => {
       const { link, candidates } = batch[i];
       link.link_hash = saved.hash;
       if (row.policy_id === "none") return;
-      const picked = candidates.find(p => p.plcyNo === row.policy_id);
-      if (!picked) throw Error("후보 밖 정책번호: index " + String(i + 1));
-      link.method = "ai"; link.a = picked.plcyNo; link.orgMatches = orgMatches(link.mention.org, picked);
-      link.a_group_ids = (groups.get(candidateName(picked.plcyNm)) ?? []).map(p => p.plcyNo).filter(id => id !== picked.plcyNo).sort();
+      const chosen = candidates.find(p => p.plcyNo === row.policy_id);
+      if (!chosen) {
+        link.link_issue = "후보 밖 정책번호";
+        return;
+      }
+      const group = groups.get(candidateName(chosen.plcyNm)) ?? [chosen];
+      const b = policies.get(link.clause.b_policy_id)!, fits = orgMatches(link.mention.org, chosen);
+      const picked = preferredRecord(group.filter(p => p === chosen || (title(p) === title(chosen) &&
+        isNamedRound(link.mention, link.clause, p, b) && orgMatches(link.mention.org, p) === fits)), b, chosen);
+      link.method = "ai"; link.a = picked.plcyNo; link.orgMatches = fits;
+      link.a_group_ids = group.map(p => p.plcyNo).filter(id => id !== picked.plcyNo).sort();
     });
   }
   return result;

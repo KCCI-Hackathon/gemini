@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import snapshot from "@/data/snapshot/current.json";
-import { linkMentions, candidateName } from "@/scripts/overlap/link";
+import { linkMentions, candidateName, preferredRecord } from "@/scripts/overlap/link";
 import { selectRegion } from "@/scripts/overlap/select";
 import type { Ask, Clause } from "@/scripts/overlap/types";
 const region = selectRegion(snapshot.records), b = "20260406005400212442";
@@ -35,5 +35,18 @@ it("없는 후보 및 2025년 B에서 2026년 장학금 연결은 거부한다",
   const ask = vi.fn<Ask>(choose("none"));
   expect((await linkMentions([c], region, ask))[0].a).toBeNull();
   if (ask.mock.calls.length) expect(ask.mock.calls[0][0].prompt).not.toContain("20260821005400113348");
-  await expect(linkMentions([clause("복지포인트")], region, choose("10000000000000000000"))).rejects.toThrow(/후보 밖/);
+  await expect(linkMentions([clause("복지포인트")], region, choose("10000000000000000000")))
+    .resolves.toMatchObject([{ a: null, method: "none", link_issue: "후보 밖 정책번호" }]);
+});
+it("같은 이름 정책은 B와 같은 지역, 없으면 최신 전국 정책, 둘 다 없으면 모델 선택을 쓴다", () => {
+  const all = snapshot.records, byId = (id: string) => all.find(p => p.plcyNo === id)!;
+  const named = (title: string) => all.filter(p => p.plcyNm.replace(/\s/g, "") === title);
+  const savings = named("청년내일저축계좌");
+  expect(preferredRecord(savings, byId(b), savings[0]).plcyNo).toBe("20260406005400212495");
+  const employment = named("국민취업지원제도");
+  expect(preferredRecord(employment, byId("20250516005400210832"), employment[0]).plcyNo).toBe("20260710005400113256");
+  const housing = named("청년주거급여분리지급");
+  const local = housing.filter(p => /광역시|특별시|도$/.test(String(p.rgtrHghrkInstCdNm)) && !/인천/.test(String(p.rgtrHghrkInstCdNm)));
+  expect(local.length).toBeGreaterThan(0);
+  expect(preferredRecord(local, byId(b), local[0])).toBe(local[0]);
 });

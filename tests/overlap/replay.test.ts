@@ -12,7 +12,7 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
   const temp=mkdtempSync(join(tmpdir(),"overlap-replay-"));
   const root=join(temp,"first"), copy=join(temp,"copy");
   function inputs(to:string){
-    for(const p of ["snapshot","verified","verify-results","verify-eval","verify-replay","regions.json","route-links.json","overlap-agent/cases.json","overlap-agent/research.json"]){
+    for(const p of ["snapshot","verified","verify-results","verify-eval","verify-replay","regions.json","route-links.json","overlap-agent/cases.json","overlap-agent/research.json","overlap/approved.json"]){
       const dest=join(to,"data",p);
       mkdirSync(join(dest,".."),{recursive:true});cpSync(join("data",p),dest,{recursive:true});
     }
@@ -37,9 +37,11 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
         : data.assertions
         ? data.assertions.map((a:{index:number,quote:string})=>({index:a.index,evidence_quote:a.quote,
           verdict:a.quote===quote?"supported":"contradicted",reason:"항목 확인"}))
-        : item?[{b_policy_id:b,field,quote,mentions:[{text:"국민취업지원제도",org:null,type:"program"}],
+        : data.filter((v:{b_policy_id:string,field:string})=>v!==item).map((v:{b_policy_id:string,field:string})=>
+          ({b_policy_id:v.b_policy_id,field:v.field,kind:"none"})).concat(item?[{b_policy_id:b,field,quote,
+          mentions:[{text:"국민취업지원제도",org:null,type:"program"}],
           kind:"blocks",effect_type:"participation_block",condition_type:"receiving",condition_params:{},
-          restricted_item:null,period_text:null,exception:null}]:[];
+          restricted_item:null,period_text:null,exception:null}]:[]);
       return Response.json({candidates:[{finishReason:"STOP",content:{parts:[{text:JSON.stringify(rows)}]}}]});
     });
     const options={runId:"test-run",live:true,root,apiKey:"fixture",now:()=>now,sleep:async(ms:number)=>{now+=ms;},fetchFn:fake};
@@ -54,6 +56,8 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
       { model: "gemini-3.8-flash", sampleCount: 0, averageMs: null },
     ]);
     expect(reportPasses(first)).toBe(true);
+    expect(first.selection?.candidatePolicies).toBeLessThan(4020);
+    expect(reportPasses({...first,selection:{candidatePolicies:1,incremental:true}})).toBe(false);
     expect(reportPasses({...first,controls:Array(3).fill(first.controls[0])})).toBe(false);
     expect(reportPasses({...first,requests:[...first.requests,{...first.requests.at(-1)!,model:"gemini-3-flash-preview"}]})).toBe(false);
     expect(reportPasses({...first,controls:first.controls.map((v,i)=>i?v:{...v,verdict:"supported"})})).toBe(false);
