@@ -11,7 +11,7 @@ import { createPlanRepository, DRAFT_KEY, parseDraft, readLegacyPolicies, readLe
 import { createServerPlanRepository, fetchMe, logoutAccount, type Me } from "@/lib/planner/server-storage";
 import { AccountNotifications } from "./AccountNotifications";
 import { CATEGORIES, EVENT_NAMES, type Card, type Category, type Choice, type Draft, type Evaluation, type PlanEvent, type PlannerInput, type SavedPlan } from "@/lib/planner/types";
-import { requestCounsel, type CounselTurn } from "@/lib/planner/counsel-client";
+import { counselFailure, requestCounsel, type CounselTurn } from "@/lib/planner/counsel-client";
 import { applyTarget, scheduleNeedsConfirm, validateAnswer, type CounselTarget } from "@/lib/planner/counsel-target";
 import { askableConditions, collectOpenConditions, mayFinish, MAX_SKIPS, questionKey, wantsImmediateRecommendation, type RecommendSession } from "@/lib/planner/open-conditions";
 import type { CounselBody } from "@/lib/plan/counsel";
@@ -82,6 +82,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const [aiQuestion, setAiQuestion] = useState<(CounselBody & { target: CounselTarget; forRecommendation: boolean; preparedAnswers?: ReadonlySet<string> }) | null>(null);
   const recommendSession = useRef<{ id: string; asked: string[]; skippedKeys: string[]; stopped: boolean; scope?: RecommendScope } | null>(null);
   const counselHistory = useRef<CounselTurn[]>([]), autoCalls = useRef(0), outOfScope = useRef(0);
+  // 상담 경계: 새 대화 · 다른 계획으로 바뀌면 1 올린다. 그 전에 시작한 요청 · 답 반영은 화면에 끼어들지 못한다.
+  const chatEpoch = useRef(0), chatOwner = useRef<string | null>(null), lastFailed = useRef<(() => void) | null>(null);
   function clearRecommendation() {
     planSeq.current++;
     setRecommendation(null);
@@ -108,6 +110,15 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const [me, setMe] = useState<Me | null>(null), meRef = useRef<Me | null>(null), [localPlans, setLocalPlans] = useState<SavedPlan[]>([]);
   const [planId, setPlanId] = useState("draft"), [rechecked, setRechecked] = useState<Draft | null>(null);
   const activePlanId = useRef(planId); activePlanId.current = planId;
+  // 상담 대상(작성 중인 초안 또는 열어 본 저장 계획)이 바뀌면 이전 계획의 대화를 새 계획의 대화처럼 남기지 않는다.
+  const chatKey = planId === "draft" ? draft?.draftId ?? null : planId;
+  useEffect(() => {
+    if (!chatKey) return;
+    if (chatOwner.current && chatOwner.current !== chatKey) resetConversation("상담할 계획이 바뀌어 새 대화를 시작했어요. 이전 계획의 대화는 지웠어요.");
+    chatOwner.current = chatKey;
+    // resetConversation 은 ref 와 setState 만 쓴다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatKey]);
   const recheckedOwner = useRef(""), recheckSeq = useRef(0), pendingCommand = useRef<string | null>(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -159,7 +170,20 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null), seq = useRef(0), retry = useRef<(() => void) | null>(null);
 
   function announce(text: string) { setToast(text); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 4500); }
-  function say(text: string, role: Message["role"] = "assistant") { const id = messageId.current++; setMessages(ms => [...ms, { id, role, text }]); }
+  function say(text: string, role: Message["role"] = "assistant", retry = false) { const id = messageId.current++; setMessages(ms => [...ms, { id, role, text, ...(retry ? { retry } : {}) }]); }
+  /** 상담을 처음부터: 화면 대화 · 서버로 보내는 요약 이력 · 진행 중 질문 · 주제 밖 횟수 · 추천 결과 · 진행 중 요청을 모두 끊는다. 계획 · 담은 정책은 그대로 */
+  function resetConversation(notice: string) {
+    chatEpoch.current++; planSeq.current++;
+    setPlanLoading(false); setRecommendation(null); setAiQuestion(null);
+    recommendSession.current = null; counselHistory.current = []; autoCalls.current = 0; outOfScope.current = 0;
+    pendingRecommend.current = false; pendingCommand.current = null; lastFailed.current = null;
+    setMessages([initialMessage, { id: messageId.current++, role: "assistant", text: notice }]);
+  }
+  function retryLastFailed() {
+    const again = lastFailed.current; lastFailed.current = null;
+    setMessages(ms => ms.map(m => m.retry ? { ...m, retry: false } : m));
+    again?.();
+  }
   function navigate(next: "select" | "roadmap") {
     const target: Screen = next === "select" ? "board" : "roadmap";
     setHash(target); window.location.hash = target;
@@ -301,7 +325,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   function openAiRecommendation() {
     if (recommend) { toggleRecommendation(false); return; }
     setAgentOpen(true);
-    if (!consentRef.current) { pendingRecommend.current = true; say("AI 추천 경로를 보려면 아래 ‘AI 상담 사용’에 먼저 동의해 주세요. 동의하면 바로 추천을 시작할게요."); return; }
+    if (!consentRef.current) { if (pendingRecommend.current) return; pendingRecommend.current = true; say("AI 추천 경로를 보려면 아래 ‘AI 상담 사용’에 먼저 동의해 주세요. 동의하면 바로 추천을 시작할게요."); return; }
     send(RECOMMEND_PROMPT);
   }
   function toggleRecommendation(force?: boolean) {
@@ -401,21 +425,25 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     const forRecommendation = action === "recommend" || (action === "followup" && continuingRecommendation);
     if (action === "recommend") { navigate("select"); toggleRecommendation(true); }
     if (action !== "followup") autoCalls.current = 0;
-    const id = ++planSeq.current; setPlanLoading(true); setLoadingAction(action);
+    const id = ++planSeq.current, epoch = chatEpoch.current; setPlanLoading(true); setLoadingAction(action); lastFailed.current = null;
     const result = await requestCounsel({ draft: current, action, message, history: counselHistory.current, consent: consentRef.current, outOfScopeStreak: outOfScope.current, recommendSession: action === "recommend" ? sessionPayload() : undefined });
-    if (id !== planSeq.current) return;
+    // 새 요청 · 새 대화 · 다른 초안으로 바뀐 뒤 늦게 온 응답은 버린다
+    if (id !== planSeq.current || epoch !== chatEpoch.current || draftRef.current?.draftId !== current.draftId) return;
     setPlanLoading(false);
-    // 이력에는 원문 대신 짧은 표시만(설계 7.1). 서버도 사용자 원문 이력은 버린다.
+    if (result.status === 403 && result.reason === "consent") { setConsent(false); say("AI 상담을 쓰려면 아래에서 ‘AI 상담 사용’에 동의해 주세요. 동의 전에는 조건 기준 질문과 추천만 보여 드려요."); return; }
+    // AI 답을 못 받은 경우: 이유와 재시도 여부를 먼저 말하고, 추천이면 ‘AI 추천이 아닌’ 조건 기준 경로로 대신한다.
+    const failed = counselFailure(result);
+    if (failed) {
+      if (failed.retryable) lastFailed.current = () => { void counsel(action, message, continuingRecommendation); };
+      say(failed.failure === "users_off" ? `${failed.text}
+조건 기준 질문과 추천, 일정 바꾸기(“취업을 2월 19일로 옮겨줘”), 기한 설명은 그대로 쓸 수 있어요.` : failed.text, "assistant", failed.retryable);
+      if (forRecommendation) showRuleRecommendation(current.evaluation, "AI 답을 받지 못해 조건 기준 경로를 표시해요. AI가 고른 추천이 아니에요.");
+      return;
+    }
+    // 이력에는 원문 대신 짧은 표시만(설계 7.1). 서버도 사용자 원문 이력은 버린다. 실패한 요청은 남기지 않아 재시도해도 겹치지 않는다.
     if (message) remember({ role: "user", text: "자유 질문" });
     if (result.notice && result.kind !== "plan" && result.kind !== "fallback") say(result.notice);
     if (result.kind === "out_of_scope") outOfScope.current++; else if (action === "message") outOfScope.current = 0;
-    if (result.status === 403) {
-      if (result.reason === "consent") { setConsent(false); say("AI 상담을 쓰려면 아래에서 ‘AI 상담 사용’에 동의해 주세요. 동의 전에는 조건 기준 질문과 추천만 보여 드려요."); return; }
-      // 운영 스위치가 꺼진 경우: 다시 동의를 요구하지 않고 조건 기준 추천으로 넘어간다.
-      if (forRecommendation) showRuleRecommendation(current.evaluation, "지금은 AI 상담이 꺼져 있어 조건 기준 경로를 표시해요");
-      say("지금은 AI 상담이 꺼져 있어요. 조건 기준 질문과 추천으로 안내해 드릴게요. 일정 바꾸기(“취업을 2월 19일로 옮겨줘”)와 기한 설명은 그대로 쓸 수 있어요.");
-      return;
-    }
     if (result.kind === "question" && result.target && result.text) { const session = recommendSession.current; setAiQuestion({ ...result, target: result.target, forRecommendation, ...(action === "recommend" && session ? { preparedAnswers: new Set([...session.asked, ...session.skippedKeys]) } : {}) }); remember({ role: "assistant", text: `질문: ${result.text}` }); return; }
     if (result.kind === "parsed" && result.target && result.value) { await answerAi(result.target, result.value, forRecommendation); return; }
     if (result.kind === "answer") { say(`${result.text}${result.citations?.length ? `\n근거: ${result.citations.map(c => c.label).join(" · ")}` : ""}${result.source === "ai" ? "\n(AI 정리)" : ""}`); remember({ role: "assistant", text: `답변: ${(result.text ?? "").slice(0, 120)}` }); return; }
@@ -436,6 +464,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   }
   async function answerAi(target: CounselTarget, value: string, forRecommendation = aiQuestion?.forRecommendation ?? false) {
     const current = draftRef.current; if (!current) return;
+    const epoch = chatEpoch.current;
     const inSession = aiQuestion?.target === target && !!aiQuestion.preparedAnswers && !!recommendSession.current;
     const valid = validateAnswer(target, value, current.evaluation.today);
     if (!valid.ok) {
@@ -444,6 +473,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     }
     const next = applyTarget(current.profileSnapshot, current.input, target, value);
     await commit({ ...current, profileSnapshot: next.profile, input: { ...next.input, revision: current.input.revision + 1 } }, undefined, "답을 반영해 다시 판정했어요", resolved => {
+      if (epoch !== chatEpoch.current) return; // 판정 중에 새 대화가 시작됐으면 이전 대화의 다음 걸음은 잇지 않는다
       setAiQuestion(null);
       remember({ role: "user", text: `답: ${target.kind === "benefit" ? target.answer : target.kind} = ${value}` });
       const confirm = scheduleNeedsConfirm(next.input); if (confirm) say(confirm);
@@ -570,7 +600,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   return <div className={`${s.app} ${agentOpen ? s.agentDrawer : ""}`}><div className={`${s.shell} ${tab === "account" ? s.noagent : ""}`}><Nav active={tab} />
     <main className={s.workspace} aria-busy={busy}>{tab === "saved" ? <><header className={s.pageHeader}><div><p className={s.eyebrow}>관심 정책</p><h1>별표한 정책을 모아 봐요</h1></div></header><Saved stars={stars} evaluation={evaluation} onToggle={toggleStar} onDetail={setDetail} onChoose={c => void choose(c)} busy={busy || readOnly} /></> : tab === "account" ? <><header className={s.pageHeader}><div><p className={s.eyebrow}>계정</p><h1>내 정보와 저장 위치</h1></div></header><div className={s.accountGrid}><section className={s.panel}><h2>계정 상태</h2><p>{me?.mode === "account" ? `${me.displayName} · 저장 방식 · 내 계정${me.durable ? "" : " (시연용 서버)"}` : "게스트 · 저장 방식 · 이 브라우저"}</p><p>저장한 계획 {plans.length}개</p><p>{draft.input.demoId ? "예시 프로필" : "내 프로필"}</p></section><section className={s.panel}><h2>내 정보</h2><p>{regionLabel(draft.profileSnapshot.sigungu)} · {draft.profileSnapshot.birthYm}</p><button className={s.primaryButton} onClick={() => { window.location.hash = "onboarding"; }}>내 정보 수정</button>{me?.mode === "account" ? <button className={s.textButton} onClick={() => void logout()}>로그아웃</button> : <a href="/login">로그인</a>}</section>{me?.mode === "account" && <AccountNotifications />}</div></> : <><header className={s.pageHeader}><div><p className={s.eyebrow}>나의 다음을 준비하는 공간</p><h1>{route === "select" ? "정책 선택하기" : "내 정책 로드맵"}</h1><p className={s.subtitle}>{evaluation.demo && <span className={s.demoBadge}>시연 인물</span>}{route === "select" ? "내 일정에 맞는 정책을 살펴보고, 나만의 계획에 담아보세요." : "내가 고른 정책을 하나의 시간 위에서 확인해 보세요."}</p><p className={s.emptyHint}>기준일 {evaluation.today} · 공고 데이터 기준 {evaluation.asOf}</p></div><div className={s.inlineActions}></div></header>
     {route === "roadmap" && <div className={s.roadmapHeader}><label className={s.srOnly} htmlFor="plan-picker">로드맵 계획 선택</label><select id="plan-picker" className={s.picker} value={planId} onChange={e => { setPlanId(e.target.value); activePlanId.current = e.target.value; setRechecked(null); setDetail(null); setError(null); retry.current = null; }}><option value="draft">편집 중인 내 계획</option>{plans.map(p => <option key={p.planId} value={p.planId}>{p.name}</option>)}{example && <option value="example">예시 계획</option>}</select>{route === "roadmap" && <button className={s.outlineButton} onClick={() => window.print()}>인쇄 · PDF</button>}{readOnly && selectedSaved && <><button className={s.outlineButton} disabled={busy} onClick={() => setCopyPlan(selectedSaved)}>복사해 편집</button><button className={s.textButton} disabled={busy} onClick={() => void reevaluate()}>오늘 기준으로 다시 보기</button></>}</div>}
-    {route === "roadmap" && <PlanCompare plans={plans} />}{readOnly && <div className={s.banner}><span>{rechecked ? `오늘 기준 재판정 · 저장 당시 ${selectedSaved?.savedEvaluation.today}` : `저장 당시 기준 ${fullDate(evaluation.today)}`} · {selectedSaved?.name}</span>{rechecked && <button className={s.outlineButton} onClick={() => setSaveDialog({ target: rechecked, recommendation: false })}>새 계획으로 저장</button>}</div>}
+    {route === "roadmap" && <PlanCompare plans={plans} onStart={() => navigate("select")} />}{readOnly && <div className={s.banner}><span>{rechecked ? `오늘 기준 재판정 · 저장 당시 ${selectedSaved?.savedEvaluation.today}` : `저장 당시 기준 ${fullDate(evaluation.today)}`} · {selectedSaved?.name}</span>{rechecked && <button className={s.outlineButton} onClick={() => setSaveDialog({ target: rechecked, recommendation: false })}>새 계획으로 저장</button>}</div>}
     <div className={s.profileChips} aria-label="이 계획의 프로필 조건">{[{ key: "residence", label: `${regionLabel(view.profileSnapshot.sigungu)} 거주` }, { key: "status", label: view.profileSnapshot.currentStatus.includes("in_training") ? "교육 수강 중" : view.profileSnapshot.currentStatus.includes("employed") ? "재직 중" : view.profileSnapshot.currentStatus.includes("unemployed") ? "구직 중" : "현재 상태 확인" }, { key: "participation", label: view.profileSnapshot.benefits?.length ? `수혜 내역 ${view.profileSnapshot.benefits.length}개` : view.profileSnapshot.participating.length ? `수혜 중 ${view.profileSnapshot.participating.length}개` : "수혜 내역" }, { key: "interest", label: `관심: ${view.input.preferredCategory === "all" ? "전체 분야" : CATEGORIES[view.input.preferredCategory].label}` }].map(chip => <button key={chip.key} disabled={readOnly || busy} className={`${s.profileChip} ${view.input.mutedKeys.includes(chip.key) ? s.mutedChip : s.activeChip}`} aria-pressed={!view.input.mutedKeys.includes(chip.key)} onClick={() => setChipMenu(chip.key)}><span className={s.chipMark} aria-hidden="true">{view.input.mutedKeys.includes(chip.key) ? "" : "✓"}</span>{chip.label}{view.input.mutedKeys.includes(chip.key) ? " · 꺼짐" : ""}</button>)}</div>
     {busy && <div className={s.banner} role="status">일정 반영 중… 직전 판정 결과를 표시합니다.</div>}{error && <div className={s.error} role="alert">{error}{retry.current && <button className={s.textButton} onClick={() => retry.current?.()}>다시 시도</button>}</div>}{storageNotice && <p className={s.warningText}>{storageNotice}</p>}
     {route !== "roadmap" && <Schedule evaluation={evaluation} events={(pending && !readOnly ? pending : view).input.events ?? []} onEdit={setEventDialog} onAdd={() => setEventDialog("new")} onUndo={undo} canUndo={history.length > 0} readOnly={readOnly} busy={busy} focusedStage={focusedStage} onFocus={focusStage} />}
@@ -582,6 +612,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     <p className={s.notice}>기준일 {fullDate(evaluation.today)} · 공고 데이터 기준 {evaluation.asOf} · 현재 공고와 입력한 예정일을 기준으로 계산한 결과입니다. 신청 전 공식 공고를 확인해 주세요.</p>
     </>}</main>{tab !== "account" && <Agent today={evaluation.today} recommendation={activeRecommendation} recommendationAt={recommendationAt} cards={evaluation.cards} planLoading={planLoading && !readOnly} loadingAction={loadingAction} aiQuestion={readOnly ? null : aiQuestion} onAiAnswer={value => { if (aiQuestion) void answerAi(aiQuestion.target, value); }} onAiSkip={() => { if (aiQuestion?.preparedAnswers) stopRecommendationQuestions(); else setAiQuestion(null); }} onAiLater={aiQuestion?.preparedAnswers ? laterRecommendationQuestion : undefined} onShowRecommendation={aiQuestion?.forRecommendation ? finishRecommendationWithCurrentAnswers : undefined}
       consentNeeded={!readOnly && !!draft && !consent} onConsent={() => { setConsent(true); say("AI 상담을 켰어요. 패널의 ‘AI 상담 끄기’로 언제든 끌 수 있어요."); if (pendingRecommend.current) { pendingRecommend.current = false; send(RECOMMEND_PROMPT); } }}
+      onRetry={retryLastFailed} onNewChat={() => resetConversation("새 대화를 시작했어요. 작성 중인 계획과 담은 정책은 그대로예요.")}
       consentOn={!readOnly && !!draft && consent} onConsentOff={() => { setConsent(false); setAiQuestion(null); counselHistory.current = []; say("AI 상담을 껐어요. 조건 기준 질문과 추천만 보여 드려요."); }}
       questions={readOnly ? [] : evaluation.questions} onAnswer={(question, answer) => {
       const profile = draft.profileSnapshot;
