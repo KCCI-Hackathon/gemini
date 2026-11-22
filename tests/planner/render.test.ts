@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { Building, canLeaveBuilding, MIN_BUILD_MS } from "@/app/workspace/Building";
 import { ProfileForm } from "@/app/workspace/Dialogs";
-import { demoStart, OnboardingScreen, personaProfile, SignupScreen, startInput, submitSignup } from "@/app/workspace/Entry";
+import { demoStart, OnboardingScreen, PlanningScreen, personaProfile, SignupScreen, startInput, submitSignup } from "@/app/workspace/Entry";
 import { Nav, resolveScreen, screenOf } from "@/app/workspace/Nav";
 import { ACCOUNT_NOTE } from "@/app/login/LoginForm";
 import { PERSONA_A } from "@/lib/judge/personas";
@@ -133,7 +133,9 @@ test("onboarding notice matches actual ai use", () => {
   const screen = renderToStaticMarkup(React.createElement(OnboardingScreen, { onSave: () => {}, onBack: () => {} }));
   expect(screen).not.toContain("외부 AI에는 보내지 않아요");
   expect(screen).toContain("AI 상담에 동의한 경우에만");
-  expect(screen).toContain("정책 보드 열기");
+  // 내 정보 다음은 계획 단계이고, 정책 보드는 계획 단계에서 연다
+  expect(screen).toContain("다음 · 계획 입력");
+  expect(renderToStaticMarkup(React.createElement(PlanningScreen, { today: "2026-11-23", onSave: () => {}, onBack: () => {} }))).toContain("정책 보드 열기");
 });
 test("nav shows four tabs", () => {
   const html = renderToStaticMarkup(React.createElement(Nav, { active: "saved" }));
