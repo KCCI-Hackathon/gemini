@@ -8,7 +8,7 @@ import { PERSONA_A } from "@/lib/judge/personas";
 import { PERSONA_DEMO_EVENTS } from "@/lib/planner/fixtures";
 import { findNamedCards, parseScheduleTurn, pickExplainTarget } from "@/lib/planner/commands";
 import { acceptRevision, applySavedRecheck, changeEvents, createDraft, newId, preserveMissingChoices, savedSnapshot, undoEvents, withChoices } from "@/lib/planner/state";
-import { createPlanRepository, DRAFT_KEY, isSavedPlan, readLegacyPolicies, readLegacySitePlans } from "@/lib/planner/storage";
+import { createPlanRepository, DRAFT_KEY, parseDraft, readLegacyPolicies, readLegacySitePlans } from "@/lib/planner/storage";
 import { CATEGORIES, EVENT_NAMES, type Card, type Category, type Choice, type Draft, type Evaluation, type PlanEvent, type PlannerInput, type SavedPlan } from "@/lib/planner/types";
 import { requestAiRecommendation } from "@/lib/planner/plan-request";
 import type { AiRecommendation } from "@/lib/planner/types";
@@ -103,8 +103,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
       if (raw) {
-        const restored = JSON.parse(raw) as Draft;
-        if (!isSavedPlan({ planId: restored.draftId, schemaVersion: 2, name: "복원", createdAt: "", profileSnapshot: restored.profileSnapshot, input: restored.input, savedEvaluation: restored.evaluation })) throw new Error("invalid draft");
+        const restored = parseDraft(raw);
+        if (!restored) throw new Error("invalid draft");
         setDraft(restored); confirmedRef.current = restored; draftRef.current = restored; setBusy(true);
         const requestId = ++seq.current;
         fetchEvaluation(restored.profileSnapshot, restored.input).then(evaluation => { if (alive && seq.current === requestId) { const next = { ...restored, evaluation: preserveMissingChoices(restored.evaluation, evaluation, restored.input.choices) }; setDraft(next); confirmedRef.current = next; draftRef.current = next; } }).catch(() => { if (alive) setError("초안을 복원했지만 최신 판정에 실패했어요. 일정이나 프로필을 다시 반영해 주세요."); }).finally(() => { if (alive && seq.current === requestId) setBusy(false); });
@@ -123,7 +123,10 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       fetchEvaluation(current.profileSnapshot, current.input).then(evaluation => { if (alive && seq.current === id) { const next = { ...current, evaluation }; setDraft(next); confirmedRef.current = next; draftRef.current = next; } }).catch(() => setError("오늘 기준 판정에 실패했어요. 직전 결과를 표시합니다.")).finally(() => { if (alive && seq.current === id) setBusy(false); });
     };
     window.addEventListener("storage", storageListener); document.addEventListener("visibilitychange", visibility);
-    return () => { alive = false; planSeq.current++; window.removeEventListener("popstate", popRoute); window.removeEventListener("storage", storageListener); document.removeEventListener("visibilitychange", visibility); if (toastTimer.current) clearTimeout(toastTimer.current); };
+    // 화면을 떠나면 진행 중인 추천 요청을 무효로 만든다(늦게 온 응답이 상태를 바꾸지 않게).
+    // 숫자를 복사하면 무효화가 사라지므로 ref 객체 자체를 잡아 둔다.
+    const recommendationSeq = planSeq;
+    return () => { alive = false; recommendationSeq.current++; window.removeEventListener("popstate", popRoute); window.removeEventListener("storage", storageListener); document.removeEventListener("visibilitychange", visibility); if (toastTimer.current) clearTimeout(toastTimer.current); };
   }, []);
   useEffect(() => { if (!draft) return; try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { setStorageNotice("임시 초안을 저장하지 못했어요. 새로고침 전에 계획 저장을 시도해 주세요."); } }, [draft]);
   // Each sentinel loads only its own column; the full server result still owns counts/recommendations.
