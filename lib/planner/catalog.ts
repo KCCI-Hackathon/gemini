@@ -2,6 +2,7 @@ import { addMonths, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
 import { loadDeadLinks } from "@/lib/data/dead-links";
+import { policyLinks } from "./policy-links";
 import { hasOverlapIssue, loadOverlap, loadOverlapNotices } from "@/lib/data/overlap";
 import { blocksParticipation, evaluateRules, type Benefit } from "@/lib/judge/overlap";
 import { judgePolicy, type Profile } from "@/lib/judge";
@@ -83,6 +84,7 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
       official: officialPeriod(v?.apply.type === "always" || (!v && p.applyPeriodType === "always"), round ? round.notice.applyStart : v ? v.apply.start : p.applyStart, round ? round.notice.applyEnd : v ? v.apply.end : p.applyEnd, v?.apply.endTime ?? null),
       rules: [], regions: p.zipCodes, restrictions: (v?.confirmedRelations ?? []).flatMap(r => r.otherId ? [{ otherId: r.otherId, reviewed: true, action: "benefit" as const, direction: "both" as const, period: null, otherPeriod: null, evidenceId: `restriction:${p.id}:${r.otherId}` }] : []), overlapAssessment,
       reviewed: !!round && round.status === "approved" && round.conditions.every(c => !!c.supportsConfirmed), dataVersion: snapshot.asOf,
+      links: policyLinks(p, v, round),
       evidence: [...(round?.conditions.map((c, i) => ({ evidenceId: `${round.id}:${i}`, title: round.notice.title, quote: c.quote.text, url: c.quote.url ?? round.notice.url, reviewedAt: c.supportsConfirmed?.at ?? round.notice.checkedAt, reviewed: !!c.supportsConfirmed })) ?? v?.statusConditions.quotes.map((q, i) => ({ evidenceId: `${p.id}:${i}`, title: v.name, quote: q.text, url: q.url ?? v.sources[0].url, reviewedAt: v.sources[0].checkedAt, reviewed: false })) ?? []), ...(v?.confirmedRelations.flatMap(r => r.otherId ? [{ evidenceId: `restriction:${p.id}:${r.otherId}`, title: `중복 수혜 제한 · ${r.otherName}`, quote: r.quote.text, url: r.quote.url ?? v.sources[0].url, reviewedAt: v.sources[0].checkedAt, reviewed: true }] : []) ?? [])],
     }; });
   });

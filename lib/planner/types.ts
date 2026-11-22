@@ -23,11 +23,15 @@ export type OfficialPeriod = { kind: "fixed" | "rolling" | "budget" | "unknown";
 export type Evidence = { evidenceId: string; title: string; quote: string; url: string | null; reviewedAt: string; reviewed: boolean; overlapReview?: { source: "agent" | "research"; verdict: "supported" | "contradicted" | "insufficient" | null; judgement: "blocked" | "needs_check"; model: string | null; reason: string | null } };
 export type Rule = { key: "trained" | "unemployed" | "employed" | "in_training" | "business_registered"; kind: "requires" | "excludes"; evidenceId: string; reviewed: boolean };
 export type Restriction = { otherId: string; reviewed: boolean; action: "application" | "benefit"; direction: "both" | "outgoing"; period: Period | null; otherPeriod: Period | null; evidenceId: string };
+/** 정책 상세의 바깥 링크. notice = 이 회차 공고, official = 검증 데이터의 공식 출처, apply/ref = 온통청년 API 등록 링크(공식 검증 전) */
+export type PolicyLink = { url: string; kind: "notice" | "official" | "apply" | "ref"; checked: boolean; checkedAt: string | null };
 export type Offering = {
   policyId: string; offeringId: string; roundLabel: string; roundId?: string | null; title: string; category: Category;
   summary: string; support: string; org: string; official: OfficialPeriod; rules: Rule[]; evidence: Evidence[];
   verifyLabel?: string | null; regions?: string[]; restrictions: Restriction[]; reviewed: boolean; dataVersion: string;
   overlapAssessment?: "no_restriction_found" | "reviewed_rules" | "unresolved";
+  /** 예전에 저장한 계획의 카드에는 없다 */
+  links?: PolicyLink[];
 };
 export type Reason = { code: string; message: string; evidenceId?: string; eventId?: string; relatedOfferingId?: string };
 export type Card = Offering & {
