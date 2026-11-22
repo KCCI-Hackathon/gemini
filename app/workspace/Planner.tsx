@@ -10,6 +10,8 @@ import { findNamedCards, parseScheduleTurn } from "@/lib/planner/commands";
 import { acceptRevision, applySavedRecheck, changeEvents, createDraft, newId, preserveMissingChoices, savedSnapshot, undoEvents, withChoices } from "@/lib/planner/state";
 import { createPlanRepository, DRAFT_KEY, isSavedPlan, readLegacyPolicies, readLegacySitePlans } from "@/lib/planner/storage";
 import { CATEGORIES, EVENT_NAMES, type Card, type Category, type Choice, type Draft, type Evaluation, type PlanEvent, type PlannerInput, type SavedPlan } from "@/lib/planner/types";
+import { requestAiRecommendation } from "@/lib/planner/plan-request";
+import type { AiRecommendation } from "@/lib/planner/types";
 import { applyAnswer } from "@/lib/planner/answers";
 import { Agent, type Message } from "./Agent";
 import { DetailDialog, EventDialog, ProfileForm, SaveDialog } from "./Dialogs";
@@ -30,10 +32,30 @@ async function fetchEvaluation(profile: Profile, input: PlannerInput): Promise<E
 }
 const initialMessage: Message = { id: 0, role: "assistant", text: "안녕하세요! 함께 다음 갈림길을 준비해 봐요.\n\n일정을 바꾸면 신청할 수 있는 정책과 내 기한을 다시 확인해 드릴게요. 마음에 드는 정책은 카드의 ‘담기’를 눌러 주세요." };
 type Filter = { category: Category | "all"; unavailable: boolean };
-type PendingSave = { target: Draft; recommendation: boolean };
+type PendingSave = { target: Draft; recommendation: boolean; source?: AiRecommendation["source"] };
 const cardKey = (c: Choice) => `${c.stageId}|${c.offeringId}`;
 
 export default function Planner() {
+  const [session, setSession] = useState(0);
+  return <PlannerSession key={session} onRestart={() => setSession(value => value + 1)} />;
+}
+
+function PlannerSession({ onRestart }: { onRestart: () => void }) {
+  const [recommendation, setRecommendation] = useState<AiRecommendation | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const planSeq = useRef(0);
+  function clearRecommendation() {
+    planSeq.current++;
+    setRecommendation(null);
+    setPlanLoading(false);
+  }
+  function restart() {
+    try { sessionStorage.removeItem(DRAFT_KEY); }
+    catch { setStorageNotice("임시 초안을 지우지 못했어요."); return; }
+    clearRecommendation();
+    seq.current++;
+    onRestart();
+  }
   const [draft, setDraft] = useState<Draft | null>(null), [pending, setPending] = useState<Draft | null>(null);
   const draftRef = useRef<Draft | null>(null), confirmedRef = useRef<Draft | null>(null);
   const [history, setHistory] = useState<PlanEvent[][]>([]), historyRef = useRef<PlanEvent[][]>([]);
@@ -96,11 +118,12 @@ export default function Planner() {
     const visibility = () => {
       const current = confirmedRef.current;
       if (document.visibilityState !== "visible" || !current || toKstDate(new Date()) === current.evaluation.today) return;
+      clearRecommendation();
       const id = ++seq.current; setBusy(true);
       fetchEvaluation(current.profileSnapshot, current.input).then(evaluation => { if (alive && seq.current === id) { const next = { ...current, evaluation }; setDraft(next); confirmedRef.current = next; draftRef.current = next; } }).catch(() => setError("오늘 기준 판정에 실패했어요. 직전 결과를 표시합니다.")).finally(() => { if (alive && seq.current === id) setBusy(false); });
     };
     window.addEventListener("storage", storageListener); document.addEventListener("visibilitychange", visibility);
-    return () => { alive = false; window.removeEventListener("popstate", popRoute); window.removeEventListener("storage", storageListener); document.removeEventListener("visibilitychange", visibility); if (toastTimer.current) clearTimeout(toastTimer.current); };
+    return () => { alive = false; planSeq.current++; window.removeEventListener("popstate", popRoute); window.removeEventListener("storage", storageListener); document.removeEventListener("visibilitychange", visibility); if (toastTimer.current) clearTimeout(toastTimer.current); };
   }, []);
   useEffect(() => { if (!draft) return; try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { setStorageNotice("임시 초안을 저장하지 못했어요. 새로고침 전에 계획 저장을 시도해 주세요."); } }, [draft]);
   // Each sentinel loads only its own column; the full server result still owns counts/recommendations.
@@ -113,6 +136,7 @@ export default function Planner() {
 
   async function commit(next: Draft, nextHistory: PlanEvent[][] = historyRef.current, success?: string): Promise<Draft | null> {
     const requestId = ++seq.current;
+    clearRecommendation();
     draftRef.current = next; setPending(next); setBusy(true); setError(null); retry.current = null;
     try {
       const evaluation = await fetchEvaluation(next.profileSnapshot, next.input);
@@ -160,7 +184,7 @@ export default function Planner() {
     if (!draft || busy) return;
     if (!recommendation) { setSaveDialog({ target: structuredClone(draft), recommendation: false }); return; }
     setBusy(true); retry.current = null; setError(null);
-    try { const input = { ...draft.input, choices: draft.evaluation.recommendations }; const evaluation = await fetchEvaluation(draft.profileSnapshot, input); setSaveDialog({ target: { ...draft, input, evaluation }, recommendation: true }); }
+    try { const input = { ...draft.input, choices: picks.map(({ offeringId, stageId }) => ({ offeringId, stageId })) }; const evaluation = await fetchEvaluation(draft.profileSnapshot, input); setSaveDialog({ target: { ...draft, input, evaluation }, recommendation: true, source: recommendationSource }); }
     catch (err) { setError(err instanceof Error ? err.message : "추천 경로를 확인하지 못했어요."); } finally { setBusy(false); }
   }
   async function choose(card: Card) {
@@ -199,7 +223,27 @@ export default function Planner() {
     const turn = parseScheduleTurn(text, current.input.events ?? [], pendingCommand.current);
     const command = turn.command; pendingCommand.current = turn.pending;
     if (command.type === "clarify") { say(command.message); return; }
-    if (command.type === "recommend") { navigate("select"); toggleRecommendation(true); say("조건 기준 추천 경로를 위쪽에 표시했어요. 직접 담은 계획과 별개로 비교하고 새 계획으로 저장할 수 있어요. 외부 AI는 사용하지 않았어요."); return; }
+    if (command.type === "recommend") {
+      if (readOnly) {
+        say("이 계획의 추천 경로를 보려면 ‘복사해 편집’을 눌러 주세요.");
+        return;
+      }
+      if (!draft) return;
+      navigate("select");
+      toggleRecommendation(true);
+      const id = ++planSeq.current;
+      setPlanLoading(true);
+      void requestAiRecommendation({
+        profile: draft.profileSnapshot, events: draft.input.events ?? [], evaluation: draft.evaluation,
+        seq: id, currentSeq: () => planSeq.current,
+      }).then(result => {
+        if (result && id === planSeq.current) {
+          setRecommendation(result);
+          setPlanLoading(false);
+        }
+      });
+      return;
+    }
     const named = findNamedCards(text, current.evaluation, current.input.choices);
     const target = named[0] ?? (detail ? current.evaluation.cards.find(c => cardKey(c) === cardKey(detail)) : current.evaluation.cards.find(c => c.offeringId === current.input.choices[0]?.offeringId && c.stageId === current.input.choices[0]?.stageId) ?? current.evaluation.cards.find(c => c.deadlineKind === "personal_estimate"));
     if (command.type === "locate_card") {
@@ -230,21 +274,25 @@ export default function Planner() {
   const checkedView = rechecked && applySavedRecheck(planId, { planId: recheckedOwner.current, evaluation: rechecked.evaluation }) ? rechecked : null;
   const view: Draft | null = readOnly && selectedSaved ? checkedView ?? { draftId: selectedSaved.planId, profileSnapshot: selectedSaved.profileSnapshot, input: selectedSaved.input, evaluation: selectedSaved.savedEvaluation } : draft;
   const evaluation = view?.evaluation;
+  const activeRecommendation = readOnly ? null : recommendation;
+  const recommendationSource = activeRecommendation?.source ?? "rule";
+  const recommendationLabel = recommendationSource === "ai" ? "AI 추천" : "조건 기준 추천";
+  const picks = activeRecommendation?.picks ?? evaluation?.recommendations ?? [];
   const detailCard = detail && evaluation?.cards.find(c => cardKey(c) === cardKey(detail));
   const compareCard = compare && draft?.evaluation.cards.find(c => cardKey(c) === cardKey(compare));
   const stageLabel = (id: string) => evaluation?.stages.find(st => st.stageId === id)?.label ?? "시점 다시 선택";
   const visibleCards = (stageId: string) => evaluation?.cards.filter(c => c.stageId === stageId && (filter.category === "all" || c.category === filter.category) && (filter.unavailable ? c.availability === "blocked" : c.availability !== "blocked" || c.conflicts.length > 0 || c.reasons.some(r => r.code === "PARTICIPATION_CONFLICT") || c.selectedStageId === c.stageId)) ?? [];
-  function renderCard(card: Card, surface = "board") { return <PolicyCard key={cardKey(card)} card={card} today={evaluation!.today} recommended={recommend && !!evaluation?.recommendations.some(c => cardKey(c) === cardKey(card))} onDetail={setDetail} onChoose={c => void choose(c)} disabled={busy || readOnly} surface={surface} />; }
+  function renderCard(card: Card, surface = "board") { return <PolicyCard key={cardKey(card)} card={card} today={evaluation!.today} recommended={recommend && picks.some(c => cardKey(c) === cardKey(card))} onDetail={setDetail} onChoose={c => void choose(c)} disabled={busy || readOnly} surface={surface} />; }
   function navIcon(type: "select" | "roadmap" | "account") { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">{type === "select" ? <><rect x="3" y="4" width="7" height="16" rx="2" /><rect x="14" y="4" width="7" height="10" rx="2" /></> : type === "roadmap" ? <><path d="M4 5v15h16M9 7h10M9 12h6M9 17h9" /><circle cx="7" cy="7" r="1" /></> : <><circle cx="12" cy="8" r="4" /><path d="M4 22v-3a8 8 0 0 1 16 0v3" /></>}</svg>; }
   const showDialogs = (): ReactNode => <>
-    {account && <Modal title="내 계정과 저장 공간" onClose={() => setAccount(false)}><p><strong>{draft?.input.demoId ? "시연 인물" : "게스트"}</strong> · 이 브라우저에 저장</p><p className={s.emptyHint}>계획은 현재 기기의 이 브라우저에서만 열 수 있어요. 다른 기기나 계정으로 자동 동기화되지 않아요.</p>{storageNotice && <p className={s.warningText}>{storageNotice}</p>}<ul className={s.saveItems}>{plans.map(p => <li key={p.planId}><button className={s.textButton} onClick={() => { if (!draft) { const seed = createDraft(p.profileSnapshot, p.input, p.savedEvaluation); setDraft(seed); draftRef.current = seed; confirmedRef.current = seed; } setPlanId(p.planId); setRechecked(null); navigate("roadmap"); setAccount(false); }}>{p.name} · {p.input.choices.length}개<small>{new Date(p.createdAt).toLocaleString("ko-KR")}</small></button></li>)}</ul>{!plans.length && <p className={s.emptyHint}>저장한 계획이 없어요.</p>}{legacySitePlans.length > 0 && <div className={s.checkNote}><strong>이전 버전에서 저장한 계획</strong>{legacySitePlans.map(p => <p key={p.sourceId}>{p.name} · 회차·시점 다시 선택</p>)}<p>원본은 보존했어요. 현재 보드에서 정책과 시점을 골라 새 계획으로 저장해 주세요.</p></div>}{legacyIds.length > 0 && <div className={s.checkNote}><strong>이전에 담은 정책 {legacyIds.length}개</strong><p>예전 목록에는 회차와 시점이 없어 자동으로 옮기지 않았어요. 보드에서 다시 골라 주세요.</p>{legacyIds.map(id => <p key={id}>{draft?.evaluation.cards.find(c => c.policyId === id)?.title ?? id} · 회차·시점 재선택</p>)}</div>}<div className={s.dialogActions}>{draft && <button className={s.primaryButton} onClick={() => { setAccount(false); setEditProfile(true); }}>내 정보 편집</button>}<button className={s.outlineButton} onClick={() => setAccount(false)}>닫기</button></div></Modal>}
+    {account && <Modal title="내 계정과 저장 공간" onClose={() => setAccount(false)}><p><strong>{draft?.input.demoId ? "시연 인물" : "게스트"}</strong> · 이 브라우저에 저장</p><p className={s.emptyHint}>계획은 현재 기기의 이 브라우저에서만 열 수 있어요. 다른 기기나 계정으로 자동 동기화되지 않아요.</p>{storageNotice && <p className={s.warningText}>{storageNotice}</p>}<ul className={s.saveItems}>{plans.map(p => <li key={p.planId}><button className={s.textButton} onClick={() => { if (!draft) { const seed = createDraft(p.profileSnapshot, p.input, p.savedEvaluation); setDraft(seed); draftRef.current = seed; confirmedRef.current = seed; } setPlanId(p.planId); setRechecked(null); navigate("roadmap"); setAccount(false); }}>{p.name} · {p.input.choices.length}개<small>{new Date(p.createdAt).toLocaleString("ko-KR")}</small></button></li>)}</ul>{!plans.length && <p className={s.emptyHint}>저장한 계획이 없어요.</p>}{legacySitePlans.length > 0 && <div className={s.checkNote}><strong>이전 버전에서 저장한 계획</strong>{legacySitePlans.map(p => <p key={p.sourceId}>{p.name} · 회차·시점 다시 선택</p>)}<p>원본은 보존했어요. 현재 보드에서 정책과 시점을 골라 새 계획으로 저장해 주세요.</p></div>}{legacyIds.length > 0 && <div className={s.checkNote}><strong>이전에 담은 정책 {legacyIds.length}개</strong><p>예전 목록에는 회차와 시점이 없어 자동으로 옮기지 않았어요. 보드에서 다시 골라 주세요.</p>{legacyIds.map(id => <p key={id}>{draft?.evaluation.cards.find(c => c.policyId === id)?.title ?? id} · 회차·시점 재선택</p>)}</div>}<div className={s.dialogActions}>{draft && <button className={s.primaryButton} onClick={() => { setAccount(false); setEditProfile(true); }}>내 정보 편집</button>}{draft && <button className={s.outlineButton} disabled={busy} onClick={restart}>처음으로</button>}<button className={s.outlineButton} onClick={() => setAccount(false)}>닫기</button></div></Modal>}
     {editProfile && draft && <Modal title="내 정보 편집" onClose={() => setEditProfile(false)}><ProfileForm mutedKeys={draft.input.mutedKeys} initial={draft.profileSnapshot} submitLabel="현재 초안에 반영" onSave={(profile, unknownKeys) => { void mutate({ mutedKeys: [...new Set([...draft.input.mutedKeys.filter(k => !["status", "participation"].includes(k)), ...unknownKeys])] }, profile); setEditProfile(false); }} /></Modal>}
     {chipMenu && draft && <Modal title="이 계획의 조건" onClose={() => setChipMenu(null)}><p>조건을 끄면 해당 판단은 ‘확인 필요’로 남고 추천에서 제외될 수 있어요.</p>{chipMenu === "interest" && <label className={s.form}>관심 분야<select className={s.picker} value={draft.input.preferredCategory} onChange={e => { void mutate({ preferredCategory: e.target.value as Category | "all" }); setChipMenu(null); }}><option value="all">전체 분야</option>{Object.entries(CATEGORIES).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}</select></label>}<div className={s.dialogActions}><button className={s.outlineButton} onClick={() => { void mutate({ mutedKeys: draft.input.mutedKeys.includes(chipMenu) ? draft.input.mutedKeys.filter(k => k !== chipMenu) : [...draft.input.mutedKeys, chipMenu] }); setChipMenu(null); }}>{draft.input.mutedKeys.includes(chipMenu) ? "다시 켜기" : "이 계획에서 잠시 끄기"}</button><button className={s.primaryButton} onClick={() => { setChipMenu(null); setEditProfile(true); }}>수정하기</button></div></Modal>}
     {eventDialog && draft && <EventDialog event={eventDialog === "new" ? null : eventDialog} events={draft.input.events ?? []} today={draft.evaluation.today} onClose={() => setEventDialog(null)} onApply={events => void updateEvents(events)} />}
     {gridStage && evaluation && <Modal title={`${stageLabel(gridStage)} · 정책 ${visibleCards(gridStage).length}개 전체 보기`} wide onClose={() => setGridStage(null)}><p className={s.emptyHint}>보드와 같은 필터·기한 순서로 보여드려요.</p><div className={s.dialogGrid}>{visibleCards(gridStage).map(c => renderCard(c, "grid"))}</div>{visibleCards(gridStage).length === 0 && <p className={s.emptyState}>현재 필터에 해당하는 정책이 없어요.</p>}</Modal>}
     {detailCard && evaluation && <DetailDialog card={detailCard} today={evaluation.today} stageLabel={stageLabel(detailCard.stageId)} busy={busy} readOnly={readOnly} onClose={() => setDetail(null)} onChoose={c => void choose(c)} />}
     {compareCard && draft && <Modal title={compareCard.conflicts.length ? "정책 비교·교체" : "담은 시점 변경"} onClose={() => setCompare(null)}><p className={s.emptyHint}>확인하기 전에는 현재 초안이 바뀌지 않아요.</p><div className={s.compareGrid}><div className={s.compareItem}><h3>현재 내 계획</h3>{draft.input.choices.filter(c => compareCard.conflicts.includes(c.offeringId) || c.offeringId === compareCard.offeringId).map(c => { const item = draft.evaluation.cards.find(p => cardKey(p) === cardKey(c)); return <div key={c.offeringId}><strong>{item?.title ?? c.offeringId}</strong><p>{item?.support}</p><p>{item && deadlineText(item, draft.evaluation.today)}</p><p>{stageLabel(c.stageId)} · 공고 마감 {dateLabel(item?.official.end ?? null)}</p></div>; })}</div><div className={s.compareItem}><h3>새로 담을 정책</h3><strong>{compareCard.title}</strong><p>{compareCard.support}</p><p>{deadlineText(compareCard, draft.evaluation.today)}</p><p>{stageLabel(compareCard.stageId)} · 공고 마감 {dateLabel(compareCard.official.end)}</p></div></div>{compareCard.reasons.map((r, i) => <p key={i} className={s.warningText}>{r.message}</p>)}{compareCard.evidence.filter(e => compareCard.reasons.some(r => r.evidenceId === e.evidenceId)).map(e => <blockquote key={e.evidenceId} className={s.evidence}>{e.quote}</blockquote>)}<div className={s.dialogActions}><button className={s.outlineButton} onClick={() => setCompare(null)}>취소</button><button className={s.primaryButton} disabled={busy || (compareCard.availability === "blocked" && !compareCard.canReplace)} onClick={() => { const next = draft.input.choices.filter(c => c.offeringId !== compareCard.offeringId && !compareCard.conflicts.includes(c.offeringId)); void mutate({ choices: [...next, { offeringId: compareCard.offeringId, stageId: compareCard.stageId }] }); setCompare(null); }}>{compareCard.conflicts.length ? "기존 정책 대신 이 정책 담기" : "이 시점으로 옮기기"}</button></div></Modal>}
-    {saveDialog && draft && <SaveDialog target={saveDialog.target} manual={draft} recommendation={saveDialog.recommendation} onClose={() => setSaveDialog(null)} onSave={name => { const plan = savedSnapshot(saveDialog.target, name, saveDialog.recommendation ? "recommendation" : "manual"); createPlanRepository(localStorage).createPlan(plan); loadPlans(); setSaveDialog(null); announce(`‘${plan.name}’을 이 브라우저에 저장했어요.`); }} />}
+    {saveDialog && draft && <SaveDialog target={saveDialog.target} manual={draft} recommendation={saveDialog.recommendation} onClose={() => setSaveDialog(null)} onSave={name => { const plan = savedSnapshot(saveDialog.target, name, saveDialog.recommendation ? "recommendation" : "manual"); if (saveDialog.source) plan.recommendationSource = saveDialog.source; createPlanRepository(localStorage).createPlan(plan); loadPlans(); setSaveDialog(null); announce(`‘${plan.name}’을 이 브라우저에 저장했어요.`); }} />}
     {copyPlan && <Modal title="새 복사본으로 편집할까요?" onClose={() => setCopyPlan(null)}><p>현재 초안에 저장하지 않은 변경이 있을 수 있어요. 복사본을 열면 현재 초안 자리를 새 복사본으로 바꿉니다. 저장된 원본은 유지돼요.</p><div className={s.dialogActions}><button className={s.outlineButton} onClick={() => setCopyPlan(null)}>현재 초안 계속</button><button className={s.primaryButton} disabled={busy} onClick={() => void openCopy(copyPlan)}>복사본 열기</button></div></Modal>}
   </>;
 
@@ -259,10 +307,10 @@ export default function Planner() {
     <Schedule evaluation={evaluation} events={(pending && !readOnly ? pending : view).input.events ?? []} onEdit={setEventDialog} onAdd={() => setEventDialog("new")} onUndo={undo} canUndo={history.length > 0} readOnly={readOnly} busy={busy} focusedStage={focusedStage} onFocus={focusStage} />
     <section className={s.draftSummary} aria-label="내 계획"><div className={s.sectionHeader}><h2>내 계획 <span>{view.input.choices.length}</span></h2>{!readOnly && <button className={s.primaryButton} disabled={busy || !view.input.choices.length} onClick={() => void previewSave(false)}>계획 저장</button>}</div>{view.input.choices.length === 0 ? <p className={s.emptyHint}>카드에서 담기를 눌러 시작하세요. 내 계획이 비어 있어도 모든 정책을 둘러볼 수 있어요.</p> : <div className={s.choiceList}>{view.input.choices.map(choice => { const card = evaluation.cards.find(c => cardKey(c) === cardKey(choice)); const warning = evaluation.choiceWarnings.find(w => w.offeringId === choice.offeringId); return <div key={choice.offeringId} className={`${s.choiceChip} ${warning ? s.choiceWarning : ""}`}><div><button className={s.textButton} onClick={() => card ? setDetail(choice) : announce("저장한 회차나 시점을 찾을 수 없어요. 다시 선택해 주세요.")}>{card?.title ?? warning?.title ?? choice.offeringId}</button><small>{stageLabel(choice.stageId)}{card?.personalWindow?.end ? ` · ${dateLabel(card.personalWindow.end)}` : ""}</small>{warning && <p className={s.warningText}>{warning.message}</p>}</div>{!readOnly && <button className={s.iconButton} disabled={busy} aria-label={`${card?.title ?? choice.offeringId} 내 계획에서 빼기`} onClick={() => void mutate({ choices: draft.input.choices.filter(c => c.offeringId !== choice.offeringId) })}>×</button>}</div>; })}</div>}{evaluation.choiceWarnings.length > 0 && <p className={s.warningText}>확인할 정책 {evaluation.choiceWarnings.length}개 · 선택한 정책은 자동으로 삭제하지 않아요.</p>}</section>
     {route === "select" ? <><div className={s.toolbar}><div className={s.categoryFilters} role="group" aria-label="분야 필터">{(["all", ...Object.keys(CATEGORIES)] as (Category | "all")[]).map(cat => <button key={cat} className={`${s.filter} ${filter.category === cat ? s.filterActive : ""}`} aria-pressed={filter.category === cat} onClick={() => setFilter({ ...filter, category: cat })}>{cat === "all" ? "전체" : CATEGORIES[cat].label}</button>)}</div><div className={s.inlineActions}><label className={s.toggle}><input type="checkbox" checked={filter.unavailable} onChange={e => setFilter({ ...filter, unavailable: e.target.checked })} />신청 불가 모아보기</label><button className={recommend ? s.primaryButton : s.outlineButton} aria-pressed={recommend} onClick={() => toggleRecommendation()}>✦ {recommend ? "추천 경로 닫기" : "AI 추천 경로 보기"}</button></div></div>
-    {recommend && <section ref={recommendRef} className={s.recommendSummary} aria-label="조건 기준 추천 경로"><div className={s.sectionHeader}><button className={s.textButton} aria-expanded={recommendExpanded} onClick={() => setRecommendExpanded(v => !v)}><strong>조건 기준 추천 · {evaluation.recommendations.length}개</strong> {recommendExpanded ? "접기" : "경로 보기"}</button><button className={s.primaryButton} disabled={busy || !evaluation.recommendations.length} onClick={() => void previewSave(true)}>새 계획으로 저장</button></div><p className={s.emptyHint}>현재 조건으로 확인한 별도 경로예요. 외부 AI를 사용하지 않았어요.</p>{recommendExpanded && <div className={s.recommendLinks}>{evaluation.recommendations.map(choice => { const card = evaluation.cards.find(c => cardKey(c) === cardKey(choice)); if (!card) return null; const hidden = filter.unavailable || (filter.category !== "all" && filter.category !== card.category); return <button key={cardKey(choice)} className={s.recommendLink} onClick={() => { if (hidden) { setDetail(choice); announce("현재 필터에서 숨김 상태예요. 상세에서 확인하거나 전체 분야로 바꿔 주세요."); } else locate(choice); }}>{card.title}<small>{stageLabel(choice.stageId)} · {hidden ? "현재 필터에서 숨김" : card.conflicts.length ? "별도 계획에서 가능" : deadlineText(card, evaluation.today)}</small></button>; })}{!evaluation.recommendations.length && <p>현재 확인된 조건으로 추천할 수 있는 정책이 없어요. 확인 필요 정책은 직접 살펴보고 담을 수 있어요.</p>}</div>}</section>}
+    {recommend && <section ref={recommendRef} className={s.recommendSummary} aria-label={recommendationLabel + " 경로"}><div className={s.sectionHeader}><button className={s.textButton} aria-expanded={recommendExpanded} onClick={() => setRecommendExpanded(v => !v)}><strong>{recommendationLabel} · {picks.length}개</strong> {recommendExpanded ? "접기" : "경로 보기"}</button><button className={s.primaryButton} disabled={busy || !picks.length} onClick={() => void previewSave(true)}>새 계획으로 저장</button></div><p className={s.emptyHint}>{activeRecommendation?.notice ?? activeRecommendation?.summary ?? "현재 조건으로 확인한 경로예요."}</p>{recommendExpanded && <div className={s.recommendLinks}>{picks.map(choice => { const card = evaluation.cards.find(c => cardKey(c) === cardKey(choice)); if (!card) return null; const hidden = filter.unavailable || (filter.category !== "all" && filter.category !== card.category); return <button key={cardKey(choice)} className={s.recommendLink} onClick={() => { if (hidden) { setDetail(choice); announce("현재 필터에서 숨김 상태예요. 상세에서 확인하거나 전체 분야로 바꿔 주세요."); } else locate(choice); }}>{card.title}<small>{stageLabel(choice.stageId)} · {hidden ? "현재 필터에서 숨김" : card.conflicts.length ? "별도 계획에서 가능" : deadlineText(card, evaluation.today)}</small></button>; })}{!picks.length && <p>현재 확인된 조건으로 추천할 수 있는 정책이 없어요. 확인 필요 정책은 직접 살펴보고 담을 수 있어요.</p>}</div>}</section>}
     <div className={s.boardScroll} ref={boardRef} aria-label="시점별 정책 보드"><div className={s.board}>{evaluation.stages.map(stage => { const cards = visibleCards(stage.stageId); const limit = limits[stage.stageId] ?? 4; return <section key={stage.stageId} id={`stage-${stage.stageId}`} className={`${s.column} ${focusedStage === stage.stageId ? s.focusedColumn : ""}`}><button className={s.columnHeader} aria-label={`${stage.label}, 정책 ${cards.length}개 전체 보기`} onClick={() => setGridStage(stage.stageId)}><h2>{stage.label}<span>{cards.length}</span></h2><p>{dateLabel(stage.start)} {stage.endExclusive ? `~ ${dateLabel(addDays(stage.endExclusive, -1))}` : "이후"} <span aria-hidden="true">⊞</span></p></button><div className={s.columnCards}>{cards.slice(0, limit).map(card => renderCard(card))}</div>{cards.length === 0 && <div className={s.emptyState}>{filter.unavailable ? "현재 조건에서 신청 불가로 확인된 정책이 없어요." : `이 시점에는 ${filter.category === "all" ? "표시할" : CATEGORIES[filter.category].label} 정책이 없어요.`}<button className={s.textButton} onClick={() => setFilter({ category: "all", unavailable: false })}>전체 보기</button></div>}{cards.length > limit && <button data-stage={stage.stageId} className={s.moreButton} onClick={() => setLimits(prev => ({ ...prev, [stage.stageId]: limit + 4 }))}>정책 더 보기 · {cards.length - limit}개 남음</button>}<p className={s.columnFooter}>{Math.min(limit, cards.length)} / {cards.length}개 표시</p></section>; })}</div></div></> : <Roadmap plan={view} onDetail={setDetail} />}
     <p className={s.notice}>기준일 {fullDate(evaluation.today)} · 공고 데이터 기준 {evaluation.asOf} · 현재 공고와 입력한 예정일을 기준으로 계산한 결과입니다. 신청 전 공식 공고를 확인해 주세요.</p>
-    </main><Agent questions={readOnly ? [] : evaluation.questions} onAnswer={(question, answer) => {
+    </main><Agent recommendation={activeRecommendation} cards={evaluation.cards} planLoading={planLoading && !readOnly} questions={readOnly ? [] : evaluation.questions} onAnswer={(question, answer) => {
       const profile = draft.profileSnapshot;
       void mutate({ mutedKeys: draft.input.mutedKeys.filter(key => key !== "participation") }, {
         ...profile, benefits: applyAnswer(profile.benefits ?? [], question, answer),

@@ -8,6 +8,12 @@ export const CATEGORIES: Record<Category, { label: string; color: string }> = {
 export const EVENT_NAMES = { training_completion: "수료", employment: "취업", business_registration: "창업", relocation: "이사" };
 export type PlanEvent = { id: string; type: keyof typeof EVENT_NAMES; date: string; status: "scheduled" | "completed"; sigungu?: string };
 export type Choice = { offeringId: string; stageId: string };
+export type AiRecommendation = {
+  source: "ai" | "rule";
+  summary: string;
+  picks: (Choice & { why: string[] })[];
+  notice: string | null;
+};
 export type PlannerInput = { revision: number; events?: PlanEvent[]; choices: Choice[]; mutedKeys: string[]; preferredCategory: Category | "all"; demoId?: "pathfinder-demo-2026" };
 export type Stage = { stageId: string; label: string; start: string; endExclusive: string | null; eventIds: string[] };
 export type Period = { start: string; end: string | null };
@@ -37,4 +43,4 @@ export type BenefitQuestion = {
 };
 export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: Choice[] };
 export type Draft = { draftId: string; profileSnapshot: Profile; input: PlannerInput; evaluation: Evaluation };
-export type SavedPlan = { planId: string; schemaVersion: 2; name: string; createdAt: string; source: "manual" | "recommendation" | "example"; profileSnapshot: Profile; input: PlannerInput; savedEvaluation: Evaluation };
+export type SavedPlan = { planId: string; schemaVersion: 2; name: string; createdAt: string; source: "manual" | "recommendation" | "example"; recommendationSource?: AiRecommendation["source"]; profileSnapshot: Profile; input: PlannerInput; savedEvaluation: Evaluation };
