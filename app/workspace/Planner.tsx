@@ -19,6 +19,7 @@ import type { AiRecommendation } from "@/lib/planner/types";
 import { applyAnswer } from "@/lib/planner/answers";
 import { Agent, type Message } from "./Agent";
 import { recommendationUpdate } from "./counsel-view";
+import { applyScope, parseRecommendScope, scopeIsEmpty, scopeLabel, type RecommendScope } from "@/lib/planner/recommend-scope";
 import { Building } from "./Building";
 import { DetailDialog, EventDialog, ProfileForm, SaveDialog } from "./Dialogs";
 import { demoStart, OnboardingScreen, PlanningScreen, personaProfile, SignupScreen, startInput } from "./Entry";
@@ -70,7 +71,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   // 상담 · 추천 에이전트(GPT 재설계): 동의 · AI 질문 · 최근 대화 · 자동 재호출 횟수 · 주제 밖 연속 횟수
   const [consent, setConsent] = useState(false);
   const [aiQuestion, setAiQuestion] = useState<(CounselBody & { target: CounselTarget; forRecommendation: boolean; preparedAnswers?: ReadonlySet<string> }) | null>(null);
-  const recommendSession = useRef<{ id: string; asked: string[]; skippedKeys: string[]; stopped: boolean } | null>(null);
+  const recommendSession = useRef<{ id: string; asked: string[]; skippedKeys: string[]; stopped: boolean; scope?: RecommendScope } | null>(null);
   const counselHistory = useRef<CounselTurn[]>([]), autoCalls = useRef(0), outOfScope = useRef(0);
   function clearRecommendation() {
     planSeq.current++;
@@ -307,7 +308,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const canCounsel = (d: Draft | null) => !!d && (!!d.input.demoId || consent);
   function remember(turn: CounselTurn) { counselHistory.current = [...counselHistory.current, turn].slice(-6); }
   function showRuleRecommendation(evaluation: Evaluation, notice: string) {
-    setRecommendation({ source: "rule", summary: "", picks: evaluation.recommendations.map(c => ({ ...c, why: [] })), notice });
+    // 사용자가 범위를 좁혔으면(“현재 시점 취업 위주로”) 규칙 추천도 그 범위 안에서만.
+    setRecommendation({ source: "rule", summary: "", picks: applyScope(evaluation, recommendSession.current?.scope).recommendations.map(c => ({ ...c, why: [] })), notice });
     toggleRecommendation(true);
   }
   function finishRecommendationWithCurrentAnswers() {
@@ -322,20 +324,22 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   /** 서버로 보내는 이번 추천의 질문 횟수. 그만두면 건너뛰기 한도를 채워 보낸다. */
   function sessionPayload(): RecommendSession | undefined {
     const session = recommendSession.current; if (!session) return undefined;
-    return { id: session.id, asked: session.asked.length + session.skippedKeys.length, skipped: session.stopped ? MAX_SKIPS : session.skippedKeys.length, skippedKeys: session.skippedKeys };
+    return { id: session.id, asked: session.asked.length + session.skippedKeys.length, skipped: session.stopped ? MAX_SKIPS : session.skippedKeys.length, skippedKeys: session.skippedKeys, ...(session.scope ? { scope: session.scope } : {}) };
   }
   /** 추천 질문 흐름의 다음 걸음. AI 상담이 가능하면 서버(AI)가 묻거나 추천하고, 아니면 같은 질문 순서를 코드가 직접 보여 준다. */
   async function continueRecommendation(current: Draft) {
     if (canCounsel(current)) { await counsel("recommend"); return; }
     const payload = sessionPayload()!;
-    const askable = askableConditions(collectOpenConditions(current.profileSnapshot, current.input, current.evaluation), payload);
+    const askable = askableConditions(collectOpenConditions(current.profileSnapshot, current.input, applyScope(current.evaluation, recommendSession.current?.scope)), payload);
     const question = mayFinish(askable, payload).allowed ? undefined : askable[0]?.question;
     if (!question) { say("답변을 반영해 추천 경로를 정리했어요."); showRuleRecommendation(current.evaluation, "답변을 반영한 조건 기준 경로예요."); return; }
     setAiQuestion({ ...question, kind: "question", source: "rule", forRecommendation: true, preparedAnswers: new Set([...recommendSession.current!.asked, ...recommendSession.current!.skippedKeys]) });
     remember({ role: "assistant", text: `질문: ${question.text}` });
   }
-  function startRecommendation(current: Draft) {
-    recommendSession.current = { id: newId(), asked: [], skippedKeys: [], stopped: false };
+  function startRecommendation(current: Draft, text?: string) {
+    const scope = text ? parseRecommendScope(text, current.evaluation.stages) : {};
+    recommendSession.current = { id: newId(), asked: [], skippedKeys: [], stopped: false, ...(scopeIsEmpty(scope) ? {} : { scope }) };
+    if (!scopeIsEmpty(scope)) say(`${scopeLabel(scope, current.evaluation.stages)}로 좁혀서 추천할게요.`);
     void continueRecommendation(current);
   }
   function stopRecommendationQuestions() {
@@ -430,7 +434,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       if (recommend) toggleRecommendation(false);
       navigate("select");
       setAgentOpen(true); setAgentHidden(false);
-      startRecommendation(current);
+      startRecommendation(current, text);
       return;
     }
     const named = findNamedCards(text, current.evaluation, current.input.choices);

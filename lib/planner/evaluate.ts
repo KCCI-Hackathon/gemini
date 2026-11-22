@@ -5,6 +5,7 @@ import { effectiveStatus } from "@/lib/judge/personal";
 import { addDays, dayNumber } from "./dates";
 import { EVENT_NAMES, type BenefitQuestion, type Evidence, type Card, type Choice, type Evaluation, type Offering, type Period, type PlanEvent, type PlannerInput, type Reason, type RecommendationChoice, type Stage } from "./types";
 import { classifyEligibility } from "./eligibility";
+import { bodyOnlyTarget } from "./recommend-scope";
 
 export type BaseVerdict = { availability: Card["availability"]; reasons: Reason[]; evidence?: Evidence[]; questions?: BenefitQuestion[] };
 export type DraftConflictEvaluator = (card: Card, chosen: Card[]) => {
@@ -207,6 +208,8 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     for (const stage of stages) {
       const candidates = cards.filter(c => c.stageId === stage.stageId && c.availability !== "blocked");
       candidates.sort((a, b) => preferredRank(b) - preferredRank(a)
+        // 박사 · 위험군처럼 공고 본문에만 있는 대상 조건이 있는 카드는 채우기 순위에서 뒤로.
+        || Number(!!bodyOnlyTarget(a)) - Number(!!bodyOnlyTarget(b))
         || (eligibility === "needs_check" ? a.reasons.length - b.reasons.length : 0)
         || interested(b) - interested(a) || sortCards(a, b));
       for (const card of candidates) {
@@ -223,7 +226,8 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
           const updated = applyConflicts(prior, proposed).eligibility;
           return updated === "blocked" || (!existing.confirmation && updated !== "eligible");
         })) continue;
-        recommended.push({ ...choice, ...(eligibility === "needs_check" ? { confirmation: result.eligibilityReason } : {}) });
+        const target = bodyOnlyTarget(card);
+        recommended.push({ ...choice, ...(eligibility === "needs_check" ? { confirmation: result.eligibilityReason } : target ? { confirmation: `공고 본문의 대상 조건(${target})을 확인해 주세요` } : {}) });
         usedOfferings.add(card.offeringId);
         counts.set(stage.stageId, count + 1);
       }

@@ -20,6 +20,7 @@ import { takeQuota } from "@/lib/limits";
 import { evaluateRequest } from "@/lib/planner/catalog";
 import { findNamedCards } from "@/lib/planner/commands";
 import { answeredLabels } from "@/lib/judge/conditions";
+import { applyScope, scopedRecommendations, scopeIsEmpty, scopeLabel } from "@/lib/planner/recommend-scope";
 import { answerOptions, scrubPII, validateAnswer, type CounselTarget } from "@/lib/planner/counsel-target";
 import { dayNumber } from "@/lib/planner/dates";
 import { PlannerInputSchema, ProfileSnapshotSchema } from "@/lib/planner/schema";
@@ -49,7 +50,9 @@ export const CounselRequestSchema = z.object({
   action: z.enum(["message", "recommend", "followup"]),
   consent: z.boolean().optional(),
   /** 이번 추천에서 지금까지 물은 횟수. 서버는 저장하지 않고 화면이 실어 보낸다. */
-  recommendSession: z.object({ id: z.string().max(64), asked: z.number().int().min(0).max(100), skipped: z.number().int().min(0).max(100), skippedKeys: z.array(z.string().max(120)).max(40).optional() }).optional(),
+  recommendSession: z.object({ id: z.string().max(64), asked: z.number().int().min(0).max(100), skipped: z.number().int().min(0).max(100), skippedKeys: z.array(z.string().max(120)).max(40).optional(),
+    /** "현재 시점 취업 위주로 추천해줘"처럼 사용자가 좁힌 범위. 화면이 문장에서 뽑아 보낸다. */
+    scope: z.object({ stageIds: z.array(z.string().max(120)).max(10).optional(), categories: z.array(z.enum(["job", "startup", "housing", "edu", "life"])).max(5).optional() }).optional() }).optional(),
   profile: ProfileSnapshotSchema.extend({ recentHistory: z.enum(["yes", "no"]).optional(), examDate: z.string().optional() }),
   input: PlannerInputSchema,
   message: z.string().max(MAX_TEXT).optional(),
@@ -197,7 +200,9 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   const history = req.history.filter(h => h.role === "assistant").map(h => ({ role: h.role, text: scrub(h.text.slice(0, 120)) }));
   const withRedaction = (body: CounselBody): CounselBody => redacted ? { ...body, redacted: true, notice: [body.notice, "개인정보로 보이는 부분은 빼고 보냈어요."].filter(Boolean).join(" ") } : body;
 
-  const evaluation = evaluateRequest(req.profile, req.input, ctx.now);
+  // 사용자가 범위를 좁혔으면 질문 후보 · AI 후보 · 규칙 추천이 모두 그 범위만 본다.
+  const scope = req.recommendSession?.scope;
+  const evaluation = applyScope(evaluateRequest(req.profile, req.input, ctx.now), scope);
   // 같은 대화에서 주제 밖이 2번 연속이면 그 뒤 메시지는 AI 를 부르지 않는다(설계 7.1).
   if (req.action === "message" && req.outOfScopeStreak >= 2) return { status: 200, body: { kind: "out_of_scope", text: OUT_OF_SCOPE } };
   const aiAction = req.action === "recommend" ? "recommend" : "message";
@@ -229,6 +234,7 @@ const cache = new Map<string, CounselBody>();
 export function resetCounselState() { cache.clear(); }
 
 async function runCounsel(req: CounselRequest, persona: boolean, message: string | undefined, history: { role: string; text: string }[], ev: Evaluation, ctx: CounselCtx, deadline: Deadline, aiAction: "recommend" | "message"): Promise<CounselBody> {
+  const scope = req.recommendSession?.scope;
   const cards = new Map(ev.cards.map(c => [c.offeringId + "|" + c.stageId, c]));
   const offerings = new Set(ev.cards.map(c => c.offeringId));
   const evidenceIds = new Map(ev.cards.flatMap(c => c.evidence.map(e => [e.evidenceId, e.title] as const)));
@@ -251,7 +257,8 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
   const sent = (s: string) => { for (const n of numberSet(s)) allowed.add(n); return s; };
   const fallback = (notice = "AI 설명을 불러오지 못해 조건 기준 경로를 표시해요") => ruleFallback(ev, notice);
 
-  const task = completedQuestionnaire ? "질문을 마쳤어요. 현재 판정과 선호 분야를 반영해 finish_plan으로 시점마다 2~3개씩 추천하세요."
+  const scoped = scopeIsEmpty(scope) ? "" : ` 사용자가 원한 범위: ${scopeLabel(scope, ev.stages)}. 이 범위 안 카드만 고르세요.`;
+  const task = completedQuestionnaire ? `질문을 마쳤어요. 현재 판정과 선호 분야를 반영해 finish_plan으로 시점마다 2~3개씩 추천하세요.${scoped}`
     : req.action === "recommend" ? `사용자가 추천을 요청했어요. 이번 추천에서 ${session.asked}번 물었어요. 먼저 get_open_questions 1순위 조건을 ask_user 로 하나만 물으세요. 이 단계에서는 finish_plan 을 부르지 않습니다.`
     : req.action === "followup" ? "방금 사용자가 답해서 코드가 다시 판정했어요. 더 물을지, 추천할지 정하세요."
     : `사용자 메시지: """${sent(message ?? "")}"""`;
@@ -329,7 +336,8 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
         if (!kept.length) return fallback(ev.recommendations.length
           ? "현재 판정을 기준으로 경로를 정리했어요."
           : "지금까지 입력한 조건으로 신청 가능으로 확인된 정책이 없어요. ‘확인 필요’ 탭에서 남은 조건을 확인해 주세요.");
-        const planned = evaluateRequest(req.profile, req.input, ctx.now, undefined, kept).recommendations;
+        const planned = scopeIsEmpty(scope) ? evaluateRequest(req.profile, req.input, ctx.now, undefined, kept).recommendations
+          : scopedRecommendations(applyScope(evaluateRequest(req.profile, req.input, ctx.now, undefined, kept), scope), scope, kept);
         const completed = planned.map(c => {
           const modelPick = kept.find(p => p.offeringId === c.offeringId && p.stageId === c.stageId);
           return { ...c, ...(modelPick ? {} : { filled: true }), why: c.confirmation ? [] : modelPick?.why ?? ["현재 조건으로 신청 가능해요."] };

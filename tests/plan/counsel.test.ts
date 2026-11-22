@@ -243,3 +243,28 @@ test("403 says why: the users switch being off is not reported as missing consen
   const noConsent = await handleCounsel({ ...user, consent: false }, m.ctx({ env: { ...env, PLAN_AI_FOR_USERS: "true" } }));
   expect(noConsent).toMatchObject({ status: 403, body: { reason: "consent" } });
 });
+
+test("추천 범위: ‘현재 · 취업’이면 AI 후보와 추천이 그 범위 안에만 있고, 범위 밖 AI 선택은 버린다", async () => {
+  const scope = { stageIds: ["current"], categories: ["job" as const] };
+  const outside = open.find(c => c.stageId !== "current")!;
+  const inside = open.find(c => c.stageId === "current" && c.category === "job")!;
+  const m = scripted([{ name: "get_evaluation", input: {} }, { name: "finish_plan", input: { summary: "골랐어요", picks: [
+    { offering_id: outside.offeringId, stage_id: outside.stageId, why: "다른 시점" },
+    { offering_id: inside.offeringId, stage_id: inside.stageId, why: "현재 취업" },
+  ] } }]);
+  const out = await handleCounsel({ ...demo, recommendSession: { id: "s", asked: 0, skipped: 2, scope } }, m.ctx());
+  expect(out.body.kind).toBe("plan");
+  const cards = new Map(ev.cards.map(c => [c.offeringId + "|" + c.stageId, c]));
+  expect(out.body.picks!.length).toBeGreaterThan(0);
+  expect(out.body.picks!.every(p => p.stageId === "current" && cards.get(p.offeringId + "|" + p.stageId)?.category === "job")).toBe(true);
+  expect(out.body.picks![0].offeringId).toBe(inside.offeringId);
+  const sentEval = JSON.parse(String((m.calls[1].messages as { content: unknown }[]).flatMap(x => Array.isArray(x.content) ? x.content : []).find((b: { type?: string }) => b.type === "tool_result")?.content));
+  expect(sentEval.cards.every((c: { category: string; stages: string[] }) => c.category === "취업·일자리" && c.stages.every(s => s === "current"))).toBe(true);
+  expect(String((m.calls[0].messages as { content: string }[])[0].content)).toContain("현재 시점, 취업·일자리 분야");
+});
+
+test("추천 범위: AI 없이도(대체 경로) 범위 안에서만 고른다", async () => {
+  const out = await handleCounsel({ ...demo, recommendSession: { id: "s", asked: 0, skipped: 2, scope: { categories: ["job"] } } }, { env: {}, ip: "x", now, makeClient: () => { throw new Error("no"); } });
+  const cards = new Map(ev.cards.map(c => [c.offeringId + "|" + c.stageId, c]));
+  expect(out.body.picks!.every(p => cards.get(p.offeringId + "|" + p.stageId)?.category === "job")).toBe(true);
+});
