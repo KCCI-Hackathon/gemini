@@ -34,7 +34,17 @@ import { countEligibilityTabs } from "@/lib/planner/eligibility";
 import { selectBoardCards } from "@/lib/planner/board-cards";
 import { createStarStore } from "@/lib/planner/stars";
 import { Schedule } from "./Schedule";
+import { GooMenu, type GooItem } from "./GooMenu";
 import s from "./workspace.module.css";
+
+const gooIcon = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />;
+// 길잡이 얼굴 버튼에서 흘러나오는 기능 4개
+const GOO_ITEMS: GooItem[] = [
+  { key: "chat", label: "길잡이와 대화", icon: gooIcon('<path d="M5 18.5V6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9z"/><path d="M8.5 9h7M8.5 12h4.5"/>') },
+  { key: "recommend", label: "AI 추천 경로", icon: gooIcon('<path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/>') },
+  { key: "schedule", label: "일정 추가", icon: gooIcon('<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16M12 13v4M10 15h4"/>') },
+  { key: "deadline", label: "내 기한 설명", icon: gooIcon('<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>') },
+];
 
 async function fetchEvaluation(profile: Profile, input: PlannerInput): Promise<Evaluation> {
   const response = await fetch("/api/judge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile, benefits: profile.benefits, plannerV2: input }) });
@@ -120,7 +130,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const [eventDialog, setEventDialog] = useState<PlanEvent | "new" | null>(null);
   const [saveDialog, setSaveDialog] = useState<PendingSave | null>(null);
   const [account, setAccount] = useState(false), [editProfile, setEditProfile] = useState(false), [chipMenu, setChipMenu] = useState<string | null>(null), [copyPlan, setCopyPlan] = useState<SavedPlan | null>(null);
-  const [agentOpen, setAgentOpen] = useState(false), [agentHidden, setAgentHidden] = useState(false);
+  // 길잡이 채팅 창. 평소에는 닫혀 있고 오른쪽 아래 얼굴 버튼(GooMenu)으로 연다
+  const [agentOpen, setAgentOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([initialMessage]); const messageId = useRef(1);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [storageNotice, setStorageNotice] = useState<string | null>(null);
   const [legacyIds, setLegacyIds] = useState<string[]>([]), [toast, setToast] = useState<string | null>(null);
@@ -269,7 +280,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   /** 보드의 ‘AI 추천 경로 보기’: 동의 전이면 동의를 먼저 받고, 동의돼 있으면 “나에게 맞는 경로 추천해줘”로 대화를 시작한다. */
   function openAiRecommendation() {
     if (recommend) { toggleRecommendation(false); return; }
-    setAgentOpen(true); setAgentHidden(false);
+    setAgentOpen(true);
     if (!consentRef.current) { pendingRecommend.current = true; say("AI 추천 경로를 보려면 아래 ‘AI 상담 사용’에 먼저 동의해 주세요. 동의하면 바로 추천을 시작할게요."); return; }
     send(RECOMMEND_PROMPT);
   }
@@ -446,7 +457,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       clearRecommendation();
       if (recommend) toggleRecommendation(false);
       navigate("select");
-      setAgentOpen(true); setAgentHidden(false);
+      setAgentOpen(true);
       startRecommendation(current, text);
       return;
     }
@@ -537,8 +548,8 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   if (!draft || !evaluation || !view || screen === "signup") return frame(<SignupScreen me={me} onNext={() => { window.location.hash = "onboarding"; }} onDemo={() => demoStart(begin)} onSaved={() => setAccount(true)} onSignedUp={() => refreshMe(() => { window.location.hash = "onboarding"; })} onLogout={() => void logout()} savedCount={plans.length} error={error} />);
   const tab = screen as Tab;
 
-  return <div className={`${s.app} ${agentOpen ? s.agentDrawer : ""} ${agentHidden ? s.agentHidden : ""}`}><div className={`${s.shell} ${tab === "account" ? s.noagent : ""}`}><Nav active={tab} />
-    <main className={s.workspace} aria-busy={busy}>{tab === "saved" ? <><header className={s.pageHeader}><div><p className={s.eyebrow}>관심 정책</p><h1>별표한 정책을 모아 봐요</h1></div></header><Saved stars={stars} evaluation={evaluation} onToggle={toggleStar} onDetail={setDetail} onChoose={c => void choose(c)} busy={busy || readOnly} /></> : tab === "account" ? <><header className={s.pageHeader}><div><p className={s.eyebrow}>계정</p><h1>내 정보와 저장 위치</h1></div></header><div className={s.accountGrid}><section className={s.panel}><h2>계정 상태</h2><p>{me?.mode === "account" ? `${me.displayName} · 저장 방식 · 내 계정${me.durable ? "" : " (시연용 서버)"}` : "게스트 · 저장 방식 · 이 브라우저"}</p><p>저장한 계획 {plans.length}개</p><p>{draft.input.demoId ? "예시 프로필" : "내 프로필"}</p></section><section className={s.panel}><h2>내 정보</h2><p>{regionLabel(draft.profileSnapshot.sigungu)} · {draft.profileSnapshot.birthYm}</p><button className={s.primaryButton} onClick={() => { window.location.hash = "onboarding"; }}>내 정보 수정</button>{me?.mode === "account" ? <button className={s.textButton} onClick={() => void logout()}>로그아웃</button> : <a href="/login">로그인</a>}</section>{me?.mode === "account" && <AccountNotifications />}</div></> : <><header className={s.pageHeader}><div><p className={s.eyebrow}>나의 다음을 준비하는 공간</p><h1>{route === "select" ? "정책 선택하기" : "내 정책 로드맵"}</h1><p className={s.subtitle}>{evaluation.demo && <span className={s.demoBadge}>시연 인물</span>}{route === "select" ? "내 일정에 맞는 정책을 살펴보고, 나만의 계획에 담아보세요." : "내가 고른 정책을 하나의 시간 위에서 확인해 보세요."}</p><p className={s.emptyHint}>기준일 {evaluation.today} · 공고 데이터 기준 {evaluation.asOf}</p></div><div className={s.inlineActions}><button className={`${s.outlineButton} ${s.agentOpen}`} onClick={() => { setAgentOpen(true); setAgentHidden(false); }}>길잡이 열기</button><button className={s.textButton} onClick={() => { setAgentHidden(v => !v); setAgentOpen(v => !v); }} aria-label="길잡이 패널 표시 전환">☷</button></div></header>
+  return <div className={`${s.app} ${agentOpen ? s.agentDrawer : ""}`}><div className={`${s.shell} ${tab === "account" ? s.noagent : ""}`}><Nav active={tab} />
+    <main className={s.workspace} aria-busy={busy}>{tab === "saved" ? <><header className={s.pageHeader}><div><p className={s.eyebrow}>관심 정책</p><h1>별표한 정책을 모아 봐요</h1></div></header><Saved stars={stars} evaluation={evaluation} onToggle={toggleStar} onDetail={setDetail} onChoose={c => void choose(c)} busy={busy || readOnly} /></> : tab === "account" ? <><header className={s.pageHeader}><div><p className={s.eyebrow}>계정</p><h1>내 정보와 저장 위치</h1></div></header><div className={s.accountGrid}><section className={s.panel}><h2>계정 상태</h2><p>{me?.mode === "account" ? `${me.displayName} · 저장 방식 · 내 계정${me.durable ? "" : " (시연용 서버)"}` : "게스트 · 저장 방식 · 이 브라우저"}</p><p>저장한 계획 {plans.length}개</p><p>{draft.input.demoId ? "예시 프로필" : "내 프로필"}</p></section><section className={s.panel}><h2>내 정보</h2><p>{regionLabel(draft.profileSnapshot.sigungu)} · {draft.profileSnapshot.birthYm}</p><button className={s.primaryButton} onClick={() => { window.location.hash = "onboarding"; }}>내 정보 수정</button>{me?.mode === "account" ? <button className={s.textButton} onClick={() => void logout()}>로그아웃</button> : <a href="/login">로그인</a>}</section>{me?.mode === "account" && <AccountNotifications />}</div></> : <><header className={s.pageHeader}><div><p className={s.eyebrow}>나의 다음을 준비하는 공간</p><h1>{route === "select" ? "정책 선택하기" : "내 정책 로드맵"}</h1><p className={s.subtitle}>{evaluation.demo && <span className={s.demoBadge}>시연 인물</span>}{route === "select" ? "내 일정에 맞는 정책을 살펴보고, 나만의 계획에 담아보세요." : "내가 고른 정책을 하나의 시간 위에서 확인해 보세요."}</p><p className={s.emptyHint}>기준일 {evaluation.today} · 공고 데이터 기준 {evaluation.asOf}</p></div><div className={s.inlineActions}></div></header>
     {route === "roadmap" && <div className={s.roadmapHeader}><label className={s.srOnly} htmlFor="plan-picker">로드맵 계획 선택</label><select id="plan-picker" className={s.picker} value={planId} onChange={e => { setPlanId(e.target.value); activePlanId.current = e.target.value; setRechecked(null); setDetail(null); setError(null); retry.current = null; }}><option value="draft">편집 중인 내 계획 · {draft.input.choices.length}개</option>{plans.map(p => <option key={p.planId} value={p.planId}>{p.name} · {p.input.choices.length}개</option>)}{example && <option value="example">예시 계획</option>}</select>{route === "roadmap" && <button className={s.outlineButton} onClick={() => window.print()}>인쇄 · PDF</button>}{readOnly && selectedSaved && <><button className={s.outlineButton} disabled={busy} onClick={() => setCopyPlan(selectedSaved)}>복사해 편집</button><button className={s.textButton} disabled={busy} onClick={() => void reevaluate()}>오늘 기준으로 다시 보기</button></>}</div>}
     {route === "roadmap" && <PlanCompare plans={plans} />}{readOnly && <div className={s.banner}><span>{rechecked ? `오늘 기준 재판정 · 저장 당시 ${selectedSaved?.savedEvaluation.today}` : `저장 당시 기준 ${fullDate(evaluation.today)}`} · {selectedSaved?.name}</span>{rechecked && <button className={s.outlineButton} onClick={() => setSaveDialog({ target: rechecked, recommendation: false })}>새 계획으로 저장</button>}</div>}
     <div className={s.profileChips} aria-label="이 계획의 프로필 조건">{[{ key: "residence", label: `${regionLabel(view.profileSnapshot.sigungu)} 거주` }, { key: "status", label: view.profileSnapshot.currentStatus.includes("in_training") ? "교육 수강 중" : view.profileSnapshot.currentStatus.includes("employed") ? "재직 중" : view.profileSnapshot.currentStatus.includes("unemployed") ? "구직 중" : "현재 상태 확인" }, { key: "participation", label: view.profileSnapshot.benefits?.length ? `수혜 내역 ${view.profileSnapshot.benefits.length}개` : view.profileSnapshot.participating.length ? `수혜 중 ${view.profileSnapshot.participating.length}개` : "수혜 내역" }, { key: "interest", label: `관심: ${view.input.preferredCategory === "all" ? "전체 분야" : CATEGORIES[view.input.preferredCategory].label}` }].map(chip => <button key={chip.key} disabled={readOnly || busy} className={`${s.profileChip} ${view.input.mutedKeys.includes(chip.key) ? s.mutedChip : ""}`} onClick={() => setChipMenu(chip.key)}>{chip.label}{view.input.mutedKeys.includes(chip.key) ? " · 꺼짐" : ""}</button>)}</div>
@@ -558,5 +569,11 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
       void mutate({ mutedKeys: draft.input.mutedKeys.filter(key => key !== "participation") }, {
         ...profile, benefits: applyAnswer(profile.benefits ?? [], question, answer),
       });
-    }} messages={messages} onSend={send} busy={busy} onClose={() => { setAgentOpen(false); setAgentHidden(true); }} />}</div>{showDialogs()}{toast && <div className={s.toast} role="status">{toast}</div>}</div>;
+    }} messages={messages} onSend={send} busy={busy} onClose={() => setAgentOpen(false)} />}
+    {tab !== "account" && <GooMenu items={GOO_ITEMS} hidden={agentOpen} face={<img src="/pathfinder/robot-face.png" alt="" />} onPick={key => {
+      if (key === "recommend") { openAiRecommendation(); return; }
+      if (key === "schedule" && !readOnly) { setEventDialog("new"); return; }
+      setAgentOpen(true);
+      if (key === "deadline") send("왜 제 기한은 더 빠른가요?");
+    }} />}</div>{showDialogs()}{toast && <div className={s.toast} role="status">{toast}</div>}</div>;
 }
