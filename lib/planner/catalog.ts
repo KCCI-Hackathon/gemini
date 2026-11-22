@@ -1,12 +1,31 @@
 import { addMonths, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
+import { loadOverlap } from "@/lib/data/overlap";
+import { blocksParticipation, evaluateRules, type Benefit } from "@/lib/judge/overlap";
 import { judgePolicy, type Profile } from "@/lib/judge";
 import { categoryOf, policyNotice } from "@/lib/route/roadmap";
-import { evaluatePlanner, type BaseEvaluator } from "./evaluate";
-import { restrictionVerdict } from "./overlap-bridge";
+import { evaluatePlanner, type BaseEvaluator, type DraftConflictEvaluator } from "./evaluate";
+import { plannedFor, restrictionVerdict } from "./overlap-bridge";
 import { DEMO_PROFILE, demoCatalog } from "./fixtures";
 import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
+
+export function backendDraftConflict(now: Date, benefits: Benefit[] = []): DraftConflictEvaluator {
+  const approved = loadOverlap();
+  return (card, chosen) => {
+    const rules = approved.get(card.policyId);
+    if (!rules) return { blocked: false, uncertain: false, reasons: [], evidence: [], conflicts: [] };
+    const { planned_conflicts } = evaluateRules(rules, benefits, plannedFor(card, chosen), now);
+    const verdict = restrictionVerdict(planned_conflicts, card.policyId, "planned");
+    const sources = new Set(planned_conflicts.filter(blocksParticipation).map(r => r.sourceId));
+    return {
+      blocked: verdict.availability === "blocked", uncertain: verdict.availability === "needs_check",
+      reasons: verdict.reasons.map(r => r.code === "DRAFT_CONFLICT" ? { ...r, message: r.message + " · 예정 기간 기준" } : r),
+      evidence: verdict.evidence,
+      conflicts: chosen.filter(other => other.offeringId !== card.offeringId && sources.has(other.policyId)).map(other => other.offeringId),
+    };
+  };
+}
 
 export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date, legacyPlan?: { employAfterMonths?: number | null; businessAfterMonths?: number | null; move?: { sigungu: string; afterMonths: number } | null }): Evaluation {
   if (input.demoId === "pathfinder-demo-2026") {
@@ -55,7 +74,9 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
     return { ...overlap, availability, reasons: [...overlap.reasons, ...reasons] };
   };
   const boundaries = [...verified.values()].flatMap(v => v.lookback ? [...profile.events, ...(input.events ?? [])].filter(e => e.type === "training_completion" || e.type === "employment").map(e => addMonths(e.date, v.lookback!.months)) : []);
-  const evaluation = evaluatePlanner(profile, input, catalog, now, baseEvaluator, [...new Set(boundaries)], { backendOverlap: true });
+  const evaluation = evaluatePlanner(profile, input, catalog, now, baseEvaluator, [...new Set(boundaries)], {
+    backendOverlap: true, draftConflict: backendDraftConflict(now, profile.benefits),
+  });
   evaluation.asOf = snapshot.asOf;
   return evaluation;
 }

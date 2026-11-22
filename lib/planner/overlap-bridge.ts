@@ -1,6 +1,17 @@
 import { loadOverlap } from "@/lib/data/overlap";
-import { blocksParticipation, type Restriction } from "@/lib/judge/overlap";
-import type { BenefitQuestion, Evidence, Reason } from "./types";
+import { blocksParticipation, type Benefit, type Restriction } from "@/lib/judge/overlap";
+import type { BenefitQuestion, Card, Evidence, Reason } from "./types";
+
+export function plannedFor(card: Card, chosen: Card[]): Benefit[] {
+  return [card, ...chosen.filter(other => other.offeringId !== card.offeringId)].map(other => {
+    const end = other.stageWindow?.end ?? other.official.end;
+    return {
+      policyId: other.policyId, status: "planned",
+      ...(other.stageWindow && { plannedStart: other.stageWindow.start }),
+      ...(end && { plannedEnd: end }),
+    };
+  });
+}
 
 export function restrictionVerdict(list: Restriction[], targetPolicyId: string, kind: "current" | "planned") {
   let availability: "blocked" | "needs_check" | null = null;

@@ -158,10 +158,25 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     const clone = { ...card, reasons: [...card.reasons], evidence: [...card.evidence], conflicts: [] as string[] };
     const originallyAllowed = clone.availability !== "blocked";
     let actualConflict = false;
-    for (const target of catalog) {
+    if (options.draftConflict) {
+      const chosen = choices.flatMap(choice => {
+        if (choice.offeringId === card.offeringId) return [];
+        const other = cards.find(c => c.offeringId === choice.offeringId && c.stageId === choice.stageId);
+        return other ? [other] : [];
+      });
+      if (chosen.length) {
+        const draft = options.draftConflict(card, chosen);
+        if (draft.blocked) clone.availability = "blocked";
+        else if (draft.uncertain && originallyAllowed) clone.availability = "needs_check";
+        clone.reasons.unshift(...draft.reasons);
+        clone.evidence.push(...draft.evidence.filter(e => !clone.evidence.some(existing => existing.evidenceId === e.evidenceId)));
+        clone.conflicts.push(...draft.conflicts);
+      }
+    }
+    for (const target of options.backendOverlap && options.draftConflict ? [] : catalog) {
       if (target.offeringId === card.offeringId) continue;
       const actual = !options.backendOverlap && (profile.participating.includes(target.policyId) || profile.participating.includes(target.offeringId));
-      const chosen = choices.some(c => c.offeringId === target.offeringId);
+      const chosen = !options.draftConflict && choices.some(c => c.offeringId === target.offeringId);
       if (!actual && !chosen) continue;
       const relation = restrictionBetween(card, target);
       if (relation.blocked) {
