@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { BenefitsSchema } from "@/lib/judge/overlap";
 import { isDate } from "./dates";
 import { regionOptions } from "@/lib/data/regions";
 import { StatusKey } from "@/lib/data/verified";
 const regions = new Set(regionOptions().map(r => r.code));
 export const ProfileSnapshotSchema = z.object({
+  benefits: BenefitsSchema.optional(),
   birthYm: z.string().refine(value => isDate(`${value}-01`)), sigungu: z.string().refine(value => regions.has(value)), school: z.string().regex(/^\d{7}$/),
   currentStatus: z.array(StatusKey), interest: z.enum(["job", "keep_searching", "startup"]), participating: z.array(z.string()), source: z.enum(["demo_persona", "user"]),
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration", "relocation"]), date: z.string().refine(isDate), status: z.enum(["scheduled", "completed", "simulated"]) })),
@@ -44,9 +46,13 @@ const CardSchema = z.object({
   restrictions: z.array(z.object({ otherId: z.string(), reviewed: z.boolean(), action: z.enum(["application", "benefit"]), direction: z.enum(["both", "outgoing"]), period: PeriodSchema.nullable(), otherPeriod: PeriodSchema.nullable(), evidenceId: z.string() })),
   evidence: z.array(z.object({ evidenceId: z.string(), title: z.string(), quote: z.string(), url: z.string().nullable(), reviewedAt: z.string(), reviewed: z.boolean() })),
   stageId: z.string(), personalWindow: PeriodSchema.nullable(), stageWindow: PeriodSchema.nullable(), applicationWindows: z.array(PeriodSchema), deadlineKind: z.enum(["official", "personal_estimate", "rolling", "unknown", "closed"]),
-  daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]), reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
+  verifyLabel: z.string().nullable().default(null), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]), reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
 });
 export const EvaluationSchema = z.object({
+  questions: z.array(z.object({
+    policyId: z.string(), sourcePolicyId: z.string(), sourceName: z.string(),
+    ruleId: z.string(), question: z.string(), answerKind: z.enum(["receiving", "selected", "ended_date", "monthly_amount"]), month: z.string().optional(),
+  })).default([]),
   revision: z.number().int().min(0), today: z.string().refine(isDate), asOf: z.string(), evaluatedAt: z.string(), dataVersion: z.string(), demo: z.boolean(),
   stages: z.array(z.object({ stageId: z.string(), label: z.string(), start: z.string().refine(isDate), endExclusive: z.string().refine(isDate).nullable(), eventIds: z.array(z.string()) })), cards: z.array(CardSchema),
   choiceWarnings: z.array(z.object({ offeringId: z.string(), stageId: z.string(), title: z.string(), message: z.string(), otherStageIds: z.array(z.string()) })), recommendations: z.array(z.object({ offeringId: z.string(), stageId: z.string() })),
