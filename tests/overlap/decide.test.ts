@@ -29,6 +29,15 @@ it("실제 복지포인트 항목은 다른 제목의 공고문과 분리하고 
   expect(EvidenceRowSchema.parse(out.evidence[0]).checked_at).toBe("2026-11-20");
   out.clauses.forEach(c => ClauseRowSchema.parse(c));
 });
+it("두 추출과 자가 검증이 동의해도 면접수당 하위 항목을 전체 사업 제한으로 확정하지 않는다", () => {
+  const b = "20250516005400210832", a = "20260710005400113256";
+  const quote = "○ 국민취업지원제도, 실업급여, 기타 구직활동 수당 등 타 기관에서 시행 중인 유사사업에 참여 중인 자";
+  const out = result(votes(b, a, "ptcpPrpTrgtCn", quote));
+  expect(RuleRowSchema.parse(out.rules[0])).toMatchObject({
+    judgement: "needs_check", restricted_item: "면접수당",
+  });
+  expect(out.clauses.every(c => c.judgement === "needs_check")).toBe(true);
+});
 it("같은 제목으로 반복된 원문에서 종료 후 정확히 6개월만 확정한다", () => {
   const q = "구직급여의 지급이 끝난 날부터 6개월이 지나지 아니한 자";
   const ms = votes("20250122005400110346", "20250122005400110369", "ptcpPrpTrgtCn", q, { condition_type: "within_months_after_end", period_text: "지급이 끝난 날부터 6개월", condition_params: { months: 6 } });

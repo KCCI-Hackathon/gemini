@@ -23,7 +23,7 @@ function compatibleYear(a: RawPolicy, b: RawPolicy) {
 }
 
 function contexts(text: string, quote: string) {
-  const results: { heading: string; lines: string }[] = [];
+  const results: { heading: string; section: string; lines: string }[] = [];
   let offset = 0;
   while (offset < text.length) {
     const location = locate(text.slice(offset), quote);
@@ -33,10 +33,25 @@ function contexts(text: string, quote: string) {
     const lineEnd = text.indexOf("\n", end);
     const lines = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
     const heading = [...text.slice(0, end).split("\n")].reverse().find(line => /^\s*["']?\s*[○□■]/.test(line)) ?? "";
-    results.push({ heading: normalizeSpace(heading.replace(/^\s*["']/, "")), lines: normalizeSpace(lines) });
+    // A condition bullet (○) may belong to a named benefit section (□ or ■).
+    const section = (text.slice(0, lineStart) + lines.split("\n")[0]).split("\n").reverse()
+      .find(line => /^\s*["']?\s*[□■]/.test(line)) ?? "";
+    results.push({
+      heading: normalizeSpace(heading.replace(/^\s*["']/, "")),
+      section: normalizeSpace(section.replace(/^\s*["']?\s*[□■]\s*/, "")),
+      lines: normalizeSpace(lines),
+    });
     offset = end;
   }
   return results;
+}
+const benefitTitle = /^[^:：]{0,40}(?:수당|장려금|지원금|보조금|바우처)\s*[:：]?$/;
+function itemScopes(source: string, quote: string, policyName: string) {
+  const normalizedName = normalizeSpace(policyName).replace(/\s/g, "");
+  return contexts(source, quote).map(({ section }) => {
+    const title = section.replace(/[:：]\s*$/, "").trim();
+    return benefitTitle.test(section) && title.replace(/\s/g, "") !== normalizedName ? title : null;
+  });
 }
 const referenceWords = /별표|첨부|공고문|지침|상세\s*내용/;
 const timing = /\d+\s*(?:개?월|년|회(?:를|까지|째)|일(?:간|까지))|['’\u0060]\d{2}|(?:참여|수급|지급|가입|종료|수혜|신청|선정|이용)(?:한|하기|받은|한\s*날)?\s*(?:이전|이후|후|뒤|전에|전부터)|선후\s*관계/;
@@ -79,6 +94,7 @@ export function decide(first: LinkedMention[], second: LinkedMention[], checks: 
     const c = m.clause, b = policies.get(c.b_policy_id), a = m.a ? policies.get(m.a) : undefined;
     const isTraceOnly = !a || !b || m.a === c.b_policy_id || c.kind === "allowed" || c.kind === "not_restriction";
     const reasons = new Set<string>();
+    const scopes = new Set<string | null>();
     let contradicted = false, hasBadQuote = false;
     for (const vote of pair ? [m, pair] : [m]) {
       const v = vote.clause, source = String(b?.[v.field] ?? ""), check = verified.get(vote.id);
@@ -95,6 +111,11 @@ export function decide(first: LinkedMention[], second: LinkedMention[], checks: 
       const nameReason = candidateReason(vote);
       if (nameReason) reasons.add(nameReason);
       if (!periodOK(v, source)) reasons.add("해당 항목의 기간·회차 또는 참조 공고 확인 필요");
+      if (v.kind === "blocks" && b) {
+        const items = itemScopes(source, v.quote, b.plcyNm);
+        items.forEach(item => scopes.add(item));
+        if (items.some(Boolean)) reasons.add("수당·지원 항목의 제한을 사업 전체에 적용할 수 있는지 확인 필요");
+      }
       if (v.kind === "blocks" && /차감|차액|감액|중복\s*(신청\s*)?가능/.test(v.quote)) reasons.add("원문의 금액 조정·중복 가능 문구와 전체 제한이 일치하는지 확인 필요");
       if ((!check && vote === m) || (check && (check.verdict !== "supported" || !validVerify))) reasons.add("검증 근거가 불충분하거나 일치하지 않음");
       traces.set(vote.id, {
@@ -114,20 +135,22 @@ export function decide(first: LinkedMention[], second: LinkedMention[], checks: 
       reasons.add("같은 모델의 독립된 두 추출이 일치하지 않음");
     }
     const judgement = reasons.size ? "needs_check" : "blocked", reason = [...reasons].join(" · ") || null;
+    const item = c.restricted_item ?? (scopes.size === 1 ? [...scopes][0] : null);
     for (const v of pair ? [m, pair] : [m]) {
       const row = traces.get(v.id)!;
       row.judgement = judgement;
+      if (item) row.restricted_item = item;
       if (reason) row.reason = reason;
     }
     const check = verified.get(m.id);
     const quote = locate(String(b[c.field]), c.quote)!.quote;
     const eid = "e-" + digest(b.plcyNo, c.field, quote);
     evidence.set(eid, { evidence_id: eid, policy_id: b.plcyNo, round_id: null, source_kind: "api", source_field: c.field, source_url: null, quote_text: quote, checked_at: checkedAt });
-    const rid = "r-" + digest(a.plcyNo, eid, c.kind, c.effect_type, c.condition_type, canonical(c.condition_params), c.exception, c.restricted_item, c.period_text);
+    const rid = "r-" + digest(a.plcyNo, eid, c.kind, c.effect_type, c.condition_type, canonical(c.condition_params), c.exception, item, c.period_text);
     const rule: RuleRow = {
       rule_id: rid, source_policy_id: a.plcyNo, target_policy_id: b.plcyNo, target_round_id: null, evidence_id: eid, kind: c.kind, effect_type: c.effect_type,
       condition_type: c.condition_type, condition_params: c.condition_params, reference_event: c.condition_type === "status_on_notice_date" ? "notice_date" : "apply_date", exception: c.exception,
-      judgement, needs_check_reason: reason, source: "agent", model: c.model, run_id: run.run_id, restricted_item: c.restricted_item, period_text: c.period_text,
+      judgement, needs_check_reason: reason, source: "agent", model: c.model, run_id: run.run_id, restricted_item: item, period_text: c.period_text,
       verify_verdict: check?.verdict ?? null, verify_quote: traces.get(m.id)?.verify_quote ?? null, a_group_ids: m.a_group_ids,
     };
     // Preserve the more cautious conclusion when duplicate clauses describe the same rule.
