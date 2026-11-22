@@ -1,6 +1,7 @@
 import type { Profile } from "@/lib/judge/types";
 import type { Offering, PlanEvent, Category, Rule, Restriction } from "./types";
 export const DEMO_PROFILE: Profile = { birthYm: "2000-04", sigungu: "28185", school: "0049007", currentStatus: ["in_training", "unemployed"], interest: "job", events: [], participating: [], source: "demo_persona" };
+export const PERSONA_DEMO_EVENTS: PlanEvent[] = [{ id: "ev-course", type: "training_completion", date: "2026-12-19", status: "scheduled" }];
 export const DEMO_EVENTS: PlanEvent[] = [{ id: "ev-course", type: "training_completion", date: "2026-12-19", status: "scheduled" }, { id: "ev-job", type: "employment", date: "2027-01-20", status: "scheduled" }];
 const rule = (key: Rule["key"], kind: Rule["kind"] = "requires"): Rule => ({ key, kind, reviewed: true, evidenceId: "fixture-rule-1" });
 export function demoCatalog(): Offering[] {

@@ -7,7 +7,6 @@ import { judgePolicy, type Profile } from "@/lib/judge";
 import { categoryOf, policyNotice } from "@/lib/route/roadmap";
 import { evaluatePlanner, type BaseEvaluator, type DraftConflictEvaluator } from "./evaluate";
 import { plannedFor, restrictionVerdict } from "./overlap-bridge";
-import { DEMO_PROFILE, demoCatalog } from "./fixtures";
 import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
 
 export function backendDraftConflict(now: Date, benefits: Benefit[] = []): DraftConflictEvaluator {
@@ -28,11 +27,6 @@ export function backendDraftConflict(now: Date, benefits: Benefit[] = []): Draft
 }
 
 export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date, legacyPlan?: { employAfterMonths?: number | null; businessAfterMonths?: number | null; move?: { sigungu: string; afterMonths: number } | null }): Evaluation {
-  if (input.demoId === "pathfinder-demo-2026") {
-    // The fixed clock and synthetic catalog are selected by a server-owned demo ID,
-    // never merely by the user-controlled profile.source marker.
-    return evaluatePlanner({ ...structuredClone(DEMO_PROFILE), ...profile }, input, demoCatalog(), new Date("2026-11-19T12:00:00+09:00"));
-  }
   const today = toKstDate(now);
   if (input.events === undefined) {
     const events: PlanEvent[] = profile.events.filter(e => e.status === "scheduled" && e.type !== "relocation").map((e, i) => ({ ...e, id: `legacy-${i}`, status: "scheduled" }));
