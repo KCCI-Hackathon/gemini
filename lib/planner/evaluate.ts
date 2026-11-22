@@ -147,10 +147,13 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
       }
       const end = personalWindow?.end ?? null;
       const deadlineKind: Card["deadlineKind"] = officialClosed ? "closed" : o.official.kind === "budget" || o.official.kind === "unknown" || (!o.reviewed && end !== o.official.end) ? "unknown" : end ? (end === o.official.end ? "official" : "personal_estimate") : o.official.kind === "rolling" ? "rolling" : "unknown";
-      for (const question of piece.verdict.questions ?? []) {
-        questions.set(JSON.stringify([question.policyId, question.ruleId, question.question]), question);
+      // 막힌 카드의 질문은 답해도 판정이 안 바뀐다(J-2). 금액 질문은 이미 지난 달·이번 달만 답할 수 있다(J-1).
+      if (availability !== "blocked") for (const question of piece.verdict.questions ?? []) {
+        if (question.answerKind === "monthly_amount" && question.month && question.month > today.slice(0, 7)) continue;
+        questions.set(JSON.stringify([question.policyId, question.ruleId, question.question, question.month ?? null]), question);
       }
-      cards.push({ ...o, evidence: [...o.evidence, ...(piece.verdict.evidence ?? [])], verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
+      const uniqueReasons = reasons.filter((r, i) => reasons.findIndex(x => x.code === r.code && x.message === r.message) === i);
+      cards.push({ ...o, evidence: [...o.evidence, ...(piece.verdict.evidence ?? [])], verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons: uniqueReasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
     }
   }
   for (const card of cards) card.otherStageIds = cards.filter(c => c.offeringId === card.offeringId && c.stageId !== card.stageId && c.availability !== "blocked").map(c => c.stageId);

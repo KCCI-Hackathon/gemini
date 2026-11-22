@@ -4,6 +4,8 @@ import { evaluateRequest } from "../../lib/planner/catalog";
 import type { Benefit, Restriction } from "../../lib/judge/overlap";
 import { restrictionVerdict } from "../../lib/planner/overlap-bridge";
 import type { Evaluation, PlannerInput } from "../../lib/planner/types";
+import { evaluatePlanner } from "../../lib/planner/evaluate";
+import { demoCatalog, DEMO_EVENTS, DEMO_PROFILE } from "../../lib/planner/fixtures";
 
 const now = new Date("2026-11-22T12:00:00+09:00");
 const input = { revision: 0, events: [{ id: "ev-course", type: "training_completion", date: "2026-12-19", status: "scheduled" }], choices: [], mutedKeys: [], preferredCategory: "all" } as const satisfies PlannerInput;
@@ -19,11 +21,23 @@ test("I1 receiving national program blocks challenge support", () => {
   expect(c.evidence.find(e => e.evidenceId === c.reasons[0].evidenceId)?.quote).toBeTruthy();
 });
 test("I2 partial restriction does not lower the verdict", () => {
-  const before = card(run([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 0 } }]), RENT_YEONSU, "current");
-  const after = card(run([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 200000 } }]), RENT_YEONSU, "current");
-  expect(after.reasons.some(r => r.code === "PARTIAL_RESTRICTION" && r.message.includes("청년월세"))).toBe(true);
-  expect(before.reasons.some(r => r.code === "PARTIAL_RESTRICTION")).toBe(false);
-  expect(after.availability).toBe(before.availability);
+  // J-4: 실데이터의 연수구 청년월세 카드는 어느 날짜에도 막혀 있어(blocked == blocked) 아무것도 입증하지 못했다.
+  // 열려 있는 가상 카드로, 부분 제한이 사유만 더하고 판정은 그대로인지 본다.
+  const partial: Restriction = {
+    ruleId: "partial", sourceId: RENT_SRC, sourceName: "청년월세 지원", effect: "personal_payment_block",
+    restricted_item: "해당 월 청년월세 지급액", state: "applies", reason: "해당 월 청년월세 지급액 미지급 · 조사 메모", question: null,
+    summary: "해당 월 청년월세 지급액 미지급", evidence: { field: null, quote: "인용", url: null, checkedAt: "2026-11-22" },
+  };
+  const verdict = restrictionVerdict([partial], "virtual", "current");
+  expect(verdict.availability).toBeNull();
+  const ev = evaluatePlanner(DEMO_PROFILE, { revision: 0, events: DEMO_EVENTS, choices: [], mutedKeys: [], preferredCategory: "all" }, demoCatalog(), now,
+    o => o.offeringId === "demo-housing" ? { ...verdict, availability: verdict.availability ?? "eligible" } : { availability: "eligible", reasons: [] });
+  const before = evaluatePlanner(DEMO_PROFILE, { revision: 0, events: DEMO_EVENTS, choices: [], mutedKeys: [], preferredCategory: "all" }, demoCatalog(), now, () => ({ availability: "eligible", reasons: [] }));
+  const pick = (e: Evaluation) => e.cards.find(c => c.offeringId === "demo-housing" && c.stageId === "current")!;
+  expect(pick(before).availability).toBe("eligible");
+  expect(pick(ev).availability).toBe(pick(before).availability);
+  expect(pick(ev).reasons).toContainEqual(expect.objectContaining({ code: "PARTIAL_RESTRICTION", message: "청년월세 지원 수혜 시 해당 월 청년월세 지급액 미지급" }));
+  expect(pick(ev).reasons.some(r => r.message.includes("조사 메모"))).toBe(false);
 });
 test("I3 six months after last payment releases the block", () => {
   expect(card(run([{ policyId: JOBSEEK, status: "ended", lastPaymentDate: "2026-08-01" }]), CHALLENGE).availability).toBe("blocked");
@@ -39,9 +53,11 @@ test("monthly payment distinguishes confirmed rent restrictions from missing fac
   const unknown = run([{ policyId: RENT_SRC, status: "receiving" }]);
   expect(card(unknown, RENT_YEONSU, "current").reasons.some(r => r.code === "PARTIAL_RESTRICTION")).toBe(false);
   expect(card(unknown, RENT_YEONSU, "current").reasons).toContainEqual(expect.objectContaining({
-    code: "RESTRICTION_QUESTION", message: expect.stringContaining("지급액 확인 필요"),
+    code: "RESTRICTION_QUESTION", message: "11월에 실제로 지급받은 금액은 얼마인가요?",
   }));
-  expect(unknown.questions).toContainEqual(expect.objectContaining({ policyId: RENT_YEONSU, sourcePolicyId: RENT_SRC, answerKind: "monthly_amount" }));
+  // J-2: 이 카드는 접수 마감으로 막혀 있어 답해도 판정이 안 바뀐다. 질문 목록에는 올리지 않는다.
+  expect(card(unknown, RENT_YEONSU, "current").availability).toBe("blocked");
+  expect(unknown.questions.some(q => q.policyId === RENT_YEONSU)).toBe(false);
 });
 test("I5 unknown benefit produces an answerable question", () => {
   const ev = run();

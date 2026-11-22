@@ -20,7 +20,7 @@ function QuestionCard({ question, onAnswer, busy, month }: { question: BenefitQu
       e.preventDefault();
       onAnswer(question, { kind: "monthly_amount", month, amountWon: Number(amount) });
     }}>
-      <label>이번 달 받은 금액(원)<input type="number" inputMode="numeric" min={0} step={1} required value={amount} onChange={e => setAmount(e.target.value)} /></label>
+      <label>{Number(month.slice(5))}월에 받은 금액(원)<input type="number" inputMode="numeric" min={0} step={1} required value={amount} onChange={e => setAmount(e.target.value)} /></label>
       <button disabled={!/^\d+$/.test(amount)}>입력</button>
     </form>
     <button onClick={() => onAnswer(question, { kind: "not_receiving" })}>안 받아요</button>
@@ -55,7 +55,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   return <aside className={s.agent} aria-label="정책 길잡이"><div className={s.agentHead}><Robot /><div><h2>나의 정책 길잡이</h2><small>일정부터 차근차근</small></div><button className={`${s.iconButton} ${s.agentClose}`} onClick={onClose} aria-label="에이전트 닫기">×</button></div>
     {first && <div className={s.questionWrap}>
       <p className={s.questionMeta}>질문 {pick.index}/{pick.total}</p>
-      <QuestionCard key={questionKey(first)} question={first} onAnswer={onAnswer} busy={busy} month={(today ?? toKstDate(new Date())).slice(0, 7)} />
+      <QuestionCard key={questionKey(first)} question={first} onAnswer={onAnswer} busy={busy} month={first.month ?? (today ?? toKstDate(new Date())).slice(0, 7)} />
       <button className={s.textButton} disabled={busy} onClick={() => setSkipped(prev => new Set([...prev, questionKey(first)]))}>나중에 답할게요</button>
     </div>}
     {!first && pick.skipped > 0 && <button className={s.textButton} onClick={() => setSkipped(new Set())}>건너뛴 질문 {pick.skipped}개 다시 보기</button>}

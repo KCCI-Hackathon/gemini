@@ -51,12 +51,19 @@ export type Restriction = {
   effect: ApprovedRule["effect_type"]; restricted_item: string | null;
   state: "applies" | "not_applies" | "needs_info";
   reason: string; question: string | null;
+  /** 답이 Benefit 칸에 담기는 질문의 종류. 있으면 화면이 질문을 보여 준다. 문구 비교 대신 이 칸을 쓴다. */
+  need?: Need;
+  /** need 가 monthly_amount 일 때 묻는 지급 월(YYYY-MM) */
+  month?: string;
+  /** 화면용 짧은 문구. 조사 메모(needs_check_reason · research_basis)는 reason 에만 남긴다. */
+  summary?: string;
   evidence: { field: string | null; quote: string; url: string | null; checkedAt: string };
 };
-type Decision = Pick<Restriction, "state" | "reason" | "question">;
-const applies = (reason: string): Decision => ({ state: "applies", reason, question: null });
+export type Need = "receiving" | "selected" | "ended" | "last_payment" | "monthly_amount";
+type Decision = Pick<Restriction, "state" | "reason" | "question" | "need" | "month" | "summary">;
+const applies = (reason: string, summary?: string): Decision => ({ state: "applies", reason, question: null, ...(summary && { summary }) });
 const no = (reason: string): Decision => ({ state: "not_applies", reason, question: null });
-const ask = (reason: string, question: string): Decision => ({ state: "needs_info", reason, question });
+const ask = (reason: string, question: string, extra: Pick<Decision, "need" | "month" | "summary"> = {}): Decision => ({ state: "needs_info", reason, question, ...extra });
 const factsNeeded: Record<string, string> = {
   activity: "해당 교육기간에 카드로 다른 훈련을 실제 수강하나요?",
   paid_months_at_least: "이 사업에서 실제 지급받은 기간은 몇 개월인가요?",
@@ -81,7 +88,7 @@ function condition(r: ApprovedRule, facts: Benefit[], plans: Benefit[], today: s
   const p = r.condition_params;
   const status = facts.find(f => f.status && f.status !== "unknown" && f.status !== "planned")?.status;
   const unknown = () => ask(r.needs_check_reason ?? "공고의 적용 조건 확인 필요",
-    Object.keys(p).map(k => factsNeeded[k]).find(Boolean) ?? "공고의 어떤 조건이 해당되는지 확인했나요?");
+    Object.keys(p).map(k => factsNeeded[k]).find(Boolean) ?? "공고의 어떤 조건이 해당되는지 확인했나요?", { summary: "공고의 적용 조건 확인 필요" });
   if (!r.condition_type) return unknown();
   const supported: string[] = knownParams[r.condition_type];
   if (Object.keys(p).some(k => !supported.includes(k))) return unknown();
@@ -112,14 +119,14 @@ function condition(r: ApprovedRule, facts: Benefit[], plans: Benefit[], today: s
     case "within_months_after_end": {
       if (typeof p.months !== "number" || !Number.isSafeInteger(p.months) || p.months <= 0) return unknown();
       if (status && status !== "ended") return no("지급 종료 후 제한 조건에 해당하지 않음");
-      if (!status) return ask("지급 종료 여부 확인 필요", "이 사업의 지급이 종료됐나요?");
+      if (!status) return ask("지급 종료 여부 확인 필요", "이 사업의 지급이 종료됐나요?", { need: "ended" });
       const last = facts.find(f => f.lastPaymentDate)?.lastPaymentDate;
-      if (!last || last > today) return ask("마지막 지급일 확인 필요", "실제 마지막 지급일은 언제인가요?");
+      if (!last || last > today) return ask("마지막 지급일 확인 필요", "실제 마지막 지급일은 언제인가요?", { need: "last_payment" });
       return today < addMonths(last, p.months) ? applies("지급 종료 후 제한 기간 이내") : no("지급 종료 후 제한 기간 경과");
     }
     case "selected":
       return status ? (status === "selected" || status === "receiving" ? applies("해당 사업에 선정됨") : no("현재 선정 상태에 해당하지 않음"))
-        : ask("선정 여부 확인 필요", "신청한 뒤 선정 통보를 받았나요?");
+        : ask("선정 여부 확인 필요", "신청한 뒤 선정 통보를 받았나요?", { need: "selected" });
     case "receiving": {
       if (r.effect_type === "amount_deduction" || Object.keys(p).length) {
         const when = p.payment_month ?? today.slice(0, 7);
@@ -127,11 +134,11 @@ function condition(r: ApprovedRule, facts: Benefit[], plans: Benefit[], today: s
         if (!month.safeParse(when).success || typeof min !== "number" || typeof max !== "number" ||
             !Number.isSafeInteger(min) || !Number.isSafeInteger(max) || min < 0 || min > max) return unknown();
         const payment = facts.map(f => f.monthlyPayment).find(m => m?.month === when);
-        if (!payment) return ask("해당 월 지급액 확인 필요", "해당 월에 실제로 지급받은 금액은 얼마인가요?");
+        if (!payment) return ask("해당 월 지급액 확인 필요", `${Number(String(when).slice(5))}월에 실제로 지급받은 금액은 얼마인가요?`, { need: "monthly_amount", month: String(when) });
         return payment.amountWon >= min && payment.amountWon <= max ? applies("해당 월 지급액이 제한 기준에 해당") : no("해당 월 지급액이 제한 기준에 해당하지 않음");
       }
       return status ? (status === "receiving" ? applies("현재 해당 사업 수급 중") : no("현재 수급 중이 아님"))
-        : ask("실제 수급 여부 확인 필요", "해당 사업의 지원금을 현재 받고 있나요?");
+        : ask("실제 수급 여부 확인 필요", "해당 사업의 지원금을 현재 받고 있나요?", { need: "receiving" });
     }
   }
 }
@@ -146,7 +153,7 @@ function restriction(r: ApprovedRule, decision: Decision): Restriction {
   let d = decision;
   if (d.state === "applies") {
     if (r.judgement !== "blocked" || !r.effect_type) {
-      d = ask(r.needs_check_reason ?? "공고의 제한 조건 확인 필요", "이번 회차의 제한이 확인됐나요?");
+      d = ask(r.needs_check_reason ?? "공고의 제한 조건 확인 필요", "이번 회차의 제한이 확인됐나요?", { summary: "공고의 제한 조건 확인 필요" });
     } else if (r.exception && !(r.condition_type === "receiving" &&
       ["수급자격만 있고 수급하지 않으면 참여 가능", "다만, 고용보험에 가입되어 구직급여 수급자격을 갖춘 경우라도 구직급여를 수급하지 않으면 참여 가능"].includes(r.exception))) {
       d = ask("공고의 예외 조건 확인 필요", "다음 예외에 해당하나요? " + r.exception);
@@ -157,7 +164,7 @@ function restriction(r: ApprovedRule, decision: Decision): Restriction {
     } else {
       const itemEffect = r.effect_type === "personal_payment_block" ? " 미지급" : r.effect_type === "amount_deduction" ? " 차감" : " 제한";
       const effect = r.restricted_item ? r.restricted_item + itemEffect : "수혜 불가";
-      d = applies([effect, d.reason, r.research_basis?.conclusion].filter(Boolean).join(" · "));
+      d = applies([effect, d.reason, r.research_basis?.conclusion].filter(Boolean).join(" · "), effect);
     }
   }
   names ??= new Map(loadSnapshot().policies.map(x => [x.id, x.name]));
