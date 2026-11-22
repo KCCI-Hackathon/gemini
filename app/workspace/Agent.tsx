@@ -87,9 +87,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   // 30초가 넘으면 오래 걸린다고 알린다.
   useEffect(() => { setSlow(false); if (!planLoading) return; const t = setTimeout(() => setSlow(true), 30_000); return () => clearTimeout(t); }, [planLoading]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" }); }, [messages.length, recommendation, planLoading, currentQuestionKey, aiQuestionText, skipped.size]);
-  // AI 상담 동의 전에는 채팅을 잠근다. 위의 ‘AI 상담 사용’을 누르면 열린다.
-  const locked = !!consentNeeded;
-  function send(value: string) { if (!value.trim() || busy || locked) return; onSend(value.trim()); setText(""); }
+  function send(value: string) { if (!value.trim() || busy) return; onSend(value.trim()); setText(""); }
   // 추천 블록은 만들어진 메시지 바로 아래에 한 번만 둔다. 뒤에 오는 대화 아래로 따라 내려오지 않게.
   const inlineRecommendation = recommendationAt != null && messages.some(m => m.id === recommendationAt);
   const recommendationBlock = recommendation && <div className={s.agentMessage}>
@@ -111,15 +109,16 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
         {onNewChat && messages.length > 1 && <button type="button" className={s.textButton} onClick={onNewChat} disabled={busy} title="대화만 지워요. 작성 중인 계획과 담은 정책은 그대로예요.">새 대화</button>}
         <button className={`${s.iconButton} ${s.agentClose}`} onClick={onClose} aria-label="에이전트 닫기">×</button>
       </div>
+      {/* AI 상담 동의 전에는 안내문과 동의 버튼만 패널을 채우고, 채팅은 쓸 수 없다 */}
+      {consentNeeded ? <section className={s.agentGate} aria-label="AI 상담 동의">
+        <h3>AI 상담 사용</h3>
+        <p>자유 질문 · 추천은 해외 AI 제공자(OpenAI 또는 Google)에게 보내 정리해요. 보내는 것: 만 나이 범위, 시·군·구 이름, 학력·상태, 일정은 ‘오늘부터 N일 뒤’, 수혜 정책 이름과 상태, 그리고 쓴 질문. 질문 속 이름·상세 주소·전화번호·주민번호·이메일·계좌번호는 찾아서 지우고 보내요. 생년월일·정확한 날짜는 보내지 않고, 대화는 저장하지 않아요. 판정은 늘 코드가 해요.</p>
+        <p><strong>질문에는 이름 · 주소 · 연락처를 쓰지 말아 주세요.</strong></p>
+        <button className={s.primaryButton} onClick={onConsent}>AI 상담 사용</button>
+      </section> : <>
       <div className={s.agentMessages} role="log" aria-live="polite">
         {messages.map(m => <Fragment key={m.id}><div className={`${s.agentMessage} ${m.role === "user" ? s.userMessage : ""}`}><span className={s.srOnly}>{m.role === "user" ? "나" : "길잡이"}: </span>{m.text}{m.retry && onRetry && !planLoading && m.id === messages[messages.length - 1]?.id && <button type="button" className={s.textButton} onClick={onRetry} disabled={busy}>다시 시도</button>}</div>
           {inlineRecommendation && m.id === recommendationAt && recommendationBlock}</Fragment>)}
-        {consentNeeded && <div className={s.agentMessage} role="region" aria-label="AI 상담 동의">
-          <strong>AI 상담 사용</strong>
-          <p>자유 질문 · 추천은 해외 AI 제공자(OpenAI 또는 Google)에게 보내 정리해요. 보내는 것: 만 나이 범위, 시·군·구 이름, 학력·상태, 일정은 ‘오늘부터 N일 뒤’, 수혜 정책 이름과 상태, 그리고 쓴 질문. 질문 속 이름·상세 주소·전화번호·주민번호·이메일·계좌번호는 찾아서 지우고 보내요. 생년월일·정확한 날짜는 보내지 않고, 대화는 저장하지 않아요. 판정은 늘 코드가 해요.</p>
-          <p>질문에는 이름 · 주소 · 연락처를 쓰지 말아 주세요.</p>
-          <button className={s.primaryButton} onClick={onConsent}>AI 상담 사용</button>
-        </div>}
         {consentOn && <button className={s.textButton} onClick={onConsentOff}>AI 상담 끄기</button>}
         {aiQuestion?.text && <AiQuestionCard key={aiQuestion.text} text={aiQuestion.text} target={aiQuestion.target} busy={busy} number={aiQuestion.preparedAnswers ? aiQuestion.preparedAnswers.size + 1 : undefined} onAnswer={v => onAiAnswer?.(v)} onSkip={() => onAiSkip?.()} onLater={onAiLater} onShowRecommendation={onShowRecommendation} />}
         {!aiQuestion && first && <div className={s.questionWrap}>
@@ -132,13 +131,14 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
         {!inlineRecommendation && recommendationBlock}
         <div ref={endRef} />
       </div>
-      <div className={s.agentExamples} aria-label="예시 질문">{AGENT_EXAMPLES.map(q => <button key={q} onClick={() => send(q)} disabled={busy || locked}>{q}</button>)}</div>
+      <div className={s.agentExamples} aria-label="예시 질문">{AGENT_EXAMPLES.map(q => <button key={q} onClick={() => send(q)} disabled={busy}>{q}</button>)}</div>
       <form className={s.agentForm} onSubmit={e => { e.preventDefault(); send(text); }}>
         <label className={s.srOnly} htmlFor="agent-message">길잡이에게 메시지</label>
-        <textarea id="agent-message" disabled={locked} value={text} onChange={e => setText(e.target.value)} placeholder={locked ? "‘AI 상담 사용’을 누르면 채팅할 수 있어요" : "일정이나 정책을 물어보세요 (이름·주소·연락처는 빼고)"} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} />
+        <textarea id="agent-message" value={text} onChange={e => setText(e.target.value)} placeholder="일정이나 정책을 물어보세요 (이름·주소·연락처는 빼고)" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} />
         <button className={s.primaryButton} disabled={busy || !text.trim()}>보내기</button>
       </form>
       <p className={s.agentFoot}>날짜·자격·중복 판정은 규칙 엔진이 하고, 길잡이는 추가로 물어보고 설명하고 추천해요.</p>
+      </>}
     </aside>
   );
 }
