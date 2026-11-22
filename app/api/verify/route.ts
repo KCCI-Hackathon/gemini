@@ -1,4 +1,4 @@
-import { makeAiClient } from "@/lib/ai/client";
+import { makeVerifyClient } from "@/lib/ai/client";
 import { NextResponse } from "next/server";
 import saved from "@/data/verify-results/index.json";
 import { handleVerify } from "@/lib/verify/handler";
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     env: process.env,
     ip,
     now: new Date(),
-    makeClient: () => makeAiClient(process.env),
+    makeClient: () => makeVerifyClient(process.env),
     saved: saved as unknown as Record<string, VerifyResult>,
   });
   return NextResponse.json(out.body, { status: out.status });

@@ -1,0 +1,398 @@
+{
+  "checkedAt": "2026-11-23",
+  "snapshotAsOf": "2026-11-16",
+  "policies": [
+    {
+      "policyId": "20260923005400113569",
+      "title": "공공기술기반 시장연계 창업탐색지원",
+      "links": [
+        {
+          "url": "https://www.compa.re.kr/kor/centerIntro/rnw-v2/pubResUtilLabStartup5.do?goMenuNo=1228000",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "제공된 페이지는 언론보도와 사업소개 목록이며, 2025년도 사업 신청 공고가 아닙니다. 사업소개 목록에 같은 계열의 사업명이 있지만 공고 본문은 확인되지 않습니다."
+    },
+    {
+      "policyId": "20260922005400113554",
+      "title": "스마트시티 혁신인재 육성",
+      "links": [
+        {
+          "url": "https://www.kaia.re.kr/portal/contents.do?menuNo=201270",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "제공된 상세 페이지에는 공고 본문이 없고, 목록에 확인되는 공고는 「AIㆍ스마트도시 혁신인재육성 사업」으로 정책명과 연도가 다른 공고입니다. 나머지 페이지도 규제샌드박스 사업 소개 또는 목록 페이지입니다."
+    },
+    {
+      "policyId": "20260922005400213509",
+      "title": "경기도 청년 참여기구 운영",
+      "links": [
+        {
+          "url": "https://youth.gg.go.kr",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260915005400213416",
+      "title": "경기청년포털 플랫폼 고도화",
+      "links": [
+        {
+          "url": "https://youth.gg.go.kr",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260410005400212685",
+      "title": "울산 세계명문대학 조정 페스티벌",
+      "links": [
+        {
+          "url": "https://www.ubc.co.kr/wp/",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "제시된 페이지는 UBC 뉴스 목록, 시청자위원 현황, 그리고 재난지휘차 관련 뉴스이며 울산 세계명문대학 조정 페스티벌 공고가 아닙니다."
+    },
+    {
+      "policyId": "20260410005400212679",
+      "title": "가족돌봄청년 지원사업",
+      "links": [
+        {
+          "url": "https://www.wfps.or.kr/webuser/page/foryouth.html",
+          "status": 410
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260410005400212674",
+      "title": "고립은둔청년 지원사업",
+      "links": [
+        {
+          "url": "https://www.wfps.or.kr/webuser/page/foryouth.html",
+          "status": 410
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260314005400212162",
+      "title": "청년근로자 내일더하기사업",
+      "links": [
+        {
+          "url": "https://www.gc.go.kr/design/main/index.html",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260314005400212161",
+      "title": "중소기업 청년근로자 3·6·9 미래희망 지원사업",
+      "links": [
+        {
+          "url": "https://www.gc.go.kr/design/main/index.html",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260313005400212159",
+      "title": "2026 평택 문화지대 기반 활성화(찾아가는 콘서트)",
+      "links": [
+        {
+          "url": "https://www.pccf.or.kr/page.do?PAGE=sub03_03",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20260313005400212157",
+      "title": "2026 청년예술 지원사업(평택시)",
+      "links": [
+        {
+          "url": "https://www.pccf.or.kr/page.do?PAGE=sub03_03",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251223005400212046",
+      "title": "청년브랜드참여단 운영",
+      "links": [
+        {
+          "url": "https://www.chungbuk.go.kr/brand/contents.do?key=5320",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251223005400212045",
+      "title": "충청북도 청년정책조정위원회 운영",
+      "links": [
+        {
+          "url": "https://www.chungbuk.go.kr/young/contents.do?key=1316",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251121005400211918",
+      "title": "충북형 도시농부 지원",
+      "links": [
+        {
+          "url": "https://www.chungbuk.go.kr/brand/contents.do?key=4735",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251113005400211884",
+      "title": "탑동 청년문화 복합콘텐츠 공간 조성 기본계획 수립",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/support-policy/61",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251113005400211883",
+      "title": "글로벌 청년창의 레지던시",
+      "links": [
+        {
+          "url": "http://www.cifaljeju.org/bbs/board.php?bo_table=sub05_3&wr_id=204",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251113005400211882",
+      "title": "가정위탁 보호종료아동 자립정착금",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/support-policy/103",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251113005400211881",
+      "title": "아동복지시설 보호종료아동 자립정착금",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/support-policy/102",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251113005400211879",
+      "title": "청소년쉼터 퇴소 청소년 자립지원수당 지원",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/support-policy/100",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251113005400211878",
+      "title": "보호종료아동 자립지원",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/support-policy/99",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20251107005400211818",
+      "title": "지역주도형 청년일자리사업",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/support-policy/3",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250903005400211605",
+      "title": "구인‧구직만남의 날, 찾아가는 일자리상담소 운영",
+      "links": [
+        {
+          "url": "https://sjepa.or.kr/page/sub4_2",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250903005400211599",
+      "title": "지역산업맞춤형 일자리창출 지원",
+      "links": [
+        {
+          "url": "https://sjepa.or.kr/page/main",
+          "status": 404
+        },
+        {
+          "url": "https://sjepa.or.kr/page/sub4_2",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250718005400211411",
+      "title": "청년이어드림(Dream)지원금",
+      "links": [
+        {
+          "url": "https://jejuyouthdream.com/jeju-dream",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 번째 페이지는 청년이어드림 플랫폼과 정책 전달체계를 소개하는 페이지이고, 두 번째 페이지는 상담 노쇼 및 당일 취소 관련 이용 안내입니다. 어느 페이지도 청년이어드림지원금 사업 공고가 아닙니다."
+    },
+    {
+      "policyId": "20250716005400111292",
+      "title": "가족돌봄청년 지원사업",
+      "links": [
+        {
+          "url": "https://www.wfps.or.kr/webuser/page/foryouth.html",
+          "status": 410
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250715005400111252",
+      "title": "청년중독관리사업 추진",
+      "links": [
+        {
+          "url": "https://bye-addiction.or.kr/wp_main/index",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250623005400111109",
+      "title": "청년 등 기업가 대상 중소기업 법률 서비스 지원",
+      "links": [
+        {
+          "url": "https://9988law.com/startlaw",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250617005400110962",
+      "title": "K-Shield 주니어 15기 정규과정",
+      "links": [
+        {
+          "url": "https://academy.kisa.or.kr/edu/apply/applyEduDetail.do?APPLY=04&SQ=9886",
+          "status": 404
+        },
+        {
+          "url": "https://academy.kisa.or.kr/cont/programInfo/kShieldJunior.do",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250304005400210577",
+      "title": "충주시 관내학교 졸업생 장기근속 장려금 지원",
+      "links": [
+        {
+          "url": "https://job.chungju.go.kr/introduceCenter/notice?srl_board=2345&order=read",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250304005400210576",
+      "title": "충주시 청년 구직자 취업 지원",
+      "links": [
+        {
+          "url": "https://job.chungju.go.kr/",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250220005400210484",
+      "title": "충북 다자녀 행복카드",
+      "links": [
+        {
+          "url": "https://ilovebonus.bccard.com/ilovebonus",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    },
+    {
+      "policyId": "20250219005400210459",
+      "title": "경상남도 청년 면접정장 무료대여",
+      "links": [
+        {
+          "url": "https://youth.gyeongnam.go.kr/youth/youthPolicySearchView.es?page_no=1&mid=a10101000000&start_date=&end_date=&apply_availablity=&policy_title=&keyword=&boardId=4&orderby=LATEST&policy_no=1568",
+          "status": 404
+        }
+      ],
+      "movedCheckedAt": "2026-11-23",
+      "movedReason": "첫 화면에서 열 수 있는 후보 링크가 없음"
+    }
+  ]
+}
