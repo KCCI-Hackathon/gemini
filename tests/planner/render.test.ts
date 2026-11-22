@@ -26,6 +26,9 @@ test("agent shows a benefit question with its answer buttons", () => {
     questions: [{ question, policyId: "target", sourcePolicyId: "source", sourceName: "국민취업지원제도", ruleId: "rule", answerKind: "receiving" }],
   }));
   expect(html).toContain(question);
+  expect(html).toContain("질문 1/1");
+  expect(html).toContain("나중에 답할게요");
+  expect(html.indexOf(question)).toBeGreaterThan(html.indexOf('role="log"'));
   expect(html).toMatch(/<button\b[^>]*>받고 있어요<\/button>/);
   expect(html).toMatch(/<button\b[^>]*>안 받아요<\/button>/);
 });
@@ -62,6 +65,12 @@ test("agent footer describes the verdict and recommendation roles", () => {
   expect(html).toContain("규칙 엔진");
   expect(html).toContain("추천해요");
   expect(html).not.toContain("설명만 해요");
+});
+test("agent uses the MVP2 heading and compact example prompts", () => {
+  const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {} }));
+  expect(html).toContain("일정을 말하면 보드에 바로 반영해요");
+  expect(html).toContain("길잡이");
+  expect(html).toContain('aria-label="예시 질문"');
 });
 
 afterEach(() => vi.unstubAllGlobals());
