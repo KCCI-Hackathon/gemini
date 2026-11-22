@@ -31,6 +31,7 @@ npm run dev
 - 상태 갈림길 루트(`lib/route`): 지금 → 수료한 뒤 → 취업/창업 갈림길. 마디 안의 번호는 `lib/route/weight.ts`의 "먼저 확인할 순서" 점수(우리가 정한 규칙, 이유와 점수를 화면에 표시)이고, 정책 사이 연결선은 공고 인용이 있는 것만 그립니다.
 - 상담 질문(`lib/agent/questions.ts`): 답하면 판정이 바뀌는 질문을 코드가 고릅니다. 답은 외부 AI로 가지 않습니다.
 - 상담 에이전트(`lib/agent/run.ts`): 가상 인물 시연 전용.
+- 계정·계정 저장 계획·알림(`lib/account`): 이메일·비밀번호 로그인, 서버 저장 계획, 화면 안 알림. 운영 DB를 정하기 전까지 SQLite이며 Vercel에서는 유지되지 않습니다. [API](docs/backend/2026-11-22-account-api.md)
 - 설계 문서: `docs/2026-11-16-policy-twin-design.md`, 구현 계획: `docs/superpowers/plans/2026-11-16-galimgil.md`
 
 ## 실행
