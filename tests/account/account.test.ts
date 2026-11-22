@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getMe, login, logout, resetLoginLimits, signup, SESSION_COOKIE } from "@/lib/account/auth";
 import { rejectCrossSite, sessionToken } from "@/lib/account/http";
-import { getSettings, listNotifications, markRead, planNotifications, putSettings, runDailyNotifications } from "@/lib/account/notifications";
+import { getSettings, listNotifications, markRead, planNotifications, putSettings, refreshUserNotifications, runDailyNotifications } from "@/lib/account/notifications";
 import { createPlan, getPlan, listPlans, MAX_PLANS, resetSaveLimits } from "@/lib/account/plans";
-import { sqliteStore, type AccountStore, type User } from "@/lib/account/store";
+import { seedUsers, sqliteStore, type AccountStore, type User } from "@/lib/account/store";
+import seedAccounts from "@/data/account/seed-accounts.json";
 import { PERSONA_A } from "@/lib/judge/personas";
 import { evaluateRequest } from "@/lib/planner/catalog";
 import { PERSONA_DEMO_EVENTS } from "@/lib/planner/fixtures";
@@ -56,6 +57,17 @@ describe("계정", () => {
     for (let i = 0; i < 10; i++) expect((await login({ email: "a@example.com", password: "nope-nope" }, ctx())).status).toBe(401);
     expect((await login({ email: "a@example.com", password: "password123" }, ctx())).status).toBe(429);
     expect((await login({ email: "a@example.com", password: "password123" }, { ...ctx(), now: new Date(now.getTime() + 16 * 60_000) })).status).toBe(200);
+  });
+});
+
+describe("시연 계정", () => {
+  it("저장소를 열 때 해시만 가진 시연 계정을 넣고, 같은 이메일로는 다시 가입할 수 없다", async () => {
+    seedUsers(store); seedUsers(store);
+    const seeded = store.findUserByEmail(seedAccounts[0].email)!;
+    expect(seeded).toMatchObject({ id: "seed-demo-account", displayName: "시연 계정" });
+    expect(seeded.passwordHash).toMatch(/^scrypt\$[^$]+\$[^$]+$/);
+    expect((await signup({ email: seedAccounts[0].email, password: "another-pass-1" }, ctx())).status).toBe(409);
+    expect(() => seedUsers(store, [{ ...seedAccounts[0], passwordHash: "plain" }])).toThrow();
   });
 });
 
@@ -168,6 +180,20 @@ describe("정기 작업 시간 한도", () => {
     const at = new Date("2026-12-20T09:00:00+09:00");
     expect(runDailyNotifications(store, at, 1500, clock)).toMatchObject({ plans: 1, complete: false });
     expect(store.plansToCheck(10)).toEqual([second, first]);
+  }, 30_000);
+});
+
+describe("알림 목록을 열 때 확인", () => {
+  it("그 사용자의 계획만, 한 시간에 한 번 다시 판정한다", async () => {
+    const a = await account("a@example.com"), b = await account("b@example.com");
+    createPlan(a.user, "key-refresh-a1", planBody, ctx());
+    createPlan(b.user, "key-refresh-b1", planBody, ctx());
+    const at = new Date("2026-12-20T09:00:00+09:00");
+    expect(refreshUserNotifications(store, a.user.id, at)).toMatchObject({ plans: 1, failed: 0 });
+    expect(refreshUserNotifications(store, a.user.id, new Date(at.getTime() + 30 * 60_000)).plans).toBe(0);
+    expect(refreshUserNotifications(store, a.user.id, new Date(at.getTime() + 61 * 60_000)).plans).toBe(1);
+    expect((listNotifications(a.user, store).body as { unread: number }).unread).toBeGreaterThan(0);
+    expect(listNotifications(b.user, store).body).toEqual({ notifications: [], unread: 0 });
   }, 30_000);
 });
 

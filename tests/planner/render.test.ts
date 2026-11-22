@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { Building, canLeaveBuilding, MIN_BUILD_MS } from "@/app/workspace/Building";
 import { ProfileForm } from "@/app/workspace/Dialogs";
-import { demoStart, OnboardingScreen, personaProfile, SignupScreen, startInput } from "@/app/workspace/Entry";
+import { demoStart, OnboardingScreen, personaProfile, SignupScreen, startInput, submitSignup } from "@/app/workspace/Entry";
 import { Nav, resolveScreen, screenOf } from "@/app/workspace/Nav";
-import { DEMO_MESSAGE } from "@/app/login/LoginForm";
+import { ACCOUNT_NOTE } from "@/app/login/LoginForm";
 import { PERSONA_A } from "@/lib/judge/personas";
 import { PERSONA_DEMO_EVENTS } from "@/lib/planner/fixtures";
 import { PolicyCard } from "@/app/workspace/PolicyCard";
@@ -85,7 +85,7 @@ function findAll(node: unknown, test: (el: Node) => boolean): Node[] {
 }
 test("demo entry still opens persona board", () => {
   const onDemo = vi.fn(), onNext = vi.fn();
-  const tree = SignupScreen({ onNext, onDemo, onSaved: () => {}, savedCount: 0 });
+  const tree = SignupScreen({ me: { mode: "guest" }, onNext, onDemo, onSaved: () => {}, onSignedUp: () => {}, onLogout: () => {}, savedCount: 0 });
   const demo = findAll(tree, el => el.type === "button" && textOf(el) === "예시로 둘러보기");
   expect(demo).toHaveLength(1);
   (demo[0].props!.onClick as () => void)();
@@ -101,23 +101,30 @@ test("demo entry still opens persona board", () => {
   expect(input.demoId).toBe("pathfinder-demo-2026");
   expect(startInput(personaProfile, false).events).toEqual([]);
 });
-test("signup is a demo screen that never sends or stores input", () => {
-  const fetchSpy = vi.fn();
+test("signup validates, sends only to the account API and never stores credentials", async () => {
   const store = { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() };
-  vi.stubGlobal("fetch", fetchSpy); vi.stubGlobal("localStorage", store); vi.stubGlobal("sessionStorage", store);
-  const onNext = vi.fn(), preventDefault = vi.fn();
-  const tree = SignupScreen({ onNext, onDemo: () => {}, onSaved: () => {}, savedCount: 2 });
-  (findAll(tree, el => el.type === "form")[0].props!.onSubmit as (e: unknown) => void)({ preventDefault });
-  expect(preventDefault).toHaveBeenCalled();
-  expect(onNext).toHaveBeenCalledTimes(1);
-  expect(fetchSpy).not.toHaveBeenCalled();
+  vi.stubGlobal("localStorage", store); vi.stubGlobal("sessionStorage", store);
+  const signup = vi.fn(async () => ({ mode: "account" as const, userId: "u", displayName: "a", durable: true }));
+  const form = { email: "a@example.com", password: "password123", confirm: "password123", agreed: true };
+  expect(await submitSignup({ ...form, confirm: "other" }, signup)).toBe("비밀번호 확인이 일치하지 않아요.");
+  expect(await submitSignup({ ...form, agreed: false }, signup)).toBe("필수 약관에 동의해 주세요.");
+  expect(await submitSignup({ ...form, email: " " }, signup)).toBe("이메일과 비밀번호를 입력해 주세요.");
+  expect(signup).not.toHaveBeenCalled();
+  expect(await submitSignup(form, signup)).toBeNull();
+  expect(signup).toHaveBeenCalledWith("a@example.com", "password123");
+  expect(await submitSignup(form, async () => { throw new Error("이미 가입된 이메일이에요. 로그인해 주세요."); })).toBe("이미 가입된 이메일이에요. 로그인해 주세요.");
   expect(store.setItem).not.toHaveBeenCalled();
-  const html = renderToStaticMarkup(React.createElement(SignupScreen, { onNext, onDemo: () => {}, onSaved: () => {}, savedCount: 2 }));
-  expect(html).toContain(DEMO_MESSAGE);
-  expect(html).toContain('href="/login"');
-  expect(html).toContain("저장한 계획 확인 (2)");
-  expect(html).not.toContain("알림 받기");
-  for (const word of ["카카오", "네이버", "또는 이메일로"]) expect(html).not.toContain(word);
+  const props = { onNext: () => {}, onDemo: () => {}, onSaved: () => {}, onSignedUp: () => {}, onLogout: () => {}, savedCount: 2 };
+  const guest = renderToStaticMarkup(React.createElement(SignupScreen, { ...props, me: { mode: "guest" } }));
+  expect(guest).toContain(ACCOUNT_NOTE);
+  expect(guest).toContain('href="/login"');
+  expect(guest).toContain("저장한 계획 확인 (2)");
+  for (const word of ["카카오", "네이버", "또는 이메일로", "시연용 화면"]) expect(guest).not.toContain(word);
+  const account = renderToStaticMarkup(React.createElement(SignupScreen, { ...props, me: { mode: "account", userId: "u", displayName: "하우", durable: false } }));
+  expect(account).toContain("하우님, 반가워요");
+  expect(account).toContain("로그아웃");
+  expect(account).toContain("재시작하면 저장한 내용이 사라질 수 있어요");
+  expect(account).not.toContain("가입하고 내 정보 입력하기");
 });
 test("onboarding notice matches actual ai use", () => {
   const html = renderToStaticMarkup(React.createElement(ProfileForm, { onSave: () => {} }));

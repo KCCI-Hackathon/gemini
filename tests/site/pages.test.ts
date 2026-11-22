@@ -2,7 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 import Landing from "@/app/page";
-import { demoSubmit, DEMO_MESSAGE, LoginForm } from "@/app/login/LoginForm";
+import { ACCOUNT_NOTE, LoginForm, submitLogin } from "@/app/login/LoginForm";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -14,27 +14,24 @@ test("landing renders hero and links", () => {
   expect(html).not.toContain(".html");
 });
 
-test("demo login never sends or stores input", () => {
-  const fetchSpy = vi.fn();
+test("login sends credentials only to the account API and never stores them", async () => {
   const store = { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() };
-  vi.stubGlobal("fetch", fetchSpy);
   vi.stubGlobal("localStorage", store);
   vi.stubGlobal("sessionStorage", store);
-  const go = vi.fn();
-  const preventDefault = vi.fn();
-  demoSubmit({ preventDefault }, go);
-  expect(preventDefault).toHaveBeenCalled();
-  expect(go).toHaveBeenCalledWith("/app#building");
-  expect(fetchSpy).not.toHaveBeenCalled();
+  const login = vi.fn(async () => ({ mode: "account" as const, userId: "u", displayName: "a", durable: true }));
+  expect(await submitLogin("", "pw", login)).toBe("이메일과 비밀번호를 입력해 주세요.");
+  expect(login).not.toHaveBeenCalled();
+  expect(await submitLogin("a@example.com", "password123", login)).toBeNull();
+  expect(login).toHaveBeenCalledWith("a@example.com", "password123");
+  expect(await submitLogin("a@example.com", "wrong", async () => { throw new Error("이메일 또는 비밀번호가 맞지 않아요."); })).toBe("이메일 또는 비밀번호가 맞지 않아요.");
   expect(store.setItem).not.toHaveBeenCalled();
   const html = renderToStaticMarkup(React.createElement(LoginForm));
   expect(html).toContain("로그인");
   expect(html).toContain('href="/app#signup"');
-  expect(DEMO_MESSAGE).toBe("시연용 화면이에요. 입력한 내용은 어디로도 전송되지 않아요.");
+  expect(html).toContain(ACCOUNT_NOTE);
 });
 
-test("login has no social sign-in and always shows the demo notice", () => {
+test("login has no social sign-in", () => {
   const html = renderToStaticMarkup(React.createElement(LoginForm));
-  for (const word of ["카카오", "네이버", "또는"]) expect(html).not.toContain(word);
-  expect(html).toContain(DEMO_MESSAGE);
+  for (const word of ["카카오", "네이버", "또는", "시연용 화면"]) expect(html).not.toContain(word);
 });
