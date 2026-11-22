@@ -117,6 +117,23 @@ export function baselineOpts(...profiles: Profile[]): JudgeOpts {
 const UNREPRESENTABLE = ["0013004", "0013006", "0013008", "0013009"];
 const EMPLOYMENT_KEYS: StatusKey[] = ["unemployed", "employed", "business_registered"];
 
+// 온통청년 학력 코드는 학업 단계 순서다(0049001 고졸 미만 … 0049008 대학원). 0049009 기타, 0049010 제한 없음.
+const SCHOOL_STEPS = ["0049001", "0049002", "0049003", "0049004", "0049005", "0049006", "0049007", "0049008"];
+/**
+ * 입력한 학력이 정책의 학력 코드에 맞는지. ok 충족, near 확인 필요, far 불충족.
+ * 졸업 예정과 졸업처럼 한 단계 차이는 공고마다 인정 범위가 달라 확인 필요로 두고, 두 단계 이상 떨어질 때만 불충족으로 본다.
+ * 화면의 "고등학교 졸업"(0049003)은 졸업 예정 · 졸업(0049003 · 0049004)을 모두 본다.
+ */
+export function schoolFit(codes: string[], mine: string): "ok" | "near" | "far" {
+  if (!codes.length || codes.includes("0049010")) return "ok";
+  const own = mine === "0049003" ? ["0049003", "0049004"] : [mine];
+  if (own.some(c => codes.includes(c))) return "ok";
+  const at = own.map(c => SCHOOL_STEPS.indexOf(c));
+  if (at.some(i => i < 0) || codes.includes("0049009")) return "near";
+  const gap = Math.min(...codes.map(c => SCHOOL_STEPS.indexOf(c)).filter(i => i >= 0).flatMap(i => at.map(j => Math.abs(i - j))));
+  return Number.isFinite(gap) && gap >= 2 ? "far" : "near";
+}
+
 export function judgePersonal(
   p: Policy,
   v: VerifiedPolicy | undefined,
@@ -206,7 +223,9 @@ export function judgePersonal(
       verdict.push(causedByTransition || ambiguous || statusUnknown ? "needs_check" : "ineligible", REASON.codeStatus);
     }
   }
-  if (p.schoolCodes.length && !p.schoolCodes.includes("0049010") && !p.schoolCodes.includes(profile.school)) verdict.push("needs_check", REASON.school);
+  const school = schoolFit(p.schoolCodes, profile.school);
+  if (school === "far") verdict.push("ineligible", "학력 조건 불충족");
+  else if (school === "near") verdict.push("needs_check", REASON.school);
   if (p.specialCodes.length && !p.specialCodes.includes("0014010")) verdict.push("needs_check", REASON.special);
   if (p.marriageCode && p.marriageCode !== "0055003") verdict.push("needs_check", REASON.marriage);
   if (p.incomeCode === "0043002" || p.incomeCode === "0043003") verdict.push("needs_check", REASON.income);
