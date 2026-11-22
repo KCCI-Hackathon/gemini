@@ -18,7 +18,7 @@ export type PersonaId = keyof typeof PERSONAS;
 /** 화면에서 고르는 계획과 응시일을 제외한 시연 원본을 찾는다. */
 export function findRegisteredPersona(profile: Profile): Profile | undefined {
   return Object.values(PERSONAS).find((base) =>
-    profile.source === base.source && profile.birthYm === base.birthYm &&
+    profile.source === base.source && profile.birthYm === base.birthYm && profile.birthDate === base.birthDate &&
     profile.sigungu === base.sigungu && profile.school === base.school &&
     profile.recentHistory === base.recentHistory &&
     profile.currentStatus.length === base.currentStatus.length &&

@@ -13,7 +13,9 @@ export type ProfileEvent = {
 };
 
 export type Profile = {
-  birthYm: string; // YYYY-MM
+  birthYm: string; // YYYY-MM (legacy and compatible month)
+  /** Exact date for new profiles. Missing only on legacy/demo month-only profiles. */
+  birthDate?: string; // YYYY-MM-DD
   sigungu: string; // 시군구 코드 5자리
   school: string; // schoolCd (예: 0049007 대학 졸업)
   currentStatus: StatusKey[];

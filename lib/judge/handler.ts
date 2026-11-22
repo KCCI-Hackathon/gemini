@@ -1,6 +1,7 @@
 // /api/judge 처리. 판정은 우리 서버 코드가 하며 외부 AI를 부르지 않는다. 요청 내용을 저장·기록하지 않는다.
 import { z } from "zod";
 import { toKstDate } from "@/lib/date";
+import { isBirthPairConsistent, isValidBirthDate } from "./birth-date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { overlapDataVersion } from "@/lib/data/overlap";
 import { BenefitsSchema, type Restriction } from "./overlap";
@@ -23,7 +24,8 @@ import type { Evaluation } from "@/lib/planner/types";
 const NATIONAL = "20260710005400113256";
 
 const ProfileSchema = z.object({
-  birthYm: z.string().regex(/^\d{4}-\d{2}$/),
+  birthYm: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  birthDate: z.string().refine(value => isValidBirthDate(value), "생년월일은 실제 날짜이며 미래일 수 없어요.").optional(),
   sigungu: z.string().regex(/^\d{5}$/),
   school: z.string().regex(/^\d{7}$/),
   currentStatus: z.array(StatusKey),
@@ -33,6 +35,8 @@ const ProfileSchema = z.object({
   recentHistory: z.enum(["yes", "no"]).optional(),
   examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   source: z.enum(["demo_persona", "user"]),
+}).superRefine((profile, ctx) => {
+  if (!isBirthPairConsistent(profile.birthYm, profile.birthDate)) ctx.addIssue({ code: "custom", message: "생년월일과 출생연월이 일치하지 않아요.", path: ["birthDate"] });
 });
 
 export const JudgeRequestSchema = z.object({

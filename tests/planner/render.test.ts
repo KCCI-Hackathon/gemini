@@ -164,3 +164,18 @@ test("building shows the trail and waits for the request and 1.2 seconds", () =>
   expect(canLeaveBuilding(false, 9000)).toBe(false);
   expect(canLeaveBuilding(true, 1200)).toBe(true);
 });
+
+test("guide avatar uses the official PathFinder robot asset", () => {
+  const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {} }));
+  expect(html).toContain('src="/pathfinder/robot-face.png"');
+  expect(html).toContain('alt="PathFinder 길잡이"');
+});
+
+test("profile form asks for an exact birthday and staged region steps", () => {
+  const html = renderToStaticMarkup(React.createElement(ProfileForm, { onSave: () => {} }));
+  expect(html).toContain("생년월일");
+  expect(html).toContain('aria-label="달력 열기"');
+  expect(html).toContain("시·도");
+  expect(html).toContain("시·군·구");
+  expect(html).not.toContain('type="month"');
+});
