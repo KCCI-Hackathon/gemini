@@ -348,3 +348,10 @@ html:has(.app) { zoom:.75; }
 .compareResult strong span { color:#2C64DB; margin-left:4px; }
 .compareResult p { margin:6px 0 0; font-size:13px; line-height:1.5; }
 @media(max-width:760px) { .compareFields { grid-template-columns:1fr; } }
+
+/* 프로필 조건 칩: 켜진 조건은 초록 체크 + 색칠, 꺼진 조건은 회색 */
+.profileChip { display:inline-flex; align-items:center; gap:6px; }
+.activeChip { background:#E8F6EE; border-color:#9ED6B6; color:#0E7A49; font-weight:700; }
+.chipMark { display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; font-size:11px; line-height:1; }
+.activeChip .chipMark { background:#12965A; color:#fff; }
+.mutedChip .chipMark { border:1.5px solid #c3cbd8; }
