@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
 import { judgePolicy, judgeAll, REASON } from "@/lib/judge";
-import { ageRange } from "@/lib/judge/personal";
+import { ageRange, schoolFit } from "@/lib/judge/personal";
 import { PERSONA_A } from "@/lib/judge/personas";
 import type { Policy } from "@/lib/data/types";
 
@@ -142,4 +142,17 @@ describe("judgeAll", () => {
     for (const r of hist) expect(r.verified).toBe(false);
     expect(results.filter((r) => r.verified).length).toBe(6);
   });
+});
+
+test("학력 코드는 두 단계 이상 차이날 때만 불충족, 한 단계 차이 · 기타는 확인 필요", () => {
+  expect(schoolFit([], "0049007")).toBe("ok");
+  expect(schoolFit(["0049010"], "0049007")).toBe("ok");
+  expect(schoolFit(["0049007", "0049008"], "0049007")).toBe("ok");
+  expect(schoolFit(["0049004"], "0049003")).toBe("ok"); // 화면의 고등학교 졸업은 졸업 예정 · 졸업 둘 다
+  expect(schoolFit(["0049005"], "0049007")).toBe("far"); // 대학 재학 대상, 대학 졸업자
+  expect(schoolFit(["0049002", "0049003"], "0049007")).toBe("far");
+  expect(schoolFit(["0049006"], "0049007")).toBe("near"); // 졸업 예정 대상, 졸업자
+  expect(schoolFit(["0049008"], "0049007")).toBe("near");
+  expect(schoolFit(["0049005", "0049009"], "0049007")).toBe("near");
+  expect(schoolFit(["0049005"], "0049010")).toBe("near"); // 화면에서 기타를 고름
 });

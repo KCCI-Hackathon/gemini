@@ -44,9 +44,9 @@ const initialMessage: Message = { id: 0, role: "assistant", text: "안녕하세�
 type Filter = { category: Category | "all" };
 type EligibilityTab = Card["eligibility"];
 const ELIGIBILITY_TABS: { id: EligibilityTab; label: string }[] = [
-  { id: "blocked", label: "수혜불가능" },
+  { id: "blocked", label: "신청 제한" },
   { id: "needs_check", label: "확인 필요" },
-  { id: "eligible", label: "수혜가능" },
+  { id: "eligible", label: "신청 가능" },
 ];
 type PendingSave = { target: Draft; recommendation: boolean; source?: AiRecommendation["source"] };
 const cardKey = (c: Choice) => `${c.stageId}|${c.offeringId}`;

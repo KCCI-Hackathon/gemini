@@ -14,9 +14,14 @@ test("backend eligible policy is eligible with its verify badge", () => {
   expect(card.verifyLabel).toBe("근거 확인 대기");
   expect(card.reasons.map(r => r.code)).not.toContain("UNREVIEWED");
 });
-test("code_met_unreviewed keeps the spec wording", () => {
-  const card = ev.cards.find(c => c.availability === "needs_check" && c.reasons.some(r => r.message === "일부 조건 충족 · 공고 확인 필요"));
-  expect(card).toBeDefined();
+test("code-met policies without a reviewed notice are eligible when nothing else is unknown", () => {
+  const cards = ev.cards.filter(c => c.reasons.some(r => r.code === "UNREVIEWED"));
+  expect(cards.length).toBeGreaterThan(0);
+  // 입력 정보로 확인할 조건을 모두 충족하고 다른 확인 사유가 없으면 신청 가능, 본문 확인은 안내로만 남긴다
+  const clean = cards.filter(c => c.reasons.every(r => r.code === "UNREVIEWED"));
+  expect(clean.length).toBeGreaterThan(0);
+  expect(clean.every(c => c.availability === "eligible")).toBe(true);
+  expect(clean[0].reasons[0].message).toBe("입력 정보 기준 조건 충족 · 공고 본문 확인 권장");
 });
 test("overlap language in an official notice without a linked rule stays in needs-check", () => {
   const card = ev.cards.find(c => c.title === "K-뉴딜 아카데미" && c.stageId === "ev-course");
