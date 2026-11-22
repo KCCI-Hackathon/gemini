@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { type Case, type ClauseRow, VerdictSchema } from "@/lib/data/overlap-schema";
 import type { CandidateSet } from "./merge";
-import { isScanModel, models, reviewModel, type RunState } from "./gemini";
+import { isReviewModel, isScanModel, models, reviewModels, type RunState } from "./gemini";
 import type { Verification } from "./types";
 
 const hash=z.string().regex(/^[a-f0-9]{64}$/);
@@ -20,6 +20,7 @@ export type BatchProof=z.infer<typeof proof>;
 export type RunReport=z.infer<typeof reportSchema> & {
   missed:string[],falseBlockedCases:string[],wrongLinks:string[],newPairs:Record<string,number>,
   correctSupported:{numerator:number,denominator:number},controlsContradicted:{numerator:number,denominator:number}
+  reviewTimings?:{model:string;sampleCount:number;averageMs:number|null}[],
 };
 function hasProof(r: Omit<RunReport,"passed">) {
   if(!r.complete || !r.total || r.covered>r.total || r.falseBlocked || r.wrongSupported || r.wrongTotal!==3) return false;
@@ -29,7 +30,7 @@ function hasProof(r: Omit<RunReport,"passed">) {
   if(!verified.size || !r.batches.length) return false;
   const singleScan = r.batches.every(b => !b.second.length);
   const scanned = new Set(r.requests.filter(q => q.stage !== "verify").map(q => q.model));
-  if (singleScan && (verified.size !== 1 || !verified.has(reviewModel) ||
+  if (singleScan && ([...verified].some(model => !isReviewModel(model)) ||
       scanned.size !== 1 || !isScanModel([...scanned][0]))) return false;
   const extractRuns=new Set<string>();
   for(const b of r.batches){
@@ -102,6 +103,12 @@ export function score(cases:Case[],agent:CandidateSet,checks:Verification[],run:
     newPairs[r.verdict]=(newPairs[r.verdict]??0)+1;
   const valid=checks.every(c=>refs.get(c.response_hash)?.stage==="verify" && refs.get(c.response_hash)?.model===c.model);
   const used=new Set(run.requests.filter(q=>q.stage==="verify").map(q=>q.model));
+  const measured = run.requests.filter(q => q.stage === "verify" && q.completed && q.durationMs !== undefined);
+  const reviewTimings = reviewModels.map(model => {
+    const samples = measured.filter(q => q.model === model);
+    return { model, sampleCount: samples.length,
+      averageMs: samples.length ? Math.round(samples.reduce((sum, q) => sum + q.durationMs!, 0) / samples.length) : null };
+  });
   const report:RunReport={
     run_id:run.run_id,startedAt:run.startedAt,snapshotSha256:run.snapshotSha256,researchSha256:run.researchSha256,casesSha256:run.casesSha256,
     ...hashes,requests:run.requests.map(({stage,model,hash})=>({stage,model,hash})),modelsUsed:[...new Set(run.requests.map(q=>q.model))],batches,controls,
@@ -110,7 +117,8 @@ export function score(cases:Case[],agent:CandidateSet,checks:Verification[],run:
     covered:cases.length-missed.length,total:cases.length,falseBlocked:falseBlockedCases.length,wrongTotal:new Set(controls.map(c=>c.type)).size,
     wrongSupported:controls.filter(c=>c.verdict==="supported").length,missed,falseBlockedCases,wrongLinks,newPairs,passed:false,
     correctSupported:{numerator:verified.filter(c=>c.verdict==="supported" && c.validQuote).length,denominator:verified.length},
-    controlsContradicted:{numerator:controls.filter(c=>c.verdict==="contradicted" && c.validQuote).length,denominator:controls.length}
+    controlsContradicted:{numerator:controls.filter(c=>c.verdict==="contradicted" && c.validQuote).length,denominator:controls.length},
+    ...(measured.length ? { reviewTimings } : {})
   };
   report.passed=hasProof(report);
   return report;

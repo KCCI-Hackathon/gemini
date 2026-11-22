@@ -80,7 +80,9 @@ npm run db:verify
 
 새 중복수혜 실행은 스냅샷의 전체 지역에 대해 참여 제한·추가 신청자격·지원 내용의 비어 있지 않은 원문을 모두 훑습니다. 기본 추출은 묶음당 한 번이며, 원문과 맞지 않는 응답은 기존 규칙대로 한 번 정정 요청합니다. 추출과 사업명 후보 연결의 기본 모델은 현재 프로젝트에서 생성이 확인된 `gemini-3.5-flash-lite`입니다. `gemini-3-flash-preview`는 전체 차단 후보와 연결·조건·예외가 불명확한 후보를 재검증합니다. 전체 차단을 확정하려면 재검증 모델의 지지와 원문 근거 검사를 모두 통과해야 합니다.
 
-이전에 시작된 실행은 당시의 모델과 방식으로 재생합니다. 새 방식을 쓰려면 `npm run overlap:agent -- --live`로 새 실행을 시작합니다. 2.5 Flash-Lite 생성 권한이 있는 프로젝트에서는 `OVERLAP_SCAN_MODEL=gemini-2.5-flash-lite`를 설정할 수 있습니다. Gemini 모델별 실제 호출 한도는 [Google AI Studio](https://aistudio.google.com/rate-limit?timeRange=last-28-days)에서 프로젝트 단위로 확인합니다.
+재검증은 3 Flash부터 시작하고, 일일 한도가 확인되면 3.6 Flash, 3.8 Flash 순으로 이어갑니다. 각 모델은 별도 반례를 통과해야 합니다. 보고서의 `reviewTimings`는 성공한 응답의 수와 평균 왕복 요청 시간(ms)을 표시하며, 재시도 대기 시간은 제외합니다. 호출하지 않은 모델의 평균은 `null`입니다.
+
+이전에 시작된 실행은 기록된 호출을 우선 재생합니다. 새 방식을 쓰려면 `npm run overlap:agent -- --live`로 새 실행을 시작합니다. 2.5 Flash-Lite 생성 권한이 있는 프로젝트에서는 `OVERLAP_SCAN_MODEL=gemini-2.5-flash-lite`를 설정할 수 있습니다. Gemini 모델별 실제 호출 한도는 [Google AI Studio](https://aistudio.google.com/rate-limit?timeRange=last-28-days)에서 프로젝트 단위로 확인합니다.
 
 ## 정책 스냅샷 변경 확인
 

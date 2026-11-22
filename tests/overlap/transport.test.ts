@@ -2,7 +2,7 @@ import { expect,it } from "vitest";
 import { mkdtempSync,rmSync,readFileSync,writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeSession } from "@/scripts/overlap/gemini";
+import { makeSession, reviewModels } from "@/scripts/overlap/gemini";
 
 const req={stage:"extract",pass:1,repair:0,prompt:"공개 원문"} as const;
 const success=()=>Response.json({candidates:[{finishReason:"STOP",content:{parts:[{text:"[]"}]}}]});
@@ -43,4 +43,19 @@ it("두 모델의 일일 한도가 끝나면 태평양 자정에 첫 모델로 �
     saved.requests[0].completed=false;delete saved.requests[0].responseSha256;writeFileSync(path,JSON.stringify(saved));
     expect(await makeSession(f.input).ask(req)).toEqual(result);expect(f.sends).toHaveLength(3);
   }finally{f.cleanup();}
+});
+
+it("재검증은 세 모델을 지정 순서로 사용하고 성공 요청 시간만 기록한다", async () => {
+  const daily = () => Response.json({ error: { details: [{ violations: [{ quotaId: "GenerateRequestsPerDay" }] }] } }, { status: 429 });
+  const f = runFixture([daily(), daily(), success()]);
+  try {
+    const s = makeSession({ ...f.input, fetchFn: async (...args) => {
+      const response = await f.input.fetchFn(...args);
+      await f.input.sleep(250);
+      return response;
+    } });
+    expect((await s.ask({ ...req, stage: "verify" }, reviewModels)).model).toBe("gemini-3.8-flash");
+    expect(f.sends.map(s => s.model)).toEqual([...reviewModels]);
+    expect(s.state.requests[0].durationMs).toBe(250);
+  } finally { f.cleanup(); }
 });

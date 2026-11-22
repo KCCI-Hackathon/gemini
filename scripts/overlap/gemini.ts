@@ -8,15 +8,18 @@ export const scanModels = ["gemini-2.5-flash-lite", scanModel] as const;
 export type ScanModel = typeof scanModels[number];
 export const isScanModel = (model: string | undefined): model is ScanModel => scanModels.some(candidate => candidate === model);
 export const reviewModel = "gemini-3-flash-preview";
+export const reviewModels = [reviewModel, "gemini-3.6-flash", "gemini-3.8-flash"] as const;
+export const isReviewModel = (model: string | undefined) => reviewModels.some(candidate => candidate === model);
 const legacyModels = ["gemini-3.6-flash", reviewModel] as const;
-export const models = [...legacyModels, ...scanModels] as const;
+export const models = [...reviewModels, ...scanModels] as const;
 export type ModelId = typeof models[number];
 const Spec = z.object({
   model: z.enum(models), stage: z.enum(["extract","link","verify"]), pass: z.union([z.literal(1),z.literal(2)]),
   repair: z.union([z.literal(0),z.literal(1)]), prompt: z.string().min(1)
 });
 export type RequestSpec = z.infer<typeof Spec>;
-const Saved = Spec.extend({ hash:z.string(),receivedAt:z.iso.datetime(),body:z.unknown(),responseSha256:z.string() });
+const duration = z.int().nonnegative().optional();
+const Saved = Spec.extend({ hash:z.string(),receivedAt:z.iso.datetime(),body:z.unknown(),responseSha256:z.string(),durationMs:duration });
 export type SavedResponse = z.infer<typeof Saved>;
 const StageResult = z.object({candidates:z.array(z.object({
   finishReason:z.literal("STOP"),content:z.object({parts:z.array(z.object({text:z.string().optional(),thought:z.boolean().optional()}))})
@@ -41,7 +44,7 @@ export function verifySaved(value:unknown, expected:{hash:string,model:string,st
       sha(JSON.stringify(row.body))!==row.responseSha256) throw Error("저장 응답 해시 불일치 "+expected.hash);
   return row;
 }
-const Entry=z.object({model:z.enum(models),stage:Spec.shape.stage,hash:z.string(),logicalKey:z.string(),completed:z.boolean(),responseSha256:z.string().optional()});
+const Entry=z.object({model:z.enum(models),stage:Spec.shape.stage,hash:z.string(),logicalKey:z.string(),completed:z.boolean(),responseSha256:z.string().optional(),durationMs:duration});
 const State=z.object({
   run_id:z.string(),startedAt:z.iso.datetime(),snapshotSha256:z.string(),casesSha256:z.string(),researchSha256:z.string(),
   requests:z.array(Entry), exhausted:z.record(z.string(),z.number()),complete:z.boolean(),lastCall:z.number()
@@ -78,8 +81,8 @@ export function makeSession(o:Options) {
   if(state.run_id!==o.runId || Object.entries(o.inputs).some(([k,v])=>state[k as keyof RunState]!==v)) throw Error("실행 입력 해시 불일치");
   const persist=()=>writeAtomic(path,jsonBytes(state));
   let cursor=0;
-  async function ask(input:Omit<RequestSpec,"model">&{model?:ModelId}, fixedModel = false) {
-    const spec=Spec.parse({...input,model:input.model??models[0]});
+  async function ask(input:Omit<RequestSpec,"model">&{model?:ModelId}, fallbackModels: readonly ModelId[] = legacyModels) {
+    const spec=Spec.parse({...input,model:input.model??fallbackModels[0]});
     const logicalKey=requestHash(spec);
     const recorded=state.requests[cursor];
     if(recorded && recorded.logicalKey!==logicalKey) throw Error("실행 순서 또는 프롬프트 변경 "+spec.stage+" "+logicalKey);
@@ -91,12 +94,12 @@ export function makeSession(o:Options) {
       if(recorded?.completed && recorded.hash!==hash) throw Error("실행 요청 불일치 "+hash);
       if(!o.live && (!recorded || recorded.hash!==hash || !existsSync(file))) throw Error("재생 응답 누락 "+spec.stage+" "+hash);
       if(!existsSync(file) && (state.exhausted[model]??0)>now()) {
-        const alternative=fixedModel ? undefined : legacyModels.find(m=>(state.exhausted[m]??0)<=now());
+        const alternative=fallbackModels.find(m=>(state.exhausted[m]??0)<=now());
         if(alternative) { model=alternative; continue; }
-        const resetAt=fixedModel ? state.exhausted[model] : Math.min(...legacyModels.map(m=>state.exhausted[m]));
+        const resetAt=Math.min(...fallbackModels.map(m=>state.exhausted[m]));
         console.error("Gemini 일일 한도 초기화 대기 "+new Date(resetAt).toISOString());
         await sleep(Math.max(0,resetAt-now()));
-        model=fixedModel ? spec.model : legacyModels[0]; continue;
+        model=fallbackModels[0]; continue;
       }
       const entry={logicalKey,model,stage:spec.stage,hash,completed:false};
       if(o.live && !recorded?.completed) {state.requests[cursor]=entry;persist();}
@@ -136,13 +139,15 @@ export function makeSession(o:Options) {
         }
         if(!res.ok) throw Error("Gemini HTTP "+res.status+" "+model+" "+spec.stage+" "+hash);
         const body:unknown=JSON.parse(raw!);
-        saved={...spec,model,hash,receivedAt:new Date(now()).toISOString(),body,responseSha256:sha(JSON.stringify(body))};
+        const receivedAt=now();
+        saved={...spec,model,hash,receivedAt:new Date(receivedAt).toISOString(),body,responseSha256:sha(JSON.stringify(body)),
+          durationMs:Math.max(0,receivedAt-state.lastCall)};
         writeAtomic(file,jsonBytes(saved));
       }
       const candidate=StageResult.parse(saved.body).candidates[0];
       const text=candidate.content.parts.filter(p=>!p.thought).map(p=>p.text??"").join("");
       if(!text.trim()) throw Error("빈 Gemini 응답 "+hash);
-      if(o.live){ state.requests[cursor]={...entry,completed:true,responseSha256:saved.responseSha256};persist(); }
+      if(o.live){ state.requests[cursor]={...entry,completed:true,responseSha256:saved.responseSha256,durationMs:saved.durationMs};persist(); }
       cursor++;
       return {hash,model,text};
     }

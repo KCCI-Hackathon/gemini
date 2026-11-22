@@ -14,7 +14,7 @@ import { verifyClaims } from "./overlap/verify";
 import { decide, needsReview } from "./overlap/decide";
 import { merge } from "./overlap/merge";
 import { score, type BatchProof } from "./overlap/score";
-import { isScanModel, jsonBytes, makeSession, reviewModel, safeId, scanModel, sha, writeAtomic, type ScanModel } from "./overlap/gemini";
+import { isScanModel, jsonBytes, makeSession, reviewModels, safeId, scanModel, sha, writeAtomic, type ScanModel } from "./overlap/gemini";
 import type { Ask, Clause } from "./overlap/types";
 import type { ClauseRow } from "@/lib/data/overlap-schema";
 
@@ -44,7 +44,9 @@ export async function runOverlap(o:AgentOptions) {
     const fields = selectFields(records, !legacy);
     const batches = batchFields(fields), region = legacy ? selectRegion(records) : records;
     if(!batches.length) throw Error("중복수혜 검증 대상 정책이 없습니다.");
-    const ask: Ask = legacy ? session.ask : req => session.ask({ ...req, model: req.stage === "verify" ? reviewModel : scanner }, true);
+    const ask: Ask = legacy ? session.ask : req => req.stage === "verify"
+      ? session.ask(req, reviewModels)
+      : session.ask({ ...req, model: scanner }, [scanner]);
     const path=join(dir,"runs",runId+".json");
     const votes:[Clause[],Clause[]]=[[],[]],proofs:BatchProof[]=[],failures:ClauseRow[]=[];
     if(o.live) writeAtomic(pointer,jsonBytes({run_id:runId}));

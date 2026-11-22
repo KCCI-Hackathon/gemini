@@ -3,7 +3,7 @@ import type { RawPolicy } from "@/lib/data/types";
 import { toKstDate } from "@/lib/date";
 import { normalizeSpace } from "@/lib/verify/web";
 import { policyYears } from "./link";
-import { isScanModel, reviewModel } from "./gemini";
+import { isReviewModel, isScanModel } from "./gemini";
 import { digest, locate, type Clause, type LinkedMention, type Verification } from "./types";
 
 export type RunContext = { run_id: string; startedAt: string };
@@ -140,7 +140,7 @@ export function decide(first: LinkedMention[], second: LinkedMention[], checks: 
     }
     if (!compatibleYear(a, b)) reasons.add("신청 연도 또는 모집 회차 확인 필요");
     if (singleScan) {
-      if (!isScanModel(c.model) || verified.get(m.id)?.model !== reviewModel)
+      if (!isScanModel(c.model) || !isReviewModel(verified.get(m.id)?.model))
         reasons.add("지정된 독립 재검증 모델의 근거 확인 필요");
     } else if (!pair || m.clause.pass !== 1 || pair.clause.pass !== 2 || pair.clause.model !== c.model || pair.clause.response_hash === c.response_hash) {
       reasons.add("같은 모델의 독립된 두 추출이 일치하지 않음");
