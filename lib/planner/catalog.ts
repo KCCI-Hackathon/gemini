@@ -5,9 +5,20 @@ import { loadOverlap } from "@/lib/data/overlap";
 import { blocksParticipation, evaluateRules, type Benefit } from "@/lib/judge/overlap";
 import { judgePolicy, type Profile } from "@/lib/judge";
 import { categoryOf, policyNotice } from "@/lib/route/roadmap";
+import { isDate } from "./dates";
 import { evaluatePlanner, type BaseEvaluator, type DraftConflictEvaluator } from "./evaluate";
 import { plannedFor, restrictionVerdict } from "./overlap-bridge";
 import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
+
+/**
+ * 공고 데이터의 자리표시 날짜(예: "0001-01-01")는 "모름"이다. 날짜로 두면 저장 스키마가 평가 전체를 거부해
+ * 실데이터로 만든 탭 초안과 저장 계획을 다시 열 수 없다. 읽는 경계에서 null 로 바꾸고, 마감이 없으면 기간 종류도 맞춘다.
+ */
+function officialPeriod(rolling: boolean, start: string | null | undefined, end: string | null | undefined, closeAt: string | null) {
+  const date = (value: string | null | undefined) => value && isDate(value) ? value : null;
+  const s = date(start), e = date(end);
+  return { kind: rolling ? "rolling" as const : e ? "fixed" as const : "unknown" as const, start: s, end: e, closeAt };
+}
 
 export function backendDraftConflict(now: Date, benefits: Benefit[] = []): DraftConflictEvaluator {
   const approved = loadOverlap();
@@ -48,7 +59,7 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
       policyId: p.id, offeringId: `${p.id}:${round?.id ?? `${(v?.apply.start ?? p.applyStart ?? today).slice(0, 4)}-current`}`, roundLabel: round?.notice.title ?? "현재 수집된 공고", title: v?.name ?? p.name,
       verifyLabel: policyNotice(p, v, round?.notice.applyStart ?? today).verifyLabel,
       category: categoryOf(p.category), summary: p.texts.description || p.texts.support, support: p.texts.support, org: p.supervisingOrg,
-      official: { kind: v?.apply.type === "always" || (!v && p.applyPeriodType === "always") ? "rolling" as const : (round?.notice.applyEnd ?? v?.apply.end ?? p.applyEnd) ? "fixed" as const : "unknown" as const, start: round ? round.notice.applyStart : v ? v.apply.start : p.applyStart, end: round ? round.notice.applyEnd : v ? v.apply.end : p.applyEnd, closeAt: v?.apply.endTime ?? null },
+      official: officialPeriod(v?.apply.type === "always" || (!v && p.applyPeriodType === "always"), round ? round.notice.applyStart : v ? v.apply.start : p.applyStart, round ? round.notice.applyEnd : v ? v.apply.end : p.applyEnd, v?.apply.endTime ?? null),
       rules: [], regions: p.zipCodes, restrictions: (v?.confirmedRelations ?? []).flatMap(r => r.otherId ? [{ otherId: r.otherId, reviewed: true, action: "benefit" as const, direction: "both" as const, period: null, otherPeriod: null, evidenceId: `restriction:${p.id}:${r.otherId}` }] : []),
       reviewed: !!round && round.status === "approved" && round.conditions.every(c => !!c.supportsConfirmed), dataVersion: snapshot.asOf,
       evidence: [...(round?.conditions.map((c, i) => ({ evidenceId: `${round.id}:${i}`, title: round.notice.title, quote: c.quote.text, url: c.quote.url ?? round.notice.url, reviewedAt: c.supportsConfirmed?.at ?? round.notice.checkedAt, reviewed: !!c.supportsConfirmed })) ?? v?.statusConditions.quotes.map((q, i) => ({ evidenceId: `${p.id}:${i}`, title: v.name, quote: q.text, url: q.url ?? v.sources[0].url, reviewedAt: v.sources[0].checkedAt, reviewed: false })) ?? []), ...(v?.confirmedRelations.flatMap(r => r.otherId ? [{ evidenceId: `restriction:${p.id}:${r.otherId}`, title: `중복 수혜 제한 · ${r.otherName}`, quote: r.quote.text, url: r.quote.url ?? v.sources[0].url, reviewedAt: v.sources[0].checkedAt, reviewed: true }] : []) ?? [])],

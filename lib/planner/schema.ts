@@ -46,7 +46,7 @@ const CardSchema = z.object({
   restrictions: z.array(z.object({ otherId: z.string(), reviewed: z.boolean(), action: z.enum(["application", "benefit"]), direction: z.enum(["both", "outgoing"]), period: PeriodSchema.nullable(), otherPeriod: PeriodSchema.nullable(), evidenceId: z.string() })),
   evidence: z.array(z.object({ evidenceId: z.string(), title: z.string(), quote: z.string(), url: z.string().nullable(), reviewedAt: z.string(), reviewed: z.boolean() })),
   stageId: z.string(), personalWindow: PeriodSchema.nullable(), stageWindow: PeriodSchema.nullable(), applicationWindows: z.array(PeriodSchema), deadlineKind: z.enum(["official", "personal_estimate", "rolling", "unknown", "closed"]),
-  verifyLabel: z.string().nullable(), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]), reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
+  verifyLabel: z.string().nullable().default(null), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]), reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
 });
 export const EvaluationSchema = z.object({
   questions: z.array(z.object({

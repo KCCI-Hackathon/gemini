@@ -72,10 +72,19 @@ function BenefitFields({ benefits, onChange }: { benefits: Benefit[]; onChange: 
     return () => controller.abort();
   }, []);
   function update(index: number, row: Benefit) {
-    onChange(benefits.map((current, i) => i === index ? row : current));
+    const before = benefits[index];
+    const statusChanged = before.status !== row.status;
+    onChange(benefits.flatMap((current, i) => i === index ? [row]
+      : statusChanged && current.policyId === row.policyId && current.monthlyPayment && current.monthlyPayment.month !== month ? [] : [current]));
   }
+  // 같은 정책에 다른 달 지급 기록 줄이 따로 있으면(에이전트 질문으로 답한 달) 편집 줄이 아니라 기록으로 보여 준다.
+  const isOtherMonth = (row: Benefit, i: number) => !!row.monthlyPayment && row.monthlyPayment.month !== month
+    && benefits.some((other, j) => j !== i && other.policyId === row.policyId);
+  const monthName = `${Number(month.slice(5))}월`;
   return <fieldset><legend>지금 받고 있거나 받았던 정책</legend>
-    {benefits.map((row, i) => <fieldset key={row.policyId}>
+    {benefits.map((row, i) => isOtherMonth(row, i) ? <p key={`${row.policyId}:${row.monthlyPayment!.month}`} className={s.emptyHint}>
+      {sources.find(source => source.policyId === row.policyId)?.name ?? row.policyId} · {Number(row.monthlyPayment!.month.slice(5))}월 지급액 {row.monthlyPayment!.amountWon.toLocaleString()}원 (질문에 답한 값)
+      <button type="button" onClick={() => onChange(benefits.filter((_, index) => index !== i))}>삭제</button></p> : <fieldset key={`${row.policyId}:${i}`}>
       <legend>{sources.find(source => source.policyId === row.policyId)?.name ?? row.policyId}</legend>
       <label>수혜 상태<select value={row.status ?? ""} onChange={e => {
         update(i, { ...row, status: e.target.value as keyof typeof benefitStatuses, lastPaymentDate: undefined, ...(e.target.value === "receiving" ? {} : { monthlyPayment: undefined }) });
@@ -83,7 +92,7 @@ function BenefitFields({ benefits, onChange }: { benefits: Benefit[]; onChange: 
         {!(row.status && row.status in benefitStatuses) && <option value={row.status ?? ""}>기존 상태 유지</option>}
         {Object.entries(benefitStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
-      {row.status === "receiving" && sources.find(source => source.policyId === row.policyId)?.asksAmount && <label>이번 달 받은 금액(원)
+      {row.status === "receiving" && sources.find(source => source.policyId === row.policyId)?.asksAmount && <label>{monthName}에 받은 금액(원)
         <input type="number" inputMode="numeric" min={0} step={1} value={row.monthlyPayment?.month === month ? row.monthlyPayment.amountWon : ""}
           onChange={e => {
             const amountWon = Number(e.target.value);
@@ -111,5 +120,7 @@ export function ProfileForm({ initial, onSave, submitLabel = "정책 찾아보�
   const [participation, setParticipation] = useState(initial?.participating ?? []);
   const [participationKnown, setParticipationKnown] = useState(!!initial && !mutedKeys.includes("participation"));
   const [benefits, setBenefits] = useState<Benefit[]>(initial?.benefits ?? []);
-  return <form className={s.form} onSubmit={e => { e.preventDefault(); onSave({ ...(initial ?? {}), birthYm, sigungu, school, currentStatus: status === "training" ? ["in_training", "unemployed"] : status === "employed" ? ["employed", "health_insured_employee"] : status === "business" ? ["business_registered"] : status === "unemployed" ? ["unemployed"] : [], interest: initial?.interest ?? "job", participating: policyOptions && participationKnown ? participation : [], benefits, events: initial?.events ?? [], source: initial?.source ?? "user" }, [...(status === "unknown" ? ["status"] : []), ...(policyOptions && !participationKnown ? ["participation"] : [])]); }}><label>출생연월<input type="month" value={birthYm} max={new Date().toISOString().slice(0, 7)} required onChange={e => setBirth(e.target.value)} /></label><label>현재 시·군·구<select value={sigungu} onChange={e => setRegion(e.target.value)} required><option value="">거주지 선택</option>{regionOptions().map(r => <option key={r.code} value={r.code}>{r.label}</option>)}</select></label><label>최종 학력<select value={school} onChange={e => setSchool(e.target.value)} required><option value="">학력 선택</option><option value="0049003">고등학교 졸업</option><option value="0049005">대학 재학</option><option value="0049007">대학교 졸업</option><option value="0049008">대학원 재학·졸업</option><option value="0049010">기타</option></select></label><label>현재 상태<select value={status} onChange={e => setStatus(e.target.value)}><option value="unknown">모름 · 나중에 확인</option><option value="training">교육·훈련 수강 중</option><option value="unemployed">미취업·구직 중</option><option value="employed">재직 중</option><option value="business">사업자등록 있음</option></select></label>{policyOptions && <><label>현재 수혜 중인 정책 (여러 개 선택 가능)<select multiple value={participation} onChange={e => { setParticipation(Array.from(e.target.selectedOptions, option => option.value)); setParticipationKnown(true); }}>{policyOptions.map(p => <option key={p.policyId} value={p.policyId}>{p.title}</option>)}</select></label><label className={s.checkboxLabel}><input type="checkbox" checked={participationKnown} onChange={e => setParticipationKnown(e.target.checked)} />현재 수혜 내역을 확인했어요 (없음 포함)</label></>}<BenefitFields benefits={benefits} onChange={setBenefits} /><p className={s.emptyHint}>모르는 조건은 확인 필요로 남겨요. 입력 정보는 외부 AI로 보내지 않아요.</p><button className={s.primaryButton}>{submitLabel}</button></form>;
+  return <form className={s.form} onSubmit={e => { e.preventDefault(); onSave({ ...(initial ?? {}), birthYm, sigungu, school, currentStatus: status === "training" ? ["in_training", "unemployed"] : status === "employed" ? ["employed", "health_insured_employee"] : status === "business" ? ["business_registered"] : status === "unemployed" ? ["unemployed"] : [], interest: initial?.interest ?? "job", participating: policyOptions && participationKnown ? participation : [], benefits, events: initial?.events ?? [], source: initial?.source ?? "user" }, [...(status === "unknown" ? ["status"] : []), ...(policyOptions && !participationKnown ? ["participation"] : [])]); }}><label>출생연월<input type="month" value={birthYm} max={new Date().toISOString().slice(0, 7)} required onChange={e => setBirth(e.target.value)} /></label><label>현재 시·군·구<select value={sigungu} onChange={e => setRegion(e.target.value)} required><option value="">거주지 선택</option>{regionOptions().map(r => <option key={r.code} value={r.code}>{r.label}</option>)}</select></label><label>최종 학력<select value={school} onChange={e => setSchool(e.target.value)} required><option value="">학력 선택</option><option value="0049003">고등학교 졸업</option><option value="0049005">대학 재학</option><option value="0049007">대학교 졸업</option><option value="0049008">대학원 재학·졸업</option><option value="0049010">기타</option></select></label><label>현재 상태<select value={status} onChange={e => setStatus(e.target.value)}><option value="unknown">모름 · 나중에 확인</option><option value="training">교육·훈련 수강 중</option><option value="unemployed">미취업·구직 중</option><option value="employed">재직 중</option><option value="business">사업자등록 있음</option></select></label>{policyOptions && <><label>현재 수혜 중인 정책 (여러 개 선택 가능)<select multiple value={participation} onChange={e => { setParticipation(Array.from(e.target.selectedOptions, option => option.value)); setParticipationKnown(true); }}>{policyOptions.map(p => <option key={p.policyId} value={p.policyId}>{p.title}</option>)}</select></label><label className={s.checkboxLabel}><input type="checkbox" checked={participationKnown} onChange={e => setParticipationKnown(e.target.checked)} />현재 수혜 내역을 확인했어요 (없음 포함)</label></>}<BenefitFields benefits={benefits} onChange={setBenefits} /><p className={s.emptyHint}>모르는 조건은 확인 필요로 남겨요. {initial?.source === "demo_persona"
+  ? "시연 인물로 AI 경로 추천을 쓰면 나이대·지역·학력·일정 요약과 판정 결과만 외부 AI로 가요. 수혜 입력은 판정에만 써요."
+  : "입력 정보는 이 서비스의 판정에만 쓰고 외부 AI로 보내지 않아요."}</p><button className={s.primaryButton}>{submitLabel}</button></form>;
 }
