@@ -30,6 +30,11 @@ export type Card = Offering & {
   conflicts: string[]; canReplace: boolean;
 };
 export type ChoiceWarning = Choice & { title: string; message: string; otherStageIds: string[] };
-export type Evaluation = { revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: Choice[] };
+export type AnswerKind = "receiving" | "selected" | "ended_date";
+export type BenefitQuestion = {
+  policyId: string; sourcePolicyId: string; sourceName: string;
+  ruleId: string; question: string; answerKind: AnswerKind;
+};
+export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: Choice[] };
 export type Draft = { draftId: string; profileSnapshot: Profile; input: PlannerInput; evaluation: Evaluation };
 export type SavedPlan = { planId: string; schemaVersion: 2; name: string; createdAt: string; source: "manual" | "recommendation" | "example"; profileSnapshot: Profile; input: PlannerInput; savedEvaluation: Evaluation };

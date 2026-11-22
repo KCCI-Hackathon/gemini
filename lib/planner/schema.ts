@@ -47,6 +47,10 @@ const CardSchema = z.object({
   verifyLabel: z.string().nullable(), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]), reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
 });
 export const EvaluationSchema = z.object({
+  questions: z.array(z.object({
+    policyId: z.string(), sourcePolicyId: z.string(), sourceName: z.string(),
+    ruleId: z.string(), question: z.string(), answerKind: z.enum(["receiving", "selected", "ended_date"]),
+  })).default([]),
   revision: z.number().int().min(0), today: z.string().refine(isDate), asOf: z.string(), evaluatedAt: z.string(), dataVersion: z.string(), demo: z.boolean(),
   stages: z.array(z.object({ stageId: z.string(), label: z.string(), start: z.string().refine(isDate), endExclusive: z.string().refine(isDate).nullable(), eventIds: z.array(z.string()) })), cards: z.array(CardSchema),
   choiceWarnings: z.array(z.object({ offeringId: z.string(), stageId: z.string(), title: z.string(), message: z.string(), otherStageIds: z.array(z.string()) })), recommendations: z.array(z.object({ offeringId: z.string(), stageId: z.string() })),

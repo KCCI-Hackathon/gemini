@@ -3,9 +3,12 @@ import { toKstDate } from "@/lib/date";
 import type { Profile } from "@/lib/judge/types";
 import { effectiveStatus } from "@/lib/judge/personal";
 import { addDays, dayNumber } from "./dates";
-import { EVENT_NAMES, type Card, type Choice, type Evaluation, type Offering, type Period, type PlanEvent, type PlannerInput, type Reason, type Stage } from "./types";
+import { EVENT_NAMES, type BenefitQuestion, type Evidence, type Card, type Choice, type Evaluation, type Offering, type Period, type PlanEvent, type PlannerInput, type Reason, type Stage } from "./types";
 
-export type BaseVerdict = { availability: Card["availability"]; reasons: Reason[] };
+export type BaseVerdict = { availability: Card["availability"]; reasons: Reason[]; evidence?: Evidence[]; questions?: BenefitQuestion[] };
+export type DraftConflictEvaluator = (card: Card, chosen: Card[]) => {
+  blocked: boolean; uncertain: boolean; reasons: Reason[]; evidence: Evidence[]; conflicts: string[];
+};
 export type BaseEvaluator = (offering: Offering, profile: Profile, date: string) => BaseVerdict;
 export function profileAt(profile: Profile, events: PlanEvent[], date: string): Profile {
   const copy = structuredClone(profile);
@@ -71,12 +74,13 @@ export function sortCards(a: Card, b: Card): number {
   return (ae === null ? 1 : 0) - (be === null ? 1 : 0) || (ae ?? "").localeCompare(be ?? "") || (a.personalWindow?.start ?? "9999").localeCompare(b.personalWindow?.start ?? "9999") || a.title.localeCompare(b.title, "ko") || a.offeringId.localeCompare(b.offeringId);
 }
 
-export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: Offering[], now: Date, baseEvaluator?: BaseEvaluator, extraBoundaries: string[] = []): Evaluation {
+export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: Offering[], now: Date, baseEvaluator?: BaseEvaluator, extraBoundaries: string[] = [], options: { backendOverlap?: boolean; draftConflict?: DraftConflictEvaluator } = {}): Evaluation {
   const today = toKstDate(now);
   const events = input.events ?? profile.events.filter(e => e.status === "scheduled").map((e, i) => ({ ...e, status: "scheduled" as const, id: `legacy-${i}` }));
   const stages = buildStages(events, today);
   const activeProfile = (date: string) => profileAt(profile, events, date);
   const selected = new Map(input.choices.map(c => [c.offeringId, c.stageId]));
+  const questions = new Map<string, BenefitQuestion>();
   const cards: Card[] = [];
   for (const o of catalog) {
     type Segment = { stageId: string; window: Period | null; verdict: BaseVerdict };
@@ -86,7 +90,9 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
       const end = minEnd(stage.endExclusive ? addDays(stage.endExclusive, -1) : null, o.official.end);
       const cuts = [start, ...extraBoundaries.filter(d => d > start && (!end || d <= end) && (!stage.endExclusive || d < stage.endExclusive))].sort();
       if ((end && start > end) || (stage.endExclusive && start >= stage.endExclusive)) {
-        segments.push({ stageId: stage.stageId, window: null, verdict: { availability: "blocked", reasons: [{ code: "NO_OVERLAP", message: `${stage.endExclusive ?? stage.start} 일정과 ${o.official.start ?? "미정"} 접수 시작이 겹치지 않아요` }] } });
+        const base = options.backendOverlap ? baseEvaluator?.(o, activeProfile(stage.start), stage.start) : undefined;
+        const reasons = [{ code: "NO_OVERLAP", message: `${stage.endExclusive ?? stage.start} 일정과 ${o.official.start ?? "미정"} 접수 시작이 겹치지 않아요` }, ...(base?.reasons ?? [])];
+        segments.push({ stageId: stage.stageId, window: null, verdict: { ...base, availability: "blocked", reasons } });
         continue;
       }
       for (let n = 0; n < cuts.length; n++) {
@@ -98,14 +104,17 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
           // Turning a known condition off means unknown, never satisfied.
           const mutedCodes = [...(muted.includes("residence") ? ["RESIDENCE"] : []), ...(muted.includes("status") ? ["STATUS"] : [])];
           const reasons = verdict.reasons.filter(r => !mutedCodes.includes(r.code));
-          verdict = { availability: reasons.length && verdict.availability === "blocked" ? "blocked" : "needs_check", reasons: [...reasons, { code: "MUTED_CONDITION", message: "꺼진 프로필 조건을 다시 확인해 주세요" }] };
+          verdict = { ...verdict, availability: reasons.length && verdict.availability === "blocked" ? "blocked" : "needs_check", reasons: [...reasons, { code: "MUTED_CONDITION", message: "꺼진 프로필 조건을 다시 확인해 주세요" }] };
         }
         segments.push({ stageId: stage.stageId, window: { start: cuts[n], end: pieceEnd }, verdict });
       }
     }
     for (const stage of stages) {
       const own = segments.filter(s => s.stageId === stage.stageId);
-      const piece = own.find(s => s.window && s.verdict.availability !== "blocked") ?? own[0];
+      // A later application window cannot clear a benefit conflict at the start of this stage.
+      const first = own[0];
+      const blockedAtStart = options.backendOverlap && first.verdict.reasons.some(r => r.code === "PARTICIPATION_CONFLICT");
+      const piece = blockedAtStart ? first : own.find(s => s.window && s.verdict.availability !== "blocked") ?? first;
       const stageWindow = piece.window && piece.verdict.availability !== "blocked" ? { ...piece.window } : null;
       const personalWindow = stageWindow ? { ...stageWindow } : null;
       if (personalWindow) {
@@ -138,7 +147,10 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
       }
       const end = personalWindow?.end ?? null;
       const deadlineKind: Card["deadlineKind"] = officialClosed ? "closed" : o.official.kind === "budget" || o.official.kind === "unknown" || (!o.reviewed && end !== o.official.end) ? "unknown" : end ? (end === o.official.end ? "official" : "personal_estimate") : o.official.kind === "rolling" ? "rolling" : "unknown";
-      cards.push({ ...o, verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
+      for (const question of piece.verdict.questions ?? []) {
+        questions.set(JSON.stringify([question.policyId, question.ruleId, question.question]), question);
+      }
+      cards.push({ ...o, evidence: [...o.evidence, ...(piece.verdict.evidence ?? [])], verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
     }
   }
   for (const card of cards) card.otherStageIds = cards.filter(c => c.offeringId === card.offeringId && c.stageId !== card.stageId && c.availability !== "blocked").map(c => c.stageId);
@@ -148,7 +160,7 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     let actualConflict = false;
     for (const target of catalog) {
       if (target.offeringId === card.offeringId) continue;
-      const actual = profile.participating.includes(target.policyId) || profile.participating.includes(target.offeringId);
+      const actual = !options.backendOverlap && (profile.participating.includes(target.policyId) || profile.participating.includes(target.offeringId));
       const chosen = choices.some(c => c.offeringId === target.offeringId);
       if (!actual && !chosen) continue;
       const relation = restrictionBetween(card, target);
@@ -180,5 +192,5 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     if (card?.availability === "eligible") return [];
     return [{ ...choice, title: card?.title ?? catalog.find(o => o.offeringId === choice.offeringId)?.title ?? `공고 조회 불가 (${choice.offeringId})`, message: card ? `${card.availability === "blocked" ? "현재 일정으로 신청 불가" : "확인 필요"} · ${card.reasons.map(r => r.message).join(" · ")}` : "시점 다시 선택 · 저장한 시점 또는 회차를 찾을 수 없어요", otherStageIds: card?.otherStageIds ?? [] }];
   });
-  return { revision: input.revision, today, asOf: catalog[0]?.dataVersion === "fixture-1" ? "2026-11-19" : (catalog[0]?.dataVersion ?? today), evaluatedAt: now.toISOString(), dataVersion: catalog[0]?.dataVersion ?? "empty", demo: input.demoId === "pathfinder-demo-2026", stages, cards: evaluated, choiceWarnings, recommendations: recommended };
+  return { revision: input.revision, today, asOf: catalog[0]?.dataVersion === "fixture-1" ? "2026-11-19" : (catalog[0]?.dataVersion ?? today), evaluatedAt: now.toISOString(), dataVersion: catalog[0]?.dataVersion ?? "empty", demo: input.demoId === "pathfinder-demo-2026", stages, questions: [...questions.values()], cards: evaluated, choiceWarnings, recommendations: recommended };
 }

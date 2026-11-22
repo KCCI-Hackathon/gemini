@@ -4,6 +4,7 @@ import { loadVerified } from "@/lib/data/verified";
 import { judgePolicy, type Profile } from "@/lib/judge";
 import { categoryOf, policyNotice } from "@/lib/route/roadmap";
 import { evaluatePlanner, type BaseEvaluator } from "./evaluate";
+import { restrictionVerdict } from "./overlap-bridge";
 import { DEMO_PROFILE, demoCatalog } from "./fixtures";
 import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
 
@@ -45,14 +46,16 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
     const v = verified.get(p.id);
     const axes = judgePolicy(p, v, atProfile, new Date(`${date}T12:00:00+09:00`));
     let availability = axes.personal.value === "ineligible" ? "blocked" as const : axes.personal.value === "eligible" ? "eligible" as const : "needs_check" as const;
-    const reasons = [...axes.personal.reasons, ...(axes.fieldNotes ?? []), ...(axes.time.note ? [axes.time.note] : [])].map(message => ({ code: message.includes("지역") ? "RESIDENCE" : message.includes("취업") || message.includes("수강") ? "STATUS" : "BASE_CONDITION", message }));
+    const overlap = restrictionVerdict(axes.restriction.current_restrictions ?? [], p.id, "current");
+    const personalReasons = axes.personal.reasons.filter(message => message !== "중복수혜 제한 조건 확인 필요");
+    const reasons = [...personalReasons, ...(axes.fieldNotes ?? []), ...(axes.time.note ? [axes.time.note] : [])].map(message => ({ code: message.includes("지역") ? "RESIDENCE" : message.includes("취업") || message.includes("수강") ? "STATUS" : "BASE_CONDITION", message }));
     if (axes.personal.value === "code_met_unreviewed") reasons.unshift({ code: "UNREVIEWED", message: "일부 조건 충족 · 공고 확인 필요" });
     if (axes.recruitment === "unknown" && availability !== "blocked") { availability = "needs_check"; reasons.push({ code: "UNKNOWN_RECRUITMENT", message: "최신 공고의 접수 기간 확인 필요" }); }
-    if (axes.restriction.value === "applies" && availability !== "blocked") { availability = "needs_check"; reasons.push({ code: "RESTRICTION_REVIEW", message: "현재 수혜 정책과 제한 범위·수혜 기간 확인 필요" }); }
-    return { availability, reasons };
+    if (availability !== "blocked" && overlap.availability) availability = overlap.availability;
+    return { ...overlap, availability, reasons: [...overlap.reasons, ...reasons] };
   };
   const boundaries = [...verified.values()].flatMap(v => v.lookback ? [...profile.events, ...(input.events ?? [])].filter(e => e.type === "training_completion" || e.type === "employment").map(e => addMonths(e.date, v.lookback!.months)) : []);
-  const evaluation = evaluatePlanner(profile, input, catalog, now, baseEvaluator, [...new Set(boundaries)]);
+  const evaluation = evaluatePlanner(profile, input, catalog, now, baseEvaluator, [...new Set(boundaries)], { backendOverlap: true });
   evaluation.asOf = snapshot.asOf;
   return evaluation;
 }
