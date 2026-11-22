@@ -4,13 +4,14 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { withDeadline, type Deadline } from "@/lib/ai/deadline";
 import { loadSnapshot } from "@/lib/data/snapshot";
+import { movedLink } from "@/lib/data/dead-links";
 import { loadVerified, type Round } from "@/lib/data/verified";
 import { containsNoticeDate, supportsComparedValue, supportsEvidence } from "./evidence";
 import { verificationVersion, type VerifyVersion } from "./version";
 import type { Policy } from "@/lib/data/types";
 import { pickRound } from "@/lib/judge/rules";
 import { toKstDate } from "@/lib/date";
-import { normalizeSpace, type Web } from "./web";
+import { focusText, normalizeSpace, type Web } from "./web";
 
 const ymdOrNull = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
@@ -62,6 +63,10 @@ export const VERIFY_MODEL = process.env.VERIFY_MODEL ?? "claude-opus-5-5";
 // 열기 6 + 판단 6 + finish 1 + 거부·재시도 여유
 const MAX_TURNS = 16;
 const MAX_SEARCHES = 3;
+/** 미리 열어 둔 공식 페이지로 끝내 보는 빠른 시도의 최대 턴 */
+const FAST_TURNS = 3;
+/** AI에게 보내는 페이지 본문 길이(인용 검사는 원문 전체로 한다) */
+const PROMPT_CHARS = 8000;
 /** 설계 5장: 정책 하나에 60초. 넘기면 새 호출을 하지 않는다 */
 export const DEFAULT_DEADLINE_MS = 60_000;
 const VERDICTS: PageVerdict[] = ["matching_notice", "site_home", "different_program", "error"];
@@ -118,7 +123,7 @@ const SYSTEM = `당신은 청년 정책 데이터를 공식 공고와 대조하�
 목표: 주어진 정책의 공식 공고를 찾아, 상태 변화(교육 수료, 취업, 사업자등록)와 관련된 자격 조건과 그 기준 시점을 확인하고, API 데이터와 다른 점을 기록합니다.
 
 진행 방식
-1. API가 준 링크부터 open_page로 엽니다.
+1. 이미 열어 둔 페이지가 있으면 그것부터 판단합니다. 없으면 API가 준 링크부터 open_page로 엽니다.
 2. 연 페이지마다 record_judgement로 판단을 기록합니다: matching_notice(이 정책의 공식 공고·안내), site_home(사이트 첫 화면이라 내용 없음), different_program(다른 사업이나 하위 과정), error(접속 오류·빈 페이지). 근거 문장을 페이지에서 그대로 인용합니다.
 3. 판단을 보고 다음 행동을 고릅니다. 첫 화면이면 같은 공식 사이트 안에서 찾고, 다른 사업이면 같은 사업의 공식 공고를 다시 찾고, 오류면 다른 공식 출처(정부24, 온통청년, 지자체 청년포털 등)를 찾습니다.
 4. 새로 찾은 자료가 원래 정책과 같은 사업인지 다시 확인합니다.
@@ -249,9 +254,14 @@ function hostOf(url: string | null): string | null {
   }
 }
 
+/** 공식 링크 목록: 옮겨진 공고 주소를 찾아 뒀으면 맨 앞에 둔다 */
+function officialLinks(p: Policy): (string | null)[] {
+  return [movedLink(p.id), p.links.apply, p.links.ref, p.links.ref2];
+}
+
 /** 정책의 링크 도메인(민간 제외는 web.ts가 강제) */
 export function policyHosts(p: Policy): string[] {
-  return [p.links.apply, p.links.ref, p.links.ref2].map(hostOf).filter((h): h is string => !!h);
+  return officialLinks(p).map(hostOf).filter((h): h is string => !!h);
 }
 
 type State = {
@@ -275,6 +285,11 @@ function asObjects(x: unknown): Record<string, unknown>[] {
   return Array.isArray(x) ? x.filter((i): i is Record<string, unknown> => !!i && typeof i === "object") : [];
 }
 
+/** 공고를 못 찾았을 때의 결과 모양(loop 끝과 404 즉시 종료가 함께 쓴다) */
+function notFoundResult(policyId: string, version: VerifyVersion, mode: "agent" | "fixed", now: Date, state: State): VerifyResult {
+  return { policyId, version, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(now), trail: state.trail, usage: state.usage };
+}
+
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
@@ -289,9 +304,15 @@ async function executeTool(
     ctx.signal.throwIfAborted();
     state.trail.push({ step, action: "open", target: url, reason: r.ok ? "열림" : r.text });
     if (r.ok) ctx.openedUrls.push(url);
+    // 공고 링크가 없어졌으면(404·410) 다른 길을 찾지 않고 바로 결과를 확정한다
+    if (!r.ok && /^HTTP (404|410)$/.test(r.text)) {
+      state.trail.push({ step: step + 1, action: "stop", target: url, reason: `공고 링크가 없어졌어요(${r.text})` });
+      state.result = notFoundResult(ctx.policy.id, ctx.version, ctx.mode, ctx.now, state);
+      return { content: r.text, isError: true };
+    }
     if (!r.ok && r.text.includes("한도")) state.limitHit = true;
     if (state.limitHit) return { content: LIMIT_MESSAGE, isError: true };
-    return r.ok ? { content: r.text } : { content: r.text, isError: true };
+    return r.ok ? { content: focusText(r.text, PROMPT_CHARS) } : { content: r.text, isError: true };
   }
   if (name === "record_judgement") {
     const url = String(input.url ?? "");
@@ -414,56 +435,93 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
     }
   }
 
-  for (let turn = 0; turn < maxTurns && !state.result; turn++) {
-    const response = await deps.client.beta.messages.create({
-      model: VERIFY_MODEL,
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "medium" },
-      system: SYSTEM,
-      tools: toolDefs(),
-      messages,
-    }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
-    deadline.remainingMs();
-    state.usage.calls++;
-    state.usage.inputTokens += response.usage?.input_tokens ?? 0;
-    state.usage.outputTokens += response.usage?.output_tokens ?? 0;
-    if (response.stop_reason === "refusal") {
-      stopReason = "모델이 요청을 거절함";
-      break;
-    }
-    for (const b of response.content) {
-      if (b.type === "server_tool_use") {
-        searches++;
-        state.trail.push({ step: state.trail.length + 1, action: "search", target: JSON.stringify(b.input), reason: "웹 검색" });
-      }
-    }
-    if (!response.content.length) {
-      stopReason = "모델이 빈 응답을 보냄";
-      break;
-    }
-    messages.push({ role: "assistant", content: response.content });
-    if (response.stop_reason === "pause_turn") continue;
-    const uses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-    if (!uses.length) {
-      messages.push({ role: "user", content: "도구를 호출해 진행하거나 finish로 끝내세요." });
-      continue;
-    }
-    const results = [];
-    for (const u of uses) {
+  // 공식 링크를 동시에 미리 열어 둔다(agent 모드)
+  let prefetched = false;
+  if (mode === "agent") {
+    const links = [...new Set(officialLinks(policy).filter((l): l is string => !!l))].slice(0, 3);
+    if (links.length) {
       deadline.remainingMs();
-      const r = await executeTool(u.name, u.input as Record<string, unknown>, { policy, rounds, activeRound, version, web: deps.web, state, mode, openedUrls, now: deps.now, signal: deadline.signal });
+      const opened = await Promise.all(links.map(async (url) => ({ url, r: await deps.web.openPage(url, deadline.signal) })));
       deadline.signal.throwIfAborted();
-      results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
-      if (state.result) break;
+      const blocks: string[] = [];
+      for (const { url, r } of opened) {
+        state.trail.push({ step: state.trail.length + 1, action: "open", target: url, reason: r.ok ? "열림" : r.text });
+        if (!r.ok) continue;
+        openedUrls.push(url);
+        blocks.push(`[${url}]\n${focusText(r.text, PROMPT_CHARS)}`);
+      }
+      if (!openedUrls.length) {
+        const gone = opened.every(({ r }) => /^HTTP (404|410)$/.test(r.text));
+        state.trail.push({ step: state.trail.length + 1, action: "stop", target: links[0], reason: gone ? `공고 링크가 없어졌어요(${opened[0].r.text})` : "공고 링크를 열지 못했어요" });
+        state.usage.pagesOpened = deps.web.opened();
+        return notFoundResult(policy.id, version, mode, deps.now, state);
+      }
+      prefetched = true;
+      messages[0] = { role: "user", content: `${firstMessage}\n\n[열어 둔 공식 페이지]\n${blocks.join("\n\n")}\n\n이 페이지들로 판단해 record_judgement 후 finish 로 끝내세요. 부족할 때만 open_page 를 쓰세요.` };
     }
-    if (state.result) break;
-    // 단계 한도가 가까우면 finish할 차례를 남기도록 알린다
-    const content: Record<string, unknown>[] = [...results];
-    if (turn === maxTurns - 3) content.push({ type: "text", text: "단계 한도가 가깝습니다. 다음 응답에서 finish로 끝내세요." });
-    messages.push({ role: "user", content });
   }
+
+  let used = 0;
+  let halted = false;
+  // 턴을 limit 만큼 돈다. 결과가 나오거나 거절·빈 응답이면 halted 로 표시하고 멈춘다
+  async function runTurns(limit: number, defs: () => Record<string, unknown>[]) {
+    for (let n = 0; n < limit && !state.result && !halted; n++, used++) {
+      const response = await deps.client.beta.messages.create({
+        model: VERIFY_MODEL,
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "medium" },
+        system: SYSTEM,
+        tools: defs(),
+        messages,
+      }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
+      deadline.remainingMs();
+      state.usage.calls++;
+      state.usage.inputTokens += response.usage?.input_tokens ?? 0;
+      state.usage.outputTokens += response.usage?.output_tokens ?? 0;
+      if (response.stop_reason === "refusal") {
+        stopReason = "모델이 요청을 거절함";
+        halted = true;
+        break;
+      }
+      for (const b of response.content) {
+        if (b.type === "server_tool_use") {
+          searches++;
+          state.trail.push({ step: state.trail.length + 1, action: "search", target: JSON.stringify(b.input), reason: "웹 검색" });
+        }
+      }
+      if (!response.content.length) {
+        stopReason = "모델이 빈 응답을 보냄";
+        halted = true;
+        break;
+      }
+      messages.push({ role: "assistant", content: response.content });
+      if (response.stop_reason === "pause_turn") continue;
+      const uses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
+      if (!uses.length) {
+        messages.push({ role: "user", content: "도구를 호출해 진행하거나 finish로 끝내세요." });
+        continue;
+      }
+      const results = [];
+      for (const u of uses) {
+        deadline.remainingMs();
+        const r = await executeTool(u.name, u.input as Record<string, unknown>, { policy, rounds, activeRound, version, web: deps.web, state, mode, openedUrls, now: deps.now, signal: deadline.signal });
+        deadline.signal.throwIfAborted();
+        results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
+        if (state.result) break;
+      }
+      if (state.result) break;
+      // 단계 한도가 가까우면 finish할 차례를 남기도록 알린다
+      const content: Record<string, unknown>[] = [...results];
+      if (used === maxTurns - 3) content.push({ type: "text", text: "단계 한도가 가깝습니다. 다음 응답에서 finish로 끝내세요." });
+      messages.push({ role: "user", content });
+    }
+  }
+
+  // 빠른 시도: 웹 검색 없이 미리 연 페이지로 최대 FAST_TURNS 턴 안에 끝내 본다
+  if (prefetched) await runTurns(Math.min(FAST_TURNS, maxTurns), () => tools(0));
+  await runTurns(maxTurns - used, toolDefs);
 
   state.usage.pagesOpened = deps.web.opened();
   if (state.result) {
@@ -471,7 +529,7 @@ async function loop(policy: Policy, deps: Deps, mode: "agent" | "fixed", firstMe
     return state.result;
   }
   state.trail.push({ step: state.trail.length + 1, action: "stop", target: "", reason: stopReason });
-  return { policyId: policy.id, version, mode, outcome: "notice_not_found", noticeUrl: null, findings: [], mismatches: [], fieldChecks: [], notice: null, checkedAt: toKstDate(deps.now), trail: state.trail, usage: state.usage };
+  return notFoundResult(policy.id, version, mode, deps.now, state);
 }
 
 export async function runVerification(policyId: string, deps: Deps): Promise<VerifyResult> {

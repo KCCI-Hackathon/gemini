@@ -5,6 +5,7 @@ import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadOverlap, loadOverlapNotices } from "@/lib/data/overlap";
 import type { Policy } from "@/lib/data/types";
 import { loadVerified, type VerifiedPolicy } from "@/lib/data/verified";
+import { loadDeadLinks } from "@/lib/data/dead-links";
 import { effectiveStatus, judgePersonal } from "./personal";
 import { blocksParticipation, evaluateRules } from "./overlap";
 import { pickRound } from "./rules";
@@ -160,7 +161,9 @@ export type JudgedPolicy = { policy: Policy; verified: boolean; layer: Layer; ax
 export function judgeAll(profile: Profile, now: Date, opts: JudgeOpts = {}): JudgedPolicy[] {
   const verified = loadVerified();
   const out: JudgedPolicy[] = [];
+  const dead = loadDeadLinks();
   for (const p of loadSnapshot().policies) {
+    if (dead.has(p.id)) continue;
     const v = verified.get(p.id);
     if (!v) {
       if (p.applyPeriodType === "closed") continue;

@@ -14,6 +14,8 @@
     "db:verify": "tsx --tsconfig tsconfig.json scripts/db-export.ts --check",
     "smoke:preview": "tsx --tsconfig tsconfig.json scripts/smoke-preview.ts",
     "smoke:api": "tsx --tsconfig tsconfig.json scripts/smoke-api.ts",
+    "check:dead-links": "tsx --tsconfig tsconfig.json scripts/check-dead-links.ts",
+    "find:moved-notices": "tsx --env-file=.env.local --tsconfig tsconfig.json scripts/find-moved-notices.ts",
     "snapshot:compare": "tsx --tsconfig tsconfig.json scripts/compare-snapshots.ts"
   },
   "dependencies": {
