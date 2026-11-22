@@ -30,6 +30,6 @@ const TABS: { id: Tab; label: string; icon: ReactNode; account?: boolean }[] = [
 export function Nav({ active }: { active: Tab }) {
   return <nav className={s.nav} aria-label="주 메뉴">
     <div className={s.brand}><img src="/pathfinder/robot-face.png" alt="" /><strong>Pathfinder</strong><small>갈림길</small></div>
-    {TABS.map(tab => <a key={tab.id} href={`#${tab.id}`} className={`${s.navButton} ${tab.account ? s.accountButton : ""} ${active === tab.id ? s.navActive : ""}`} aria-current={active === tab.id ? "page" : undefined}>{tab.icon}<span>{tab.label}</span></a>)}
+    {TABS.map(tab => <a key={tab.id} href={`#${tab.id}`} className={`${s.navButton} ${tab.account ? s.accountButton : ""} ${active === tab.id ? s.navActive : ""}`} aria-current={active === tab.id ? "page" : undefined} data-tour={`nav-${tab.id}`}>{tab.icon}<span>{tab.label}</span></a>)}
   </nav>;
 }

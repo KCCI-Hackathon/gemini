@@ -30,6 +30,6 @@ export function AgentFab({ onOpen, face, hidden = false }: { onOpen: () => void;
   // 창을 닫아 버튼이 다시 나오면 작게 시작해 튀어 오른다
   useEffect(() => { if (!hidden) { st.current.main.x = 0.4; st.current.main.v = 0; } }, [hidden]);
 
-  return <button ref={btn} type="button" className={`${s.agentFab} ${hidden ? s.agentFabHidden : ""}`} aria-label="길잡이와 대화 열기" disabled={hidden}
+  return <button ref={btn} type="button" data-tour="agent-fab" className={`${s.agentFab} ${hidden ? s.agentFabHidden : ""}`} aria-label="길잡이와 대화 열기" disabled={hidden}
     onClick={() => { st.current.main.v -= 3; setTimeout(onOpen, 120); }}>{face}</button>;
 }
