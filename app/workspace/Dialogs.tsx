@@ -116,7 +116,7 @@ const statusOptions = [["unknown", "모름 · 나중에 확인"], ["training", "
 // 외부 AI 사용 안내 : 시연 인물은 AI 경로 추천에 요약이 가고, 그 밖에는 AI 상담에 동의한 경우에만 간다
 const privacyNotice = (demo: boolean) => demo
   ? "시연 인물로 AI 경로 추천을 쓰면 나이대·지역·학력·일정 요약과 판정 결과만 외부 AI로 가요. 수혜 입력은 판정에만 써요."
-  : "판정은 이 서비스 서버에서 해요. 예시 인물이나 AI 상담에 동의한 경우에만 요약과 질문이 설정된 외부 AI 제공자로 가요.";
+  : "판정은 이 서비스 서버에서 해요. 예시 인물이나 AI 상담에 동의한 경우에만 요약과 질문이 해외 AI 제공자(OpenAI 또는 Google)로 가요. 이름 · 상세 주소 · 연락처는 지우고 보내요.";
 
 export function ProfileForm({ initial, onSave, onBack, submitLabel = "정책 찾아보기", policyOptions, mutedKeys = [] }: { initial?: Profile; onSave: (profile: Profile, mutedKeys: string[]) => void; onBack?: () => void; submitLabel?: string; policyOptions?: { policyId: string; title: string }[]; mutedKeys?: string[] }) {
   const [birthYm, setBirth] = useState(initial?.birthYm ?? "");
