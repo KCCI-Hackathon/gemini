@@ -4,6 +4,7 @@ import type { Profile } from "@/lib/judge/types";
 import { effectiveStatus } from "@/lib/judge/personal";
 import { addDays, dayNumber } from "./dates";
 import { EVENT_NAMES, type BenefitQuestion, type Evidence, type Card, type Choice, type Evaluation, type Offering, type Period, type PlanEvent, type PlannerInput, type Reason, type Stage } from "./types";
+import { classifyEligibility } from "./eligibility";
 
 export type BaseVerdict = { availability: Card["availability"]; reasons: Reason[]; evidence?: Evidence[]; questions?: BenefitQuestion[] };
 export type DraftConflictEvaluator = (card: Card, chosen: Card[]) => {
@@ -153,7 +154,7 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
         questions.set(JSON.stringify([question.policyId, question.ruleId, question.question, question.month ?? null]), question);
       }
       const uniqueReasons = reasons.filter((r, i) => reasons.findIndex(x => x.code === r.code && x.message === r.message) === i);
-      cards.push({ ...o, evidence: [...o.evidence, ...(piece.verdict.evidence ?? [])], verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, reasons: uniqueReasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
+      cards.push({ ...o, evidence: [...o.evidence, ...(piece.verdict.evidence ?? [])], verifyLabel: o.verifyLabel ?? null, stageId: stage.stageId, personalWindow, stageWindow, applicationWindows, deadlineKind, daysLeft: end && availability !== "blocked" && deadlineKind !== "unknown" && !officialClosed ? dayNumber(end) - dayNumber(today) : null, availability, eligibility: "needs_check", eligibilityReason: "평가 중", reasons: uniqueReasons, selectedStageId: selected.get(o.offeringId) ?? null, otherStageIds: [], conflicts: [], canReplace: false });
     }
   }
   for (const card of cards) card.otherStageIds = cards.filter(c => c.offeringId === card.offeringId && c.stageId !== card.stageId && c.availability !== "blocked").map(c => c.stageId);
@@ -192,7 +193,8 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     }
     if (input.mutedKeys.includes("participation") && !actualConflict && clone.availability !== "blocked") { clone.availability = "needs_check"; clone.reasons.push({ code: "MUTED_PARTICIPATION", message: "수혜 조건을 꺼두어 추가 확인이 필요해요" }); }
     clone.canReplace = originallyAllowed && !actualConflict && clone.conflicts.length > 0;
-    return clone;
+    const classification = classifyEligibility(clone.availability, clone.overlapAssessment, clone.reasons.map(reason => reason.message));
+    return { ...clone, eligibility: classification.eligibility, eligibilityReason: classification.reason };
   };
   const recommended: Choice[] = [];
   for (const stage of stages) {
@@ -200,15 +202,15 @@ export function evaluatePlanner(profile: Profile, input: PlannerInput, catalog: 
     const options = cards.filter(c => c.stageId === stage.stageId).sort((a, b) => Number(b.category === input.preferredCategory && !input.mutedKeys.includes("interest")) - Number(a.category === input.preferredCategory && !input.mutedKeys.includes("interest")) || sortCards(a, b));
     for (const card of options) {
       if (count === 2) break;
-      if (recommended.some(c => c.offeringId === card.offeringId) || applyConflicts(card, recommended).availability !== "eligible") continue;
+      if (recommended.some(c => c.offeringId === card.offeringId) || applyConflicts(card, recommended).eligibility !== "eligible") continue;
       recommended.push({ offeringId: card.offeringId, stageId: card.stageId }); count++;
     }
   }
   const evaluated = cards.map(c => applyConflicts(c, input.choices)).sort(sortCards);
   const choiceWarnings = input.choices.flatMap(choice => {
     const card = evaluated.find(c => c.offeringId === choice.offeringId && c.stageId === choice.stageId);
-    if (card?.availability === "eligible") return [];
-    return [{ ...choice, title: card?.title ?? catalog.find(o => o.offeringId === choice.offeringId)?.title ?? `공고 조회 불가 (${choice.offeringId})`, message: card ? `${card.availability === "blocked" ? "현재 일정으로 신청 불가" : "확인 필요"} · ${card.reasons.map(r => r.message).join(" · ")}` : "시점 다시 선택 · 저장한 시점 또는 회차를 찾을 수 없어요", otherStageIds: card?.otherStageIds ?? [] }];
+    if (card?.eligibility === "eligible") return [];
+    return [{ ...choice, title: card?.title ?? catalog.find(o => o.offeringId === choice.offeringId)?.title ?? `공고 조회 불가 (${choice.offeringId})`, message: card ? `${card.eligibility === "blocked" ? "현재 일정으로 신청 불가" : "확인 필요"} · ${card.eligibilityReason}` : "시점 다시 선택 · 저장한 시점 또는 회차를 찾을 수 없어요", otherStageIds: card?.otherStageIds ?? [] }];
   });
   return { revision: input.revision, today, asOf: catalog[0]?.dataVersion === "fixture-1" ? "2026-11-19" : (catalog[0]?.dataVersion ?? today), evaluatedAt: now.toISOString(), dataVersion: catalog[0]?.dataVersion ?? "empty", demo: input.demoId === "pathfinder-demo-2026", stages, questions: [...questions.values()], cards: evaluated, choiceWarnings, recommendations: recommended };
 }

@@ -22,7 +22,7 @@ test("F-2: a card without restrictions has no empty warning area", () => {
   expect(html(base)).not.toMatch(/class="[^"]*(checkNote|cardWarning|partialNote)/);
 });
 test("F-2: a blocked card still shows its first reason", () => {
-  const blocked: Card = { ...base, availability: "blocked", reasons: [{ code: "CLOSED", message: "공식 접수가 마감되었어요" }, ...partial.reasons] };
+  const blocked: Card = { ...base, availability: "blocked", eligibility: "blocked", eligibilityReason: "공식 접수가 마감되었어요", reasons: [{ code: "CLOSED", message: "공식 접수가 마감되었어요" }, ...partial.reasons] };
   const out = html(blocked);
   expect(out).toContain("공식 접수가 마감되었어요");
   expect(out).not.toContain("지급액 미지급");

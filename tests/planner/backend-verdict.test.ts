@@ -9,6 +9,8 @@ const ev = evaluateRequest({ ...PERSONA_A, events: [] }, structuredClone(input) 
 test("backend eligible policy is eligible with its verify badge", () => {
   const card = ev.cards.find(c => c.title === "청년 자격증 응시료 지원(인천)" && c.stageId === "current")!;
   expect(card.availability).toBe("eligible");
+  expect(card.eligibility).toBe("needs_check"); // 응시료 감면 조항이 있으나 수혜 사실과 연결된 검토 규칙이 없음
+  expect(card.eligibilityReason).toContain("중복수혜 문구");
   expect(card.verifyLabel).toBe("근거 확인 대기");
   expect(card.reasons.map(r => r.code)).not.toContain("UNREVIEWED");
 });
@@ -16,6 +18,13 @@ test("code_met_unreviewed keeps the spec wording", () => {
   const card = ev.cards.find(c => c.availability === "needs_check" && c.reasons.some(r => r.message === "일부 조건 충족 · 공고 확인 필요"));
   expect(card).toBeDefined();
 });
-test("at least one rule recommendation exists for the persona", () => {
-  expect(ev.recommendations.length).toBeGreaterThan(0);
+test("overlap language in an official notice without a linked rule stays in needs-check", () => {
+  const card = ev.cards.find(c => c.title === "K-뉴딜 아카데미" && c.stageId === "ev-course");
+  expect(card).toBeDefined();
+  expect(card).toMatchObject({ overlapAssessment: "unresolved", eligibility: "needs_check" });
+  expect(card!.eligibilityReason).toContain("중복수혜");
+});
+test("rule recommendations use the same eligibility classification as the tabs", () => {
+  expect(ev.recommendations.every(choice => ev.cards.find(card => card.offeringId === choice.offeringId && card.stageId === choice.stageId)?.eligibility === "eligible")).toBe(true);
+  expect(ev.recommendations.some(choice => ev.cards.find(card => card.offeringId === choice.offeringId && card.stageId === choice.stageId)?.eligibility === "needs_check")).toBe(false);
 });

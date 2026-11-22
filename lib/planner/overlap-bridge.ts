@@ -42,7 +42,8 @@ export function restrictionVerdict(list: Restriction[], targetPolicyId: string, 
     if (r.state === "not_applies") continue;
     const evidenceId = `overlap:${r.ruleId}`;
     evidence.push({ evidenceId, title: `중복 수혜 제한 · ${r.sourceName}`, quote: r.evidence.quote,
-      url: r.evidence.url, reviewedAt: r.evidence.checkedAt, reviewed: true });
+      url: r.evidence.url, reviewedAt: r.evidence.checkedAt, reviewed: true,
+      ...(r.review && { overlapReview: r.review }) });
     if (blocksParticipation(r)) {
       availability = "blocked";
       blocks.push({ code: kind === "current" ? "PARTICIPATION_CONFLICT" : "DRAFT_CONFLICT", message: blockMessage(r, kind), evidenceId });

@@ -9,9 +9,9 @@ function card(policyId: string, title: string): Card {
   return {
     policyId, offeringId: policyId + ":2027", title, roundLabel: "2027", category: "life",
     summary: "", support: "", org: "", official: { ...window, kind: "fixed", closeAt: null },
-    rules: [], evidence: [], restrictions: [], reviewed: true, dataVersion: "test", verifyLabel: null,
+    rules: [], evidence: [], restrictions: [], overlapAssessment: "reviewed_rules", reviewed: true, dataVersion: "test", verifyLabel: null,
     stageId: "current", personalWindow: window, stageWindow: window, applicationWindows: [window],
-    deadlineKind: "official", daysLeft: null, availability: "eligible", reasons: [],
+    deadlineKind: "official", daysLeft: null, availability: "eligible", eligibility: "eligible", eligibilityReason: "test", reasons: [],
     selectedStageId: null, otherStageIds: [], conflicts: [], canReplace: false,
   };
 }
