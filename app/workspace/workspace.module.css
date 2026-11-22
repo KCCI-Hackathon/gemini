@@ -88,7 +88,7 @@ html:has(.app) { zoom:.75; }
 .columnCards { display:flex; flex-direction:column; gap:10px; }
 .policyCard { background:#fff; border:1px solid #E6ECF6; border-radius:18px; box-shadow:0 10px 24px -16px rgba(22,34,74,.28); padding:14px; position:relative; min-width:0; overflow-wrap:anywhere; }
 .chosen { border:2px solid #2C64DB; padding:13px; }
-.recommended { box-shadow:inset 0 3px 0 #8eafdd; }
+.recommended { outline:2px solid #2C64DB; outline-offset:-2px; box-shadow:0 0 0 4px rgba(44,100,219,.14); }
 .blocked { background:#edeef1; border-color:#d8dbe2; }
 .cardTop { display:flex; align-items:center; justify-content:space-between; gap:7px; margin-bottom:9px; }
 .category { display:flex; align-items:center; gap:5px; font-size:13px; font-weight:650; }
@@ -333,3 +333,25 @@ html:has(.app) { zoom:.75; }
 .flag_relocation { color:#E1AA74; }
 .deadlineFlag { position:absolute; top:6px; transform:translateX(-2px); color:#12965A; z-index:2; line-height:0; }
 .deadlineFlagCheck { color:#E1AA74; }
+
+/* 저장 계획 비교: 열고 닫는 상자, 두 계획을 고르면 바로 비교 */
+.compareBox summary { display:flex; align-items:center; gap:10px; cursor:pointer; list-style:none; }
+.compareBox summary::-webkit-details-marker { display:none; }
+.compareBox summary::before { content:"▸"; color:var(--muted); transition:transform .15s; }
+.compareBox[open] summary::before { transform:rotate(90deg); }
+.compareBox summary span { color:var(--muted); font-size:13px; }
+.compareFields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+.compareField { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:700; color:var(--muted); }
+.compareField .picker { width:100%; min-width:0; }
+.compareResult { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:14px; }
+.compareResult>div { border:1px solid #dfe5ee; border-radius:12px; padding:12px; background:#fbfcfe; }
+.compareResult strong span { color:#2C64DB; margin-left:4px; }
+.compareResult p { margin:6px 0 0; font-size:13px; line-height:1.5; }
+@media(max-width:760px) { .compareFields { grid-template-columns:1fr; } }
+
+/* 프로필 조건 칩: 켜진 조건은 초록 체크 + 색칠, 꺼진 조건은 회색 */
+.profileChip { display:inline-flex; align-items:center; gap:6px; }
+.activeChip { background:#E8F6EE; border-color:#9ED6B6; color:#0E7A49; font-weight:700; }
+.chipMark { display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; font-size:11px; line-height:1; }
+.activeChip .chipMark { background:#12965A; color:#fff; }
+.mutedChip .chipMark { border:1.5px solid #c3cbd8; }

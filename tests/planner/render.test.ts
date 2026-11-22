@@ -58,7 +58,7 @@ test("missing starred policy remains removable without a current verdict", () =>
 test("plan comparison explains why one plan cannot be compared", () => {
   const html = renderToStaticMarkup(React.createElement(PlanCompare, { plans: [] }));
   expect(html).toContain("계획을 두 개 이상 저장하면 비교할 수 있어요");
-  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>계획 비교<\/button>/);
+  expect(html).not.toContain("<select"); // 계획이 둘 미만이면 고르는 칸 없이 안내만
 });
 test("agent footer describes the verdict and recommendation roles", () => {
   const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {} }));
