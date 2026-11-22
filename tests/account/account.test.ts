@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getMe, login, logout, resetLoginLimits, signup, SESSION_COOKIE } from "@/lib/account/auth";
 import { rejectCrossSite, sessionToken } from "@/lib/account/http";
 import { getSettings, listNotifications, markRead, planNotifications, putSettings, runDailyNotifications } from "@/lib/account/notifications";
-import { createPlan, getPlan, listPlans } from "@/lib/account/plans";
+import { createPlan, getPlan, listPlans, MAX_PLANS, resetSaveLimits } from "@/lib/account/plans";
 import { sqliteStore, type AccountStore, type User } from "@/lib/account/store";
 import { PERSONA_A } from "@/lib/judge/personas";
 import { evaluateRequest } from "@/lib/planner/catalog";
@@ -26,7 +26,7 @@ async function account(email = "a@example.com") {
   return { token, user: store.findUserByEmail(email)! as User };
 }
 
-beforeEach(() => { store = sqliteStore(":memory:"); resetLoginLimits(); });
+beforeEach(() => { store = sqliteStore(":memory:"); resetLoginLimits(); resetSaveLimits(); });
 
 describe("계정", () => {
   it("가입하면 세션이 생기고, 같은 이메일은 다시 가입할 수 없다", async () => {
@@ -82,7 +82,7 @@ describe("계정 저장 계획", () => {
   it("목록은 내 계획만 생성일 역순으로, 다른 사람 계획은 404", async () => {
     const a = await account("a@example.com"), b = await account("b@example.com");
     const ids: string[] = [];
-    for (let i = 0; i < 22; i++) ids.push((createPlan(a.user, `key-a-${String(i).padStart(4, "0")}`, planBody, { store, now: new Date(now.getTime() + i * 1000) }).body as { planId: string }).planId);
+    for (let i = 0; i < 22; i++) ids.push((createPlan(a.user, `key-a-${String(i).padStart(4, "0")}`, planBody, { store, now: new Date(now.getTime() + i * 7000) }).body as { planId: string }).planId);
     createPlan(b.user, "key-b-000001", planBody, ctx());
     const page1 = listPlans(a.user, null, ctx()).body as { plans: { planId: string }[]; nextCursor: string };
     expect(page1.plans.map(p => p.planId)).toEqual(ids.slice(2).reverse());
@@ -93,6 +93,21 @@ describe("계정 저장 계획", () => {
     expect(listPlans(null, null, ctx()).status).toBe(401);
     expect(listPlans(a.user, "garbage", ctx()).status).toBe(400);
   }, 30_000); // 저장마다 서버가 전체 판정을 다시 돌린다
+});
+
+describe("저장 한도", () => {
+  it("분당 10번, 사용자당 50개, 본문 크기를 넘으면 거부하고 재시도는 세지 않는다", async () => {
+    const { user } = await account();
+    for (let i = 0; i < 10; i++) expect(createPlan(user, `key-rate-${i}0000`, { ...planBody, name: `계획 ${i}` }, ctx()).status).toBe(201);
+    expect(createPlan(user, "key-rate-overflow", planBody, ctx()).status).toBe(429);
+    expect(createPlan(user, "key-rate-00000", { ...planBody, name: "계획 0" }, ctx()).status).toBe(200);
+    expect(createPlan(user, "key-rate-later", planBody, { store, now: new Date(now.getTime() + 61_000) }).status).toBe(201);
+    const full = { ...store, countPlans: () => MAX_PLANS };
+    expect(createPlan(user, "key-full-0001", planBody, { store: full, now: new Date(now.getTime() + 200_000) }).status).toBe(409);
+    expect(createPlan(user, "key-rate-later", planBody, { store: full, now }).status).toBe(200);
+    const huge = { ...planBody, profileSnapshot: { ...profile, participating: Array(30_000).fill("20250101005400000000") } };
+    expect(createPlan(user, "key-huge-0001", huge, ctx()).status).toBe(413);
+  }, 30_000);
 });
 
 describe("알림", () => {
@@ -126,7 +141,7 @@ describe("알림", () => {
     createPlan(a.user, "key-notify-1", planBody, ctx());
     const later = new Date("2026-12-20T09:00:00+09:00");
     const first = runDailyNotifications(store, later);
-    expect(first).toMatchObject({ plans: 1, failed: 0 });
+    expect(first).toMatchObject({ plans: 1, failed: 0, complete: true });
     expect(runDailyNotifications(store, later).created).toBe(0);
     const list = listNotifications(a.user, store).body as { notifications: { id: string }[]; unread: number };
     expect(list.unread).toBe(first.created);
@@ -141,6 +156,19 @@ describe("알림", () => {
     expect(getSettings(b.user, store).body).toEqual(settings);
     expect(listNotifications(null, store).status).toBe(401);
   });
+});
+
+describe("정기 작업 시간 한도", () => {
+  it("시간을 넘기면 멈추고, 다음 실행은 확인하지 못한 계획부터 처리한다", async () => {
+    const { user } = await account();
+    const first = (createPlan(user, "key-queue-0001", planBody, ctx()).body as { planId: string }).planId;
+    const second = (createPlan(user, "key-queue-0002", { ...planBody, name: "두 번째" }, { store, now: new Date(now.getTime() + 7000) }).body as { planId: string }).planId;
+    let t = 0;
+    const clock = () => (t += 1000);
+    const at = new Date("2026-12-20T09:00:00+09:00");
+    expect(runDailyNotifications(store, at, 1500, clock)).toMatchObject({ plans: 1, complete: false });
+    expect(store.plansToCheck(10)).toEqual([second, first]);
+  }, 30_000);
 });
 
 describe("HTTP 경계", () => {

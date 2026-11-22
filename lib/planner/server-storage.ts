@@ -30,7 +30,7 @@ export async function logoutAccount(fetchFn: Fetch = fetch): Promise<void> {
 }
 
 export function createServerPlanRepository(fetchFn: Fetch = fetch) {
-  return {
+  const repo = {
     /** 목록은 요약만 받는다(계획 하나가 판정 결과를 포함해 수 MB). 열 때 getPlan으로 본문을 받는다. */
     async listPlans(): Promise<{ plans: PlanSummary[] }> {
       const plans: PlanSummary[] = []; let cursor: string | null = null;
@@ -55,9 +55,10 @@ export function createServerPlanRepository(fetchFn: Fetch = fetch) {
         name: plan.name, source: plan.source, ...(plan.recommendationSource && { recommendationSource: plan.recommendationSource }),
         profileSnapshot: plan.profileSnapshot, input: plan.input,
       }, { "idempotency-key": plan.planId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100).padEnd(8, "0") }));
-      const saved = await this.getPlan(planId);
+      const saved = await repo.getPlan(planId);
       if (!saved) throw new Error("저장한 계획을 다시 읽지 못했어요.");
       return saved;
     },
   };
+  return repo;
 }

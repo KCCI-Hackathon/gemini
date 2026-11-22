@@ -51,11 +51,18 @@ export function planNotifications(planId: string, name: string, saved: Evaluatio
 }
 const label = (c: Card) => c.availability === "eligible" ? "수혜 가능" : c.availability === "blocked" ? "수혜 불가능" : "확인 필요";
 
-/** 하루 한 번 도는 작업. 새로 쌓은 알림 수를 돌려준다. */
-export function runDailyNotifications(store: AccountStore, at: Date): { plans: number; created: number; failed: number } {
-  let created = 0, failed = 0;
-  const plans = store.allPlans();
-  for (const rec of plans) {
+/**
+ * 하루 한 번 도는 작업. 가장 오래 확인하지 않은 계획부터 하나씩 읽어(계획 하나가 약 3MB) 시간 안에서만 처리한다.
+ * 못 끝낸 계획은 다음 실행에서 먼저 처리된다. 같은 알림은 dedupe 키로 한 번만 쌓인다.
+ */
+export function runDailyNotifications(store: AccountStore, at: Date, budgetMs = 45_000, clock = () => Date.now()) {
+  const started = clock(), ids = store.plansToCheck(10_000);
+  let plans = 0, created = 0, failed = 0, stopped = false;
+  for (const id of ids) {
+    if (clock() - started > budgetMs) { stopped = true; break; }
+    const rec = store.planById(id);
+    if (!rec) continue;
+    plans++;
     try {
       const fresh = evaluateRequest(rec.plan.profileSnapshot, rec.plan.input, at);
       for (const d of planNotifications(rec.id, rec.plan.name, rec.plan.savedEvaluation, fresh, store.getSettings(rec.ownerId))) {
@@ -64,8 +71,9 @@ export function runDailyNotifications(store: AccountStore, at: Date): { plans: n
         if (store.addNotification(n, d.dedupe)) created++;
       }
     } catch { failed++; } // 한 계획이 깨져도 다른 사용자의 알림은 만든다
+    store.markChecked(id, at.toISOString());
   }
-  return { plans: plans.length, created, failed };
+  return { plans, created, failed, complete: !stopped && ids.length < 10_000 };
 }
 
 export function listNotifications(user: User | null, store: AccountStore): Result {

@@ -23,7 +23,8 @@ export interface AccountStore {
   createUser(user: User): User | null;
   findUserByEmail(email: string): User | null;
   findUser(id: string): User | null;
-  createSession(tokenHash: string, userId: string, expiresAt: string): void;
+  /** 만료된 세션을 지운 뒤 새 세션을 만든다 */
+  createSession(tokenHash: string, userId: string, expiresAt: string, now: string): void;
   /** 만료되지 않은 세션의 사용자 */
   findSessionUser(tokenHash: string, now: string): User | null;
   deleteSession(tokenHash: string): void;
@@ -31,8 +32,12 @@ export interface AccountStore {
   insertPlan(record: PlanRecord): { record: PlanRecord; created: boolean };
   listPlans(ownerId: string, limit: number, after?: PlanCursor): PlanSummary[];
   getPlan(ownerId: string, id: string): PlanRecord | null;
-  /** 정기 알림 작업용: 알림 설정과 함께 모든 사용자의 계획 */
-  allPlans(): PlanRecord[];
+  countPlans(ownerId: string): number;
+  planByKey(ownerId: string, idempotencyKey: string): PlanRecord | null;
+  /** 정기 알림 작업용: 가장 오래 확인하지 않은 계획부터 ID만 */
+  plansToCheck(limit: number): string[];
+  planById(id: string): PlanRecord | null;
+  markChecked(id: string, at: string): void;
   /** 같은 (사용자, dedupeKey)는 한 번만 쌓는다. 새로 쌓았으면 true */
   addNotification(n: Notification, dedupeKey: string): boolean;
   listNotifications(userId: string, limit: number): Notification[];
@@ -52,8 +57,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS plans (
   id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, source TEXT NOT NULL,
   schema_version INTEGER NOT NULL, snapshot_json TEXT NOT NULL, data_version TEXT NOT NULL, created_at TEXT NOT NULL,
-  idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, UNIQUE(owner_id, idempotency_key)
+  idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, checked_at TEXT, UNIQUE(owner_id, idempotency_key)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS plans_to_check ON plans(checked_at, created_at);
 CREATE INDEX IF NOT EXISTS plans_by_owner ON plans(owner_id, created_at DESC, id DESC);
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL,
@@ -91,7 +97,10 @@ export function sqliteStore(path: string): AccountStore {
     },
     findUserByEmail(email) { const r = one("SELECT * FROM users WHERE email=?", email); return r ? toUser(r) : null; },
     findUser(id) { const r = one("SELECT * FROM users WHERE id=?", id); return r ? toUser(r) : null; },
-    createSession(tokenHash, userId, expiresAt) { run("INSERT INTO sessions VALUES (?,?,?)", tokenHash, userId, expiresAt); },
+    createSession(tokenHash, userId, expiresAt, now) {
+      run("DELETE FROM sessions WHERE expires_at<=?", now);
+      run("INSERT INTO sessions VALUES (?,?,?)", tokenHash, userId, expiresAt);
+    },
     findSessionUser(tokenHash, now) {
       const r = one("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?", tokenHash, now);
       return r ? toUser(r) : null;
@@ -99,7 +108,7 @@ export function sqliteStore(path: string): AccountStore {
     deleteSession(tokenHash) { run("DELETE FROM sessions WHERE token_hash=?", tokenHash); },
     insertPlan(rec) {
       const p = rec.plan;
-      const r = run("INSERT OR IGNORE INTO plans VALUES (?,?,?,?,?,?,?,?,?,?)", rec.id, rec.ownerId, p.name, p.source, p.schemaVersion,
+      const r = run("INSERT OR IGNORE INTO plans VALUES (?,?,?,?,?,?,?,?,?,?,NULL)", rec.id, rec.ownerId, p.name, p.source, p.schemaVersion,
         JSON.stringify(p), p.savedEvaluation.dataVersion, p.createdAt, rec.idempotencyKey, rec.requestHash);
       if (r.changes) return { record: rec, created: true };
       return { record: toPlan(one("SELECT * FROM plans WHERE owner_id=? AND idempotency_key=?", rec.ownerId, rec.idempotencyKey)!), created: false };
@@ -110,7 +119,12 @@ export function sqliteStore(path: string): AccountStore {
         : all(`${SUMMARY} WHERE owner_id=? ORDER BY created_at DESC, id DESC LIMIT ?`, ownerId, limit)).map(toSummary);
     },
     getPlan(ownerId, id) { const r = one("SELECT * FROM plans WHERE owner_id=? AND id=?", ownerId, id); return r ? toPlan(r) : null; },
-    allPlans() { return all("SELECT * FROM plans ORDER BY owner_id, created_at").map(toPlan); },
+    planByKey(ownerId, key) { const r = one("SELECT * FROM plans WHERE owner_id=? AND idempotency_key=?", ownerId, key); return r ? toPlan(r) : null; },
+    countPlans(ownerId) { return Number(one("SELECT count(*) AS n FROM plans WHERE owner_id=?", ownerId)!.n); },
+    // 확인한 적 없는 계획 먼저, 그다음 가장 오래전에 확인한 계획. 시간 안에 못 끝낸 계획이 다음 실행에서 앞에 온다.
+    plansToCheck(limit) { return all("SELECT id FROM plans ORDER BY checked_at IS NOT NULL, checked_at, created_at LIMIT ?", limit).map(r => str(r.id)); },
+    planById(id) { const r = one("SELECT * FROM plans WHERE id=?", id); return r ? toPlan(r) : null; },
+    markChecked(id, at) { run("UPDATE plans SET checked_at=? WHERE id=?", at, id); },
     addNotification(n, dedupeKey) {
       return !!run("INSERT OR IGNORE INTO notifications VALUES (?,?,?,?,?,?,?,?,?,?)", n.id, n.userId, n.kind, n.planId, n.policyId, n.title, n.body, dedupeKey, n.createdAt, n.readAt).changes;
     },

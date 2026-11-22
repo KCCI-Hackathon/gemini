@@ -41,7 +41,7 @@ export function sessionCookie(token: string, secure: boolean, maxAgeSeconds: num
 }
 function startSession(ctx: Ctx, user: User): string {
   const token = randomBytes(32).toString("base64url");
-  ctx.store.createSession(tokenHash(token), user.id, new Date(ctx.now.getTime() + SESSION_DAYS * 86_400_000).toISOString());
+  ctx.store.createSession(tokenHash(token), user.id, new Date(ctx.now.getTime() + SESSION_DAYS * 86_400_000).toISOString(), ctx.now.toISOString());
   return sessionCookie(token, ctx.secure, SESSION_DAYS * 86_400);
 }
 const me = (u: User) => ({ mode: "account" as const, userId: u.id, displayName: u.displayName });
@@ -67,6 +67,7 @@ export async function login(body: unknown, ctx: Ctx & { ip: string }): Promise<R
   const parsed = LoginSchema.safeParse(body);
   if (!parsed.success) return { status: 400, body: { error: "이메일과 비밀번호를 입력해 주세요." } };
   const key = `${ctx.ip}:${parsed.data.email}`, now = ctx.now.getTime();
+  if (failures.size > 10_000) for (const [k, v] of failures) if (v.until <= now) failures.delete(k);
   const f = failures.get(key);
   if (f && f.n >= MAX_FAILURES && f.until > now) return { status: 429, body: { error: "로그인 시도가 많아요. 15분 뒤에 다시 시도해 주세요." } };
   const user = ctx.store.findUserByEmail(parsed.data.email);

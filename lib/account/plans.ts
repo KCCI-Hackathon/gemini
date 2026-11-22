@@ -18,6 +18,11 @@ export const CreatePlanSchema = z.object({
 }).refine(b => b.input.choices.length > 0, { message: "담은 정책이 있어야 저장할 수 있어요.", path: ["input", "choices"] });
 const KEY = /^[A-Za-z0-9_-]{8,100}$/;
 const PAGE = 20;
+// 저장 하나가 전체 판정(약 0.5초)과 약 3MB를 쓴다. 한 사용자가 서버 디스크·CPU를 차지하지 못하게 막는다.
+export const MAX_PLANS = 50, MAX_BODY_CHARS = 200_000, SAVES_PER_MINUTE = 10;
+// shortcut: 분당 저장 횟수는 인스턴스 메모리에 센다(lib/limits.ts와 같은 한계). 운영 DB를 정하면 저장소로 옮긴다.
+const recentSaves = new Map<string, number[]>();
+export function resetSaveLimits() { recentSaves.clear(); }
 
 type Ctx = { store: AccountStore; now: Date };
 const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(",")}]`
@@ -27,9 +32,19 @@ const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical
 export function createPlan(user: User | null, idempotencyKey: string | null, body: unknown, ctx: Ctx): Result {
   if (!user) return { status: 401, body: { error: "로그인이 필요해요." } };
   if (!idempotencyKey || !KEY.test(idempotencyKey)) return { status: 400, body: { error: "Idempotency-Key 헤더가 필요해요." } };
+  if (JSON.stringify(body).length > MAX_BODY_CHARS) return { status: 413, body: { error: "계획 내용이 너무 커요." } };
   const parsed = CreatePlanSchema.safeParse(body);
   if (!parsed.success) return { status: 400, body: { error: parsed.error.issues[0]?.message ?? "계획 형식이 잘못됐어요." } };
   const requestHash = createHash("sha256").update(canonical(parsed.data)).digest("hex");
+  // 재시도는 다시 판정하지 않고 한도에도 세지 않는다
+  const existing = ctx.store.planByKey(user.id, idempotencyKey);
+  if (existing) return existing.requestHash === requestHash
+    ? { status: 200, body: { planId: existing.id, createdAt: existing.plan.createdAt } }
+    : { status: 409, body: { error: "같은 저장 요청 키로 다른 내용을 보냈어요." } };
+  const now = ctx.now.getTime(), saves = (recentSaves.get(user.id) ?? []).filter(t => t > now - 60_000);
+  if (saves.length >= SAVES_PER_MINUTE) return { status: 429, body: { error: "잠시 뒤에 다시 저장해 주세요." } };
+  recentSaves.set(user.id, [...saves, now]);
+  if (ctx.store.countPlans(user.id) >= MAX_PLANS) return { status: 409, body: { error: `계획은 ${MAX_PLANS}개까지 저장할 수 있어요.` } };
   const { name, source, recommendationSource, profileSnapshot, input } = parsed.data;
   const id = randomUUID();
   const plan: SavedPlan = {
