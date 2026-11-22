@@ -26,3 +26,16 @@ test("A-2: the agent shows the position and a skip button", () => {
   expect(html).toContain("질문 1/3");
   expect(html).toMatch(/<button\b[^>]*>나중에 답할게요<\/button>/);
 });
+
+test("GPT 재설계 8장: a real user sees the consent box before any AI use", () => {
+  const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {}, consentNeeded: true, onConsent: () => {} }));
+  expect(html).toContain("AI 상담 사용");
+  expect(html).toContain("보내지 않고");
+});
+test("GPT 재설계 8장: an AI question shows code-made inputs for its target and replaces the code question", () => {
+  const html = renderToStaticMarkup(React.createElement(Agent, { messages: [], busy: false, onClose: () => {}, onSend: () => {}, onAnswer: () => {}, questions: qs,
+    aiQuestion: { text: "교육은 언제 끝나요?", target: { kind: "event", event: "training_completion" } } }));
+  expect(html).toContain("교육은 언제 끝나요?");
+  expect(html).toContain('type="date"');
+  expect(html).not.toContain("질문 1/3");
+});
