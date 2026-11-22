@@ -40,6 +40,8 @@ export type AnswerKind = "receiving" | "selected" | "ended_date" | "monthly_amou
 export type BenefitQuestion = {
   policyId: string; sourcePolicyId: string; sourceName: string;
   ruleId: string; question: string; answerKind: AnswerKind;
+  /** monthly_amount 질문이 묻는 지급 월(YYYY-MM). 답을 이 달로 저장해야 같은 질문이 닫힌다(J-1). */
+  month?: string;
 };
 export type Evaluation = { questions: BenefitQuestion[]; revision: number; today: string; asOf: string; evaluatedAt: string; dataVersion: string; demo: boolean; stages: Stage[]; cards: Card[]; choiceWarnings: ChoiceWarning[]; recommendations: Choice[] };
 export type Draft = { draftId: string; profileSnapshot: Profile; input: PlannerInput; evaluation: Evaluation };

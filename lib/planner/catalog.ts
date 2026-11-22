@@ -58,10 +58,13 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
     const p = policyMap.get(o.policyId)!;
     const v = verified.get(p.id);
     const axes = judgePolicy(p, v, atProfile, new Date(`${date}T12:00:00+09:00`));
-    let availability = axes.personal.value === "ineligible" ? "blocked" as const : axes.personal.value === "eligible" ? "eligible" as const : "needs_check" as const;
+    // 이력 기간 조건이 아직 남은 날짜는 막는다. 시점 경계(boundaries)로 기간이 지나는 날부터 다시 판정한다(J-9).
+    let availability = axes.personal.value === "ineligible" || axes.time.value === "unmet" ? "blocked" as const : axes.personal.value === "eligible" ? "eligible" as const : "needs_check" as const;
     const overlap = restrictionVerdict(axes.restriction.current_restrictions ?? [], p.id, "current");
-    const personalReasons = axes.personal.reasons.filter(message => message !== "중복수혜 제한 조건 확인 필요");
-    const reasons = [...personalReasons, ...(axes.fieldNotes ?? []), ...(axes.time.note ? [axes.time.note] : [])].map(message => ({ code: message.includes("지역") ? "RESIDENCE" : message.includes("취업") || message.includes("수강") ? "STATUS" : "BASE_CONDITION", message }));
+    // 중복수혜 사유는 overlap 쪽에서 한 번만 보여 준다. judgePolicy 가 같은 사유를 personal 에도 넣으므로 뺀다(J-3).
+    const overlapTexts = new Set((axes.restriction.current_restrictions ?? []).map(r => r.reason));
+    const personalReasons = axes.personal.reasons.filter(message => message !== "중복수혜 제한 조건 확인 필요" && !overlapTexts.has(message));
+    const reasons = [...personalReasons, ...(axes.fieldNotes ?? []), ...(axes.time.note ? [axes.time.note] : [])].map(message => ({ code: axes.time.value === "unmet" && (message === axes.time.note || message === "기간 경과 후 재검토") ? "PERIOD" : message.includes("지역") ? "RESIDENCE" : message.includes("취업") || message.includes("수강") ? "STATUS" : "BASE_CONDITION", message }));
     if (axes.personal.value === "code_met_unreviewed") reasons.unshift({ code: "UNREVIEWED", message: "일부 조건 충족 · 공고 확인 필요" });
     if (axes.recruitment === "unknown" && availability !== "blocked") { availability = "needs_check"; reasons.push({ code: "UNKNOWN_RECRUITMENT", message: "최신 공고의 접수 기간 확인 필요" }); }
     if (availability !== "blocked" && overlap.availability) availability = overlap.availability;
