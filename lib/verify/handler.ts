@@ -1,5 +1,5 @@
 // /api/verify 처리. 요청은 정책 번호 하나만 받는다(설계 7장 서버 격리).
-import { aiConfigured, isGemini } from "@/lib/ai/client";
+import { verifyAiConfigured, verifyProvider } from "@/lib/ai/client";
 import { DeadlineExceeded } from "@/lib/ai/deadline";
 import { toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
@@ -62,7 +62,7 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
   if (v?.rounds?.length && pickRound(v.rounds, date).state === "approved") {
     return { status: 409, body: { error: needsReview ? VERIFY_RECHECK : "승인된 공고 규칙이 있는 정책은 실시간 AI 대조를 하지 않습니다." } };
   }
-  if (!aiConfigured(ctx.env)) {
+  if (!verifyAiConfigured(ctx.env)) {
     return needsReview
       ? { status: 409, body: { error: VERIFY_RECHECK } }
       : { status: 503, body: { error: "AI 검증이 꺼져 있습니다. 저장된 결과가 있는 정책만 볼 수 있습니다." } };
@@ -85,8 +85,8 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
     client: ctx.makeClient(),
     web: createWeb({ fetchFn: ctx.fetchFn, extraHosts: policyHosts(policy) }),
     now: ctx.now,
-    // Gemini는 함수 호출과 웹 검색을 함께 쓸 수 없어 검색 없이 공식 링크로만 탐색한다
-    enableSearch: !isGemini(ctx.env),
+    // Gemini는 함수 호출과 웹 검색을 함께 쓸 수 없고 OpenAI 어댑터는 서버 검색 도구를 버려서, 검색 없이 공식 링크로만 탐색한다
+    enableSearch: !["gemini", "openai"].includes(verifyProvider(ctx.env) ?? ""),
     startedAt,
     // 배포 실행 한도(300초) 전에 재시도 안내를 응답할 시간을 남긴다.
     deadlineMs: configuredMs > 0 ? Math.min(configuredMs, 290_000) : undefined,

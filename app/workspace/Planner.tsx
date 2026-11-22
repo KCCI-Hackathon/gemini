@@ -21,7 +21,7 @@ import { Agent, type Message } from "./Agent";
 import { recommendationUpdate } from "./counsel-view";
 import { applyScope, parseRecommendScope, scopeIsEmpty, scopeLabel, type RecommendScope } from "@/lib/planner/recommend-scope";
 import { Building } from "./Building";
-import { DetailDialog, EventDialog, ProfileForm, SaveDialog } from "./Dialogs";
+import { DetailDialog, EventDialog, ProfileForm, SaveDialog, type VerifyState } from "./Dialogs";
 import { demoStart, OnboardingScreen, PlanningScreen, personaProfile, SignupScreen, startInput } from "./Entry";
 import { Modal } from "./Modal";
 import { Nav, resolveScreen, screenOf, type Screen, type Tab } from "./Nav";
@@ -110,6 +110,19 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
   const previousFilter = useRef<Filter | null>(null), previousScroll = useRef(0), boardRef = useRef<HTMLDivElement>(null), recommendRef = useRef<HTMLElement>(null);
   const [limits, setLimits] = useState<Record<string, number>>({});
   const [focusedStage, setFocusedStage] = useState<string | null>(null);
+  const [verifyMap, setVerifyMap] = useState<Record<string, VerifyState>>({});
+  // 정책 하나를 /api/verify 로 AI 공고 대조한다(판정은 바꾸지 않음)
+  async function verifyPolicy(id: string) {
+    setVerifyMap(v => ({ ...v, [id]: { status: "loading" } }));
+    try {
+      const res = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ policyId: id }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setVerifyMap(v => ({ ...v, [id]: { status: "done", result: body.result, source: body.source } }));
+    } catch (e) {
+      setVerifyMap(v => ({ ...v, [id]: { status: "error", error: e instanceof Error ? e.message : "공고 확인에 실패했어요." } }));
+    }
+  }
   const [gridStage, setGridStage] = useState<string | null>(null), [detail, setDetail] = useState<Choice | null>(null), [compare, setCompare] = useState<Choice | null>(null);
   const [eventDialog, setEventDialog] = useState<PlanEvent | "new" | null>(null);
   const [saveDialog, setSaveDialog] = useState<PendingSave | null>(null);
@@ -496,7 +509,7 @@ function PlannerSession({ onRestart }: { onRestart: () => void }) {
     {chipMenu && draft && <Modal title="이 계획의 조건" onClose={() => setChipMenu(null)}><p>조건을 끄면 해당 판단은 ‘확인 필요’로 남고 추천에서 제외될 수 있어요.</p>{chipMenu === "interest" && <label className={s.form}>관심 분야<select className={s.picker} value={draft.input.preferredCategory} onChange={e => { void mutate({ preferredCategory: e.target.value as Category | "all" }); setChipMenu(null); }}><option value="all">전체 분야</option>{Object.entries(CATEGORIES).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}</select></label>}<div className={s.dialogActions}><button className={s.outlineButton} onClick={() => { void mutate({ mutedKeys: draft.input.mutedKeys.includes(chipMenu) ? draft.input.mutedKeys.filter(k => k !== chipMenu) : [...draft.input.mutedKeys, chipMenu] }); setChipMenu(null); }}>{draft.input.mutedKeys.includes(chipMenu) ? "다시 켜기" : "이 계획에서 잠시 끄기"}</button><button className={s.primaryButton} onClick={() => { setChipMenu(null); setEditProfile(true); }}>수정하기</button></div></Modal>}
     {eventDialog && draft && <EventDialog event={eventDialog === "new" ? null : eventDialog} events={draft.input.events ?? []} today={draft.evaluation.today} onClose={() => setEventDialog(null)} onApply={events => void updateEvents(events)} />}
     {gridStage && evaluation && <Modal title={`${stageLabel(gridStage)} · 정책 ${visibleCards(gridStage).length}개 전체 보기`} wide onClose={() => setGridStage(null)}><p className={s.emptyHint}>보드와 같은 필터·기한 순서로 보여드려요.</p><div className={s.dialogGrid}>{visibleCards(gridStage).map(c => renderCard(c, "grid"))}</div>{visibleCards(gridStage).length === 0 && <p className={s.emptyState}>현재 필터에 해당하는 정책이 없어요.</p>}</Modal>}
-    {detailCard && evaluation && <DetailDialog card={detailCard} today={evaluation.today} stageLabel={stageLabel(detailCard.stageId)} busy={busy} readOnly={readOnly} onClose={() => setDetail(null)} onChoose={c => void choose(c)} />}
+    {detailCard && evaluation && <DetailDialog card={detailCard} today={evaluation.today} stageLabel={stageLabel(detailCard.stageId)} busy={busy} readOnly={readOnly} verify={verifyMap[detailCard.policyId]} onVerify={() => void verifyPolicy(detailCard.policyId)} onClose={() => setDetail(null)} onChoose={c => void choose(c)} />}
     {compareCard && draft && <Modal title={compareCard.conflicts.length ? "정책 비교·교체" : "담은 시점 변경"} onClose={() => setCompare(null)}><p className={s.emptyHint}>확인하기 전에는 현재 초안이 바뀌지 않아요.</p><div className={s.compareGrid}><div className={s.compareItem}><h3>현재 내 계획</h3>{draft.input.choices.filter(c => compareCard.conflicts.includes(c.offeringId) || c.offeringId === compareCard.offeringId).map(c => { const item = draft.evaluation.cards.find(p => cardKey(p) === cardKey(c)); return <div key={c.offeringId}><strong>{item?.title ?? c.offeringId}</strong><p>{item?.support}</p><p>{item && deadlineText(item, draft.evaluation.today)}</p><p>{stageLabel(c.stageId)} · 공고 마감 {dateLabel(item?.official.end ?? null)}</p></div>; })}</div><div className={s.compareItem}><h3>새로 담을 정책</h3><strong>{compareCard.title}</strong><p>{compareCard.support}</p><p>{deadlineText(compareCard, draft.evaluation.today)}</p><p>{stageLabel(compareCard.stageId)} · 공고 마감 {dateLabel(compareCard.official.end)}</p></div></div>{compareCard.reasons.map((r, i) => <p key={i} className={s.warningText}>{r.message}</p>)}{compareCard.evidence.filter(e => compareCard.reasons.some(r => r.evidenceId === e.evidenceId)).map(e => <blockquote key={e.evidenceId} className={s.evidence}>{e.quote}</blockquote>)}<div className={s.dialogActions}><button className={s.outlineButton} onClick={() => setCompare(null)}>취소</button><button className={s.primaryButton} disabled={busy || (compareCard.availability === "blocked" && !compareCard.canReplace)} onClick={() => { const next = draft.input.choices.filter(c => c.offeringId !== compareCard.offeringId && !compareCard.conflicts.includes(c.offeringId)); void mutate({ choices: [...next, { offeringId: compareCard.offeringId, stageId: compareCard.stageId }] }); setCompare(null); }}>{compareCard.conflicts.length ? "기존 정책 대신 이 정책 담기" : "이 시점으로 옮기기"}</button></div></Modal>}
     {saveDialog && draft && <SaveDialog target={saveDialog.target} manual={draft} recommendation={saveDialog.recommendation} account={me?.mode === "account"} onClose={() => setSaveDialog(null)} onSave={name => { const plan = savedSnapshot(saveDialog.target, name, saveDialog.recommendation ? "recommendation" : "manual"); if (saveDialog.source) plan.recommendationSource = saveDialog.source; savePlan(plan); }} />}
     {copyPlan && <Modal title="새 복사본으로 편집할까요?" onClose={() => setCopyPlan(null)}><p>현재 초안에 저장하지 않은 변경이 있을 수 있어요. 복사본을 열면 현재 초안 자리를 새 복사본으로 바꿉니다. 저장된 원본은 유지돼요.</p><div className={s.dialogActions}><button className={s.outlineButton} onClick={() => setCopyPlan(null)}>현재 초안 계속</button><button className={s.primaryButton} disabled={busy} onClick={() => void openCopy(copyPlan)}>복사본 열기</button></div></Modal>}
