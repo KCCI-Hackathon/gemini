@@ -146,8 +146,17 @@ export function judgePersonal(
     // 회차별 규칙이 있으면 신청 시점의 회차로 조건마다 판정한다
     if (v.rounds?.length) {
       const pick = pickRound(v.rounds, today);
-      if (pick.state === "under_review") verdict.push("needs_check", REASON.roundReview);
-      else if (pick.round) {
+      if (pick.state === "under_review") {
+        verdict.push("needs_check", REASON.roundReview);
+        if (pick.round) {
+          verdict.evidence = judgeConditions(pick.round, status, profile.examDate ? statusAt(profile, profile.examDate) : null)
+            .evidence.filter((condition) => condition.confirmed);
+        }
+      } else if (pick.state === "outside") {
+        verdict.push("needs_check", REASON.nextRound);
+        if (pick.round) verdict.evidence = judgeConditions(pick.round, status, profile.examDate ? statusAt(profile, profile.examDate) : null).evidence;
+        return verdict;
+      } else if (pick.round) {
         const employmentRule = pick.round.conditions.some((c) => EMPLOYMENT_KEYS.includes(c.key));
         const r = judgeConditions(pick.round, status, profile.examDate ? statusAt(profile, profile.examDate) : null);
         verdict.evidence = r.evidence;

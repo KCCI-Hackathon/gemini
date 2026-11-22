@@ -30,6 +30,14 @@ describe("pickRound: 신청 시점이 속한 회차를 고른다", () => {
   test("어느 회차 기간도 아니면 지난 승인 회차를 참고로", () => {
     expect(pickRound([old, next], "2026-09-01")).toEqual({ round: old, state: "outside" });
   });
+  test("같은 해 추가 모집은 저장 순서와 무관하며 겹치는 회차는 식별값이 필요하다", () => {
+    const extra = round("extra", 2026, "2026-06-15", "2026-07-31", "under_review");
+    for (const rounds of [[old, extra], [extra, old]]) {
+      expect(pickRound(rounds, "2026-07-01")).toEqual({ round: extra, state: "under_review" });
+      expect(pickRound(rounds, "2026-06-20")).toEqual({ round: null, state: "under_review" });
+      expect(pickRound(rounds, "2026-06-20", "extra")).toEqual({ round: extra, state: "under_review" });
+    }
+  });
 });
 
 describe("judgeConditions: 조건마다 기준일 종류로 판정하고 근거를 붙인다", () => {

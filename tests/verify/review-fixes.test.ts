@@ -113,12 +113,10 @@ describe("I9: 검색 3회와 시간 한도를 코드가 강제한다", () => {
     expect(searchTool(2)).toBeUndefined();
   });
 
-  test("시간 한도를 넘기면 더 부르지 않고 확인 불가로 끝난다", async () => {
+  test("시간 한도를 넘기면 더 부르지 않고 재시도할 수 있는 오류로 끝난다", async () => {
     const client = scriptedClient([open(ATFIS)]);
     let t = 0;
-    const r = await runVerification(LUNCH, { ...deps(client), clock: () => (t += 25_000) });
-    expect(r.outcome).toBe("notice_not_found");
+    await expect(runVerification(LUNCH, { ...deps(client), clock: () => (t += 25_000) })).rejects.toThrow("시간 한도");
     expect(client.calls).toBeLessThanOrEqual(3);
-    expect(r.trail.at(-1)?.reason).toContain("시간 한도");
   });
 });

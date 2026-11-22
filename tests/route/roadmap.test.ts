@@ -1,4 +1,8 @@
 import { describe, expect, test } from "vitest";
+import { loadSnapshot } from "@/lib/data/snapshot";
+import { toKstDate } from "@/lib/date";
+import { verificationVersion } from "@/lib/verify/version";
+import { loadVerified } from "@/lib/data/verified";
 import { handleJudge } from "@/lib/judge/handler";
 import { PERSONA_A } from "@/lib/judge/personas";
 import { buildRoadmap, categoryOf } from "@/lib/route/roadmap";
@@ -85,10 +89,46 @@ test("회차별 규칙이 있는 K-뉴딜은 '근거 확인 대기'로 표시하
   expect(x.evidence.length).toBe(3);
 });
 
+test("같은 해 추가 모집은 그 회차의 공고와 조건별 확인 기록을 표시한다", { timeout: 15_000 }, () => {
+  const v = loadVerified().get(INCHEON)!;
+  const original = v.rounds!;
+  const confirmed = { by: "human" as const, at: "2026-11-18" };
+  const first = { ...original[0], conditions: original[0].conditions.map((c) => ({ ...c, supportsConfirmed: confirmed })), notice: { ...original[0].notice, applyEnd: "2026-10-31" } };
+  const extra = { ...original[0], id: "extra", status: "under_review" as const, notice: { ...original[0].notice, round: "추가 모집", title: "추가 모집 공고", url: "https://example.go.kr/extra", applyStart: "2026-11-20" } };
+  try {
+    for (const rounds of [[first, extra], [extra, first]]) {
+      v.rounds = rounds;
+      expect(row(roadmap(), INCHEON)).toMatchObject({
+        verifyLabel: "이번 공고 기준 확인 중",
+        link: { url: extra.notice.url, kind: "official" },
+        official: { start: "2026-11-20", end: "2026-11-30" },
+      });
+    }
+    v.rounds = [first, { ...extra, conditions: extra.conditions.map((c, i) => ({ ...c, supportsConfirmed: i === 0 ? confirmed : null })) }];
+    const x = row(roadmap(), INCHEON);
+    expect(x.verifyLabel).toBe("이번 공고 기준 확인 중");
+    expect(x.evidence.filter((e) => e.confirmed)).toEqual([expect.objectContaining({ key: extra.conditions[0].key, round: extra.notice.title })]);
+    const judged = handleJudge({ profile: PERSONA_A }, NOW).body;
+    expect("items" in judged && judged.items.find((item) => item.id === INCHEON)).toMatchObject({ link: extra.notice.url, verifyLabel: "이번 공고 기준 확인 중" });
+
+    v.rounds = [
+      { ...first, notice: { ...first.notice, applyEnd: "2026-11-26" }, conditions: [{ ...first.conditions[0], key: "in_training", basis: "apply_date", kind: "excludes" }] },
+      { ...extra, notice: { ...extra.notice, applyStart: "2026-11-27" }, conditions: [{ ...extra.conditions[0], supportsConfirmed: confirmed }] },
+    ];
+    expect(row(roadmap(), INCHEON)).toMatchObject({ firstAvailable: "2026-11-27", verifyLabel: "이번 공고 기준 확인 중", link: { url: extra.notice.url }, evidence: [{ round: extra.notice.title, confirmed: true }] });
+    const after = handleJudge({ profile: PERSONA_A }, new Date("2026-12-01T12:00:00+09:00")).body;
+    expect("items" in after && after.items.find((item) => item.id === INCHEON)).toMatchObject({
+      verifyLabel: "다음 회차 공고 전", recruitment: "closed", personal: "needs_check", link: first.notice.url,
+    });
+  } finally {
+    v.rounds = original;
+  }
+});
+
 describe("검증 표시 네 가지(통합 설계 7.3)", () => {
   const fc = { field: "apply_period" as const, status: "match" as const, apiValue: "", noticeValue: "", quote: "q" };
   const saved = (policyId: string, confirmed: boolean) => ({
-    policyId, mode: "agent" as const, outcome: "verified_against_notice" as const, noticeUrl: "https://x.go.kr", findings: [], mismatches: [], trail: [],
+    policyId, version: verificationVersion(loadSnapshot().policies.find((p) => p.id === policyId)!, undefined, toKstDate(NOW)), mode: "agent" as const, outcome: "verified_against_notice" as const, noticeUrl: "https://x.go.kr", findings: [], mismatches: [], trail: [],
     usage: { calls: 0, inputTokens: 0, outputTokens: 0, pagesOpened: 0 }, fieldChecks: [fc], notice: null, checkedAt: "2026-11-16",
     ...(confirmed ? { fieldChecksConfirmed: { by: "human" as const, at: "2026-11-18" } } : {}),
   });

@@ -35,14 +35,14 @@ export const STATUS_NAME: Partial<Record<StatusKey, string>> = {
 
 const inRange = (r: Round, date: string) => (!r.notice.applyStart || r.notice.applyStart <= date) && (!r.notice.applyEnd || date <= r.notice.applyEnd);
 
-/** 신청 시점이 속한 회차. 기간에 걸친 회차 중 가장 새 회차가 정한다. 없으면 지난 승인 회차를 참고(outside) */
-export function pickRound(rounds: Round[], date: string): { round: Round | null; state: "approved" | "under_review" | "outside" } {
-  const covering = rounds.filter((r) => inRange(r, date)).sort((a, b) => b.notice.year - a.notice.year);
-  if (covering.length) return { round: covering[0], state: covering[0].status };
-  const past = rounds
-    .filter((r) => r.status === "approved" && (!r.notice.applyStart || r.notice.applyStart <= date))
-    .sort((a, b) => b.notice.year - a.notice.year);
-  return { round: past[0] ?? rounds.find((r) => r.status === "approved") ?? null, state: "outside" };
+/** 신청 기간과 일치하는 회차를 고른다. 기간이 겹치면 식별값이 있어야 특정할 수 있다. */
+export function pickRound(rounds: Round[], date: string, roundId?: string): { round: Round | null; state: "approved" | "under_review" | "outside" } {
+  const covering = rounds.filter((r) => inRange(r, date) && (roundId === undefined || r.id === roundId));
+  if (covering.length === 1) return { round: covering[0], state: covering[0].status };
+  if (covering.length > 1 || roundId !== undefined) return { round: null, state: "under_review" };
+  const approved = rounds.filter((r) => r.status === "approved").sort((a, b) =>
+    b.notice.year - a.notice.year || (b.notice.applyStart ?? "").localeCompare(a.notice.applyStart ?? "") || a.id.localeCompare(b.id));
+  return { round: approved.find((r) => !r.notice.applyStart || r.notice.applyStart <= date) ?? null, state: "outside" };
 }
 
 /** 그 회차의 조건을 상태에 적용한다. 걸린 조건만 판정으로 돌려주고, 근거는 모든 조건에 남긴다 */

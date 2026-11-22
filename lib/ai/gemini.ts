@@ -2,7 +2,8 @@
 // Gemini generateContent REST 호출로 바꾼다. 에이전트 루프·도구·검사 코드는 그대로 둔다.
 // - 서버 도구(web_search)는 Gemini 함수 호출과 함께 쓸 수 없어 뺀다. 검색 없이 공식 링크로만 탐색한다.
 // - Gemini가 함수 호출에 붙여 보낸 thoughtSignature는 다음 요청에 그대로 돌려줘야 해서 tool_use 블록에 보관한다.
-import type { AnthropicLike } from "@/lib/verify/run";
+import type { AiRequestOptions, AnthropicLike } from "@/lib/verify/run";
+import { setTimeout as delay } from "node:timers/promises";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -59,7 +60,7 @@ function toContents(messages: Msg[]): { role: string; parts: Part[] }[] {
 export function geminiClient(opts: { apiKey: string; model: string; fetchFn?: typeof fetch; retryDelayMs?: number }): AnthropicLike {
   const fetchFn = opts.fetchFn ?? fetch;
   let n = 0;
-  const create = async (params: Record<string, unknown>) => {
+  const create = async (params: Record<string, unknown>, request: AiRequestOptions = {}) => {
     const tools = ((params.tools as Record<string, unknown>[] | undefined) ?? []).filter((t) => t.input_schema);
     const body: Record<string, unknown> = {
       contents: toContents((params.messages as Msg[]) ?? []),
@@ -71,14 +72,17 @@ export function geminiClient(opts: { apiKey: string; model: string; fetchFn?: ty
 
     // 과부하(429·503)는 잠시 뒤 두 번까지 다시 시도한다
     let res!: Response;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const maxRetries = request.maxRetries ?? 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      request.signal?.throwIfAborted();
       res = await fetchFn(`${BASE}/${opts.model}:generateContent`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": opts.apiKey },
         body: JSON.stringify(body),
+        signal: request.signal,
       });
       if (res.status !== 429 && res.status !== 503) break;
-      if (attempt < 2) await new Promise((r) => setTimeout(r, (opts.retryDelayMs ?? 2000) * (attempt + 1)));
+      if (attempt < maxRetries) await delay((opts.retryDelayMs ?? 2000) * (attempt + 1), undefined, { signal: request.signal });
     }
     type GeminiResponse = {
       error?: { message?: string };
@@ -87,6 +91,7 @@ export function geminiClient(opts: { apiKey: string; model: string; fetchFn?: ty
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
     };
     const data = (await res.json().catch(() => ({}))) as GeminiResponse;
+    request.signal?.throwIfAborted();
     // 오류 문구에 키가 들어가지 않게 상태와 메시지만
     if (!res.ok) throw new Error(`Gemini ${res.status}: ${String(data?.error?.message ?? "").slice(0, 200)}`);
 

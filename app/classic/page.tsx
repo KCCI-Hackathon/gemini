@@ -648,7 +648,7 @@ function PolicyRow({ item, open, onToggle, verify, onVerify }: { item: JudgeItem
       <button className={styles.itemHead} onClick={onToggle} aria-expanded={open}>
         <span className={styles.itemName}>
           {item.name}
-          {item.verified && <span className={styles.verifiedTag}>검증됨</span>}
+          {item.verifyLabel !== "미검증(API)" && <span className={item.verifyLabel === "근거 확인됨" || item.verifyLabel === "공고 항목 확인됨" ? styles.verifiedTag : styles.badge}>{item.verifyLabel}</span>}
         </span>
         <span className={styles.badges}>
           <span className={`${styles.badge} ${styles[p.cls]}`}>자격: {p.label}</span>
@@ -669,9 +669,9 @@ function PolicyRow({ item, open, onToggle, verify, onVerify }: { item: JudgeItem
             </p>
           )}
           <div className={styles.row}>
-            {item.link && <a href={item.link} target="_blank" rel="noreferrer">공고 링크</a>}
-            {!item.verified && (!verify || verify.status === "error") && (
-              <button className={styles.ghost} onClick={onVerify}>에이전트에게 공식 공고 확인 요청</button>
+            {item.link && <a href={item.link} target="_blank" rel="noreferrer">{item.verifyLabel === "다음 회차 공고 전" ? "지난 회차 공고 링크" : "공고 링크"}</a>}
+            {(!item.verified || item.verifyLabel === "이번 공고 기준 확인 중") && (!verify || verify.status === "error") && (
+              <button className={styles.ghost} onClick={onVerify}>{verify?.status === "error" ? "공고 확인 다시 시도" : "에이전트에게 공식 공고 확인 요청"}</button>
             )}
           </div>
           {verify?.status === "error" && <p className={styles.error}>{verify.error}</p>}
@@ -698,14 +698,20 @@ function VerifyView({ r, source }: { r: VerifyResult; source?: string }) {
       {r.findings.length > 0 && (
         <ul>
           {r.findings.map((f, k) => (
-            <li key={k}>{f.text} <blockquote>{f.quote}</blockquote></li>
+            <li key={k}><blockquote>{f.quote}</blockquote></li>
           ))}
         </ul>
       )}
       {r.mismatches.length > 0 && (
         <ul>
           {r.mismatches.map((m, k) => (
-            <li key={k}><b>{MISMATCH[m.kind]}</b>: API {m.apiValue} → 공고 {m.noticeValue}</li>
+            <li key={k}>
+              <b>{MISMATCH[m.kind]}</b>
+              <blockquote>{m.quote}</blockquote>
+              {m.kind === "different_program" && m.noticeUrl && (
+                <a href={m.noticeUrl} target="_blank" rel="noreferrer">다른 사업 공고 원문</a>
+              )}
+            </li>
           ))}
         </ul>
       )}

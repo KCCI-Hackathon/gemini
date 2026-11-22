@@ -50,6 +50,73 @@ npx tsx --tsconfig tsconfig.json scripts/verify-replay.ts run 202604060054002124
 
 `data/verify-results/index.json`의 현재 6건은 이 방식으로 만든 것입니다(2026-11-17). 페이지 열기·허용 도메인·robots.txt·인용 대조는 서비스 코드가 수행했고, 어떤 페이지를 열고 무엇을 인용할지는 Claude Code가 정했습니다. Claude API로 실행한 결과가 아닙니다.
 
+## 중복수혜 규칙 실행
+
+중복수혜 에이전트는 로컬에서 공개 정책 원문을 분석합니다. 기존 `/api/verify`는 정책 한 건의 공식 공고를 대조합니다. 중복수혜 결과는 SQLite에서 검증하고 JSON으로 내보냅니다. 배포된 `/api/judge`는 이 JSON을 읽어 신청자의 수혜 사실과 대조합니다. [구현 계획](docs/backend/2026-11-19-overlap-agent-implementation-plan.md)
+
+Node 22.22에서 연구 조사본으로 배포 파일을 재생성하는 명령입니다.
+
+```bash
+npm ci
+npm run db:build -- --research-only
+npm run db:export
+npm run db:verify
+```
+
+새 Gemini 실행에는 프로젝트의 무료 할당량과 로컬 `.env.local`의 `GEMINI_API_KEY`가 필요합니다. 실호출은 `npm run overlap:agent -- --live`로 시작합니다. 실행 ID는 `data/overlap-agent/latest.json`에 기록됩니다. 중단 후에는 같은 입력으로 `--live --run-id <ID>`를 사용합니다. 최신 실행의 저장 응답을 다시 채점하고 배포본을 만드는 명령은 다음과 같습니다.
+
+```bash
+npm run overlap:agent -- --replay --run-id <ID>
+npm run db:build
+npm run db:export
+npm run db:verify
+```
+
+점수와 요청 해시는 `data/overlap-agent/report-<ID>.md`에서 확인합니다. 점수 기준을 통과하지 못한 실행은 종료 코드 2를 반환합니다. 적재·내보내기는 같은 실행과 원문의 검증을 통과한 에이전트 규칙만 조사본에 추가합니다. 이전 실행을 재현하려면 별도 작업 폴더에서 그 실행 기록과 저장 응답을 사용합니다.
+
+`POST /api/judge`에 기존 프로필과 함께 선택 입력인 `benefits`를 보낼 수 있습니다. 예를 들어 구직급여 지급이 종료됐다면 `{"policyId":"20250122005400110369","status":"ended","lastPaymentDate":"2026-07-15"}`를 배열에 담습니다. 정책별 `restrictions`에는 적용 여부·이유·인용 근거가, `planned_conflicts`에는 예정된 충돌이 들어갑니다. 응답의 `dataVersion`으로 사용한 규칙 버전을 식별합니다.
+
+## 중복수혜 스캔과 재검증
+
+새 중복수혜 실행은 스냅샷의 전체 지역에 대해 참여 제한·추가 신청자격·지원 내용의 비어 있지 않은 원문을 모두 훑습니다. 기본 추출은 묶음당 한 번이며, 원문과 맞지 않는 응답은 기존 규칙대로 한 번 정정 요청합니다. 추출과 사업명 후보 연결의 기본 모델은 현재 프로젝트에서 생성이 확인된 `gemini-3.5-flash-lite`입니다. `gemini-3-flash-preview`는 전체 차단 후보와 연결·조건·예외가 불명확한 후보를 재검증합니다. 전체 차단을 확정하려면 재검증 모델의 지지와 원문 근거 검사를 모두 통과해야 합니다.
+
+재검증은 3 Flash부터 시작하고, 일일 한도가 확인되면 3.6 Flash, 3.8 Flash 순으로 이어갑니다. 각 모델은 별도 반례를 통과해야 합니다. 보고서의 `reviewTimings`는 성공한 응답의 수와 평균 왕복 요청 시간(ms)을 표시하며, 재시도 대기 시간은 제외합니다. 호출하지 않은 모델의 평균은 `null`입니다.
+
+이전에 시작된 실행은 기록된 호출을 우선 재생합니다. 새 방식을 쓰려면 `npm run overlap:agent -- --live`로 새 실행을 시작합니다. 2.5 Flash-Lite 생성 권한이 있는 프로젝트에서는 `OVERLAP_SCAN_MODEL=gemini-2.5-flash-lite`를 설정할 수 있습니다. Gemini 모델별 실제 호출 한도는 [Google AI Studio](https://aistudio.google.com/rate-limit?timeRange=last-28-days)에서 프로젝트 단위로 확인합니다.
+
+## 정책 스냅샷 변경 확인
+
+기존 배포에 사용한 스냅샷과 새 수집본을 비교합니다. 기본 설정은 기존 배포 규칙을 함께 읽어, 연결 정책의 변경이나 삭제로 재검증이 필요한 규칙을 표시합니다.
+
+```bash
+npm run snapshot:compare -- data/snapshot/current.json <새 스냅샷 JSON>
+```
+
+`added`, `changed`, `removed`는 정책 변경 목록이고, `revalidatePolicyIds`와 `rulesToReview`는 검토할 정책번호와 연결 규칙입니다. 수정일만 바뀐 정책은 변경 목록에 표시하고 재검증 대상에서는 제외합니다. 이 명령은 비교 결과를 출력합니다. 이후 검토를 통과한 규칙만 기존 SQLite 검증과 내보내기 절차로 배포합니다.
+
+## Vercel Preview 배포
+
+팀 Vercel 프로젝트에 GitHub 저장소를 연결하고 Node.js 22.x를 선택합니다. `backend/vercel-preview` 브랜치를 Preview로 배포합니다. 함수 리전은 `vercel.json`에서 서울(`icn1`)로 설정합니다. 현재 배포용 규칙과 버전은 `data/overlap/approved.json`과 `data/release/manifest.json`에서 가져옵니다.
+
+초기 Preview에서는 브랜치별 환경변수에 `EXTERNAL_AI_ENABLED=false`와 `PLAN_AI_FOR_USERS=false`를 설정합니다. 이 상태에서 자격 판정과 저장된 정책 검증 근거를 확인할 수 있습니다. 외부 AI를 확인하는 Preview에는 승인된 제공자의 키와 `EXTERNAL_AI_ENABLED=true`를 별도로 설정합니다.
+
+```bash
+npm ci
+npm run db:build -- --research-only
+npm run db:verify
+npm test
+npm run build
+npm run smoke:preview -- <Preview URL>
+```
+
+스모크 명령은 첫 화면과 세 시연 지역의 `/api/judge` 요청 8건을 확인합니다. 응답에서 배포 데이터 버전, 적용 상태, 근거 인용을 검사합니다.
+
+외부 AI와 실제 사용자용 AI를 끈 서버에서는 `npm run smoke:api -- <서버 URL>`로 계획 API의 입력·권한 검사, 상담 카드의 기본 응답, 검증 API의 재확인 응답을 화면 없이 확인할 수 있습니다.
+
+2026-11-21에 `Path-Finder` 팀의 `path-finder` 프로젝트에 [Preview](https://path-finder-bp79t76sc-path-finder10.vercel.app)를 배포했습니다. 기준 커밋은 `c70d768`, 데이터 버전은 `dd9153edea47`입니다. 서울 리전과 첫 화면 및 가상 요청 8건을 확인했습니다. Preview는 Vercel 로그인이 필요합니다. 보호된 Preview의 자동 검증에는 팀에서 승인한 인증 방법을 사용합니다.
+
+CLI 배포에서는 `vercel deploy --environment preview`로 환경을 명시하고, 완료 출력에서 `environment: preview`를 확인합니다.
+
 ## Credits / Licenses
 
 | 구분 | 이름 | 출처·라이선스 | 사용 위치 |
