@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PathFinder 정책 선택</title>
+<link rel="icon" href="robot-face.png">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* gemini 저장소 frontend/ui-development 의 workspace.module.css 디자인을 그대로 옮김 */
+:root{--navy:#16224A;--blue:#2C64DB;--muted:#5E6782;--line:#dde3ed;--sand:#E1AA74;--cream:#F3F0CA}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;color:var(--navy);background:#e7edf7;font-size:16px;word-break:keep-all}
+button,input,select,textarea{font:inherit;color:inherit}
+button{border:0;background:none;min-height:44px;cursor:pointer}
+button:disabled{cursor:default;opacity:.55}
+:focus-visible{outline:3px solid #2C64DB;outline-offset:3px}
+h1,h2,h3,p{margin:0}
+h1{font-size:28px;line-height:1.35;letter-spacing:-1px}
+h2{font-size:18px;line-height:1.4}
+a{color:var(--blue)}
+.app{min-height:133.333dvh;padding:18px}
+.shell{display:grid;grid-template-columns:118px minmax(0,1fr) 236px;gap:16px;max-width:1920px;margin:auto;align-items:start}
+.shell.noagent{grid-template-columns:118px minmax(0,1fr)}
+.nav{position:sticky;top:18px;min-height:calc(133.333dvh - 36px);background:#fff;border-radius:20px;display:flex;flex-direction:column;padding:18px 9px;gap:12px}
+.brand{text-align:center;margin-bottom:30px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.brand img{width:57px;height:57px;object-fit:contain}
+.brand strong{font-size:15px;letter-spacing:-.6px}
+.brand small{color:var(--muted);font-size:12px}
+.navButton{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;font-size:14px;border-radius:12px;padding:13px 3px;line-height:1.4;text-decoration:none;color:var(--navy)}
+.navButton svg{width:23px;height:23px}
+.navActive{color:#245e9f;background:#eaf1fb;font-weight:700}
+.accountButton{margin-top:auto}
+.workspace{min-width:0;background:#f0f1f3;border-radius:20px;padding:26px 22px 18px;min-height:calc(133.333dvh - 36px)}
+.pageHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
+.eyebrow{color:#5E6782;font-size:14px;letter-spacing:.5px;margin-bottom:5px}
+.subtitle{color:var(--muted);font-size:14px;margin-top:8px}
+.demoBadge{display:inline-flex;background:#e5edf8;color:#29588f;border-radius:6px;padding:3px 7px;font-size:13px;margin-right:7px;font-weight:650}
+.profileChips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:20px}
+.profileChip{min-height:34px;border:1px solid #dce2ec;border-radius:20px;background:#fff;font-size:14px;padding:5px 11px}
+.mutedChip{color:#697285;text-decoration:line-through;background:#e7e9ed}
+.sectionHeader{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px}
+.sectionHeader span{color:var(--muted);font-size:14px}
+.inlineActions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.primaryButton,.outlineButton,.secondaryButton{border-radius:9px;padding:9px 14px;font-weight:650;font-size:14px}
+.primaryButton{background:#2C64DB;color:#fff;border:1px solid #2C64DB}
+.outlineButton{border:1px solid #ced8e8;background:#fff}
+.secondaryButton{background:#e7effa;color:#285b99}
+.textButton{color:#315d94;font-size:14px;padding:6px 9px}
+.iconButton{font-size:25px;width:44px;height:44px;border-radius:9px}
+.iconButton:hover{background:#edf1f7}
+.schedule{background:#fff;border:1px solid #e5e8ef;border-radius:14px;padding:17px 18px 8px;margin-bottom:14px}
+.scheduleScroll{overflow-x:auto}
+.scheduleAxis{height:130px;position:relative;margin:0 70px 0 16px;min-width:760px}
+.monthTick{position:absolute;top:0;color:#5E6782;font-size:14px;height:49px;display:flex;flex-direction:column;gap:5px;padding-left:6px;border-left:1px solid #dce2eb}
+.monthTick strong{color:#16224A;font-weight:650}
+.scheduleChip{position:absolute;top:62px;border-radius:10px;padding:5px 11px;min-height:45px;background:#edf3fb;border:1px solid #c7d7ec;white-space:nowrap;text-align:left;display:flex;align-items:center;gap:8px;font-size:14px;transform:translateX(-8px)}
+.scheduleChip small{display:block;font-size:13px}
+.scheduleChip.low{top:96px}
+.todayChip{background:#16224A;color:#fff;border-color:#16224A}
+.focusedChip{box-shadow:0 0 0 2px #2C64DB}
+.calendarGlyph{font-size:19px;color:#2C64DB}
+.todayChip .calendarGlyph{color:#F3F0CA}
+.draftSummary{background:#fff;border:1px solid #e5e8ef;border-radius:14px;padding:16px 18px;margin-bottom:21px}
+.draftSummary h2 em{color:#2C64DB;margin-left:7px;font-style:normal}
+.choiceList{display:flex;flex-wrap:wrap;gap:8px}
+.choiceChip{display:flex;align-items:center;gap:5px;border:1px solid #cbd9eb;background:#f3f7fd;border-radius:9px;padding:5px 6px 5px 11px;font-size:14px}
+.choiceChip small{display:block;font-size:12px;color:#52637c}
+.choiceChip button{min-height:32px;padding:0 6px}
+.choiceWarning{border-color:#dfc6a4;background:#faf5e8}
+.warningText{color:#75512a;font-size:14px;margin-top:7px}
+.emptyHint{color:#59657d;font-size:14px}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.categoryFilters{display:flex;gap:4px;flex-wrap:wrap}
+.filter{padding:7px 11px;font-size:14px;border-radius:8px;min-height:38px}
+.filterActive{background:#16224A;color:#fff;font-weight:650}
+.toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px}
+.toggle input{width:17px;height:17px;accent-color:#2C64DB}
+.recommendSummary{border:1px solid #bbd1ee;background:#eef5ff;border-radius:13px;padding:14px 16px;margin-bottom:16px}
+.recommendLinks{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.recommendLink{border:1px solid #c9d9ef;background:#fff;padding:7px 10px;border-radius:8px;font-size:14px;text-align:left}
+.recommendLink small{display:block;color:#59657d;font-size:12px}
+.boardScroll{overflow-x:auto;padding:2px 2px 16px}
+.board{display:flex;gap:14px;min-height:430px}
+.column{width:276px;flex:1 0 260px;max-width:350px;background:#f7f7f8;border:1px solid #e1e4e9;border-radius:16px;padding:12px;display:flex;flex-direction:column}
+.focusedColumn{border-color:#2C64DB;box-shadow:0 0 0 2px #2C64DB17}
+.columnHeader{width:100%;text-align:left;padding:2px 2px 13px}
+.columnHeader h2{font-size:19px;display:flex;align-items:center;gap:8px}
+.columnHeader h2 span{font-size:13px;background:#e7eaf0;border-radius:6px;padding:2px 7px;color:#5E6782}
+.columnHeader p{font-size:13px;color:#56627a;margin-top:5px}
+.columnCards{display:flex;flex-direction:column;gap:10px}
+.policyCard{background:#fff;border:1px solid #e2e6ed;border-radius:13px;padding:14px;position:relative}
+.chosen{border:2px solid #2C64DB;padding:13px}
+.recommended{box-shadow:inset 0 3px 0 #8eafdd}
+.blocked{background:#edeef1;border-color:#d8dbe2}
+.cardTop{display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:9px}
+.category{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:650}
+.category i{width:6px;height:6px;border-radius:2px}
+.dday{font-variant-numeric:tabular-nums;font-weight:750;color:#263d68;background:#f0f3f8;padding:3px 7px;border-radius:6px;font-size:14px}
+.urgent{background:#f3f0ca}
+.cardTitle{font-size:18px;line-height:1.4;font-weight:750;text-align:left;padding:0;min-height:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cardTitle:hover{color:#2C64DB}
+.recommendBadge{display:inline-block;font-size:12px;color:#2f619a;background:#e9f1fd;border-radius:4px;padding:1px 5px;margin-top:5px}
+.cardDeadline{font-weight:700;font-size:15px;margin-top:12px;line-height:1.5}
+.cardMeta{color:#56627a;font-size:14px;line-height:1.6;margin-top:3px}
+.cardSupport{font-size:14px;color:#5E6782;margin-top:9px;line-height:1.6}
+.cardWarning,.checkNote{border-radius:6px;color:#4c5468;background:#e1e3e8;padding:7px 8px;font-size:14px;line-height:1.5;margin-top:10px}
+.checkNote{background:#f6f3d9;color:#665735}
+.cardBottom{display:flex;align-items:center;justify-content:space-between;gap:5px;border-top:1px solid #e9ebf0;margin-top:13px;padding-top:8px}
+.cardBottom>span{color:#58657d;font-size:12px}
+.addButton,.chosenButton{font-size:14px;font-weight:700;padding:6px 10px;border-radius:7px;min-height:37px}
+.addButton{background:#eaf1fa;color:#2d5e98}
+.chosenButton{background:#2C64DB;color:#fff}
+.moreButton{border:1px dashed #cbd3e1;border-radius:9px;font-size:14px;width:100%;margin-top:12px;padding:9px}
+.emptyState{background:#fff9;border:1px dashed #cbd4e0;border-radius:12px;padding:28px 16px;text-align:center;color:#59657d;line-height:1.7}
+.agent{position:sticky;top:18px;background:#fff;border-radius:20px;height:calc(133.333dvh - 36px);display:flex;flex-direction:column;overflow:hidden}
+.agentHead{display:flex;align-items:center;padding:18px 14px;gap:7px;border-bottom:1px solid #edf0f4}
+.agentHead img{width:40px;height:40px;object-fit:contain}
+.agentHead h2{font-size:16px}
+.agentHead small{font-size:12px;color:#61708b}
+.agentMessages{overflow-y:auto;flex:1;padding:18px 13px}
+.agentMessage{border-radius:12px;background:#f1f4f9;padding:12px;font-size:14px;color:#364562;line-height:1.7;margin-bottom:12px}
+.userMessage{background:#e7effc;margin-left:20px}
+.agentExamples{padding:0 12px 10px;display:flex;flex-direction:column;gap:5px}
+.agentExamples button{font-size:13px;text-align:left;background:#f7f9fc;border:1px solid #e8edf5;border-radius:8px;padding:8px}
+.agentForm{border-top:1px solid #edf0f4;padding:12px}
+.agentForm textarea{width:100%;resize:vertical;min-height:70px;border:1px solid #d8e0ed;border-radius:10px;padding:10px;font-size:14px}
+.agentForm button{width:100%;margin-top:7px}
+.agentFoot{font-size:12px;color:#63718a;padding:0 12px 12px}
+.banner{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #dfc8a5;background:#faf3e3;border-radius:10px;padding:11px 14px;font-size:14px;margin-bottom:14px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16224A;color:#fff;padding:13px 20px;border-radius:12px;z-index:200;font-size:14px;display:none}
+.toast.show{display:block}
+.backdrop{position:fixed;inset:0;background:#15203a91;display:none;align-items:center;justify-content:center;padding:26px;z-index:100}
+.backdrop.open{display:flex}
+.dialog{background:#fff;border-radius:20px;width:570px;max-width:100%;max-height:90dvh;overflow-y:auto;padding:22px}
+.dialogWide{width:1050px}
+.dialogHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.dialogHeader h2{font-size:22px;margin:5px 0}
+.dialogActions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;border-top:1px solid #e4e9f0;padding-top:16px;margin-top:20px}
+.dialogGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.detailSection{margin:20px 0}
+.detailSection h3{margin-bottom:9px;font-size:16px}
+.detailSection p{font-size:15px;color:#5E6782;line-height:1.8}
+.facts{display:grid;grid-template-columns:135px minmax(0,1fr);gap:10px;font-size:14px;margin:15px 0}
+.facts dt{color:#61708b}
+.facts dd{margin:0}
+.evidence{background:#f5f7fa;border-radius:10px;padding:12px;margin:9px 0;font-size:14px}
+.evidence blockquote{margin:8px 0;line-height:1.7;color:#5E6782}
+.form{display:flex;flex-direction:column;gap:15px}
+.form label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600}
+.form input,.form select,.picker{width:100%;padding:11px 12px;border:1px solid #cbd5e5;border-radius:9px;background:#fff;min-height:44px}
+.checkboxLabel{flex-direction:row!important;align-items:center;font-weight:400!important}
+.checkboxLabel input{width:18px;min-height:18px}
+.calendarHeader{display:flex;justify-content:space-between;align-items:center;margin:10px 0}
+.calendarGrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;text-align:center}
+.calendarGrid>span{color:#65728b;font-size:13px;padding:5px 0}
+.calendarDay{border-radius:8px;padding:7px;font-variant-numeric:tabular-nums;min-height:38px}
+.calendarDay:hover{background:#eaf1fb}
+.calendarSelected{background:#2C64DB!important;color:#fff}
+.compareGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.compareItem{padding:15px;background:#f4f6fa;border-radius:12px}
+.compareItem p{font-size:14px;margin:9px 0}
+.saveItems{padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;margin:16px 0}
+.saveItems li{border:1px solid #e0e5ed;border-radius:9px;padding:10px 12px;font-size:14px}
+.saveItems small{display:block;color:#607089}
+.roadmapHeader{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.picker{width:auto;flex:1;min-width:200px}
+.periodLegend{display:flex;flex-wrap:wrap;gap:16px;color:#5E6782;font-size:13px;margin:18px 0 10px}
+.periodLegend span{display:flex;align-items:center;gap:5px}
+.periodLegend i{width:23px;height:7px;background:#d9e1ed;border-radius:3px}
+.periodLegend span:nth-child(2) i{background:#2C64DB}
+.periodLegend span:nth-child(3) i{background:#e1aa74;width:8px;height:8px;border-radius:50%}
+.roadmapScroll{overflow-x:auto;background:#fff;border-radius:13px;border:1px solid #dfe5ee}
+.roadmapTable{min-width:1050px}
+.roadmapRow,.roadmapTicks{display:grid;grid-template-columns:245px minmax(760px,1fr);border-bottom:1px solid #e8edf3}
+.roadmapTicks{min-height:54px}
+.roadmapTicks>strong{padding:15px;position:sticky;left:0;background:#f7f9fc;z-index:3;font-size:14px}
+.tickTrack{position:relative}
+.roadmapPolicy{position:sticky;left:0;z-index:2;background:#fff;border-right:1px solid #e2e7ef;padding:15px}
+.roadmapPolicy button{font-size:15px;text-align:left;font-weight:700;padding:0;min-height:0}
+.roadmapPolicy small{color:#5E6782;font-size:13px;display:block;margin-top:6px}
+.periodTrack{position:relative;min-height:95px;background:repeating-linear-gradient(to right,transparent 0,transparent calc(16.666% - 1px),#edf0f5 calc(16.666% - 1px),#edf0f5 16.666%)}
+.periodMonth{position:absolute;top:15px;font-size:13px;color:#5E6782;border-left:1px solid #dce3ed;padding-left:6px}
+.officialBar,.personalBar{position:absolute;top:35px;height:17px;border-radius:4px;background:#dce3ef}
+.personalBar{height:11px;top:38px;background:#2C64DB}
+.uncertainBar{background:repeating-linear-gradient(45deg,#c5d4e8 0,#c5d4e8 4px,#edf2fa 4px,#edf2fa 8px);border:1px dashed #6f88ad}
+.deadlineDot{position:absolute;top:37px;width:13px;height:13px;border-radius:50%;background:#e1aa74;transform:translateX(-50%);border:2px solid #fff}
+.periodText{position:relative;top:61px;padding:0 10px 10px;font-size:13px;color:#5E6782}
+/* 시작·가입·내 정보 입력 화면 (entry) */
+.entry{display:grid;grid-template-columns:1.05fr 1fr;min-height:calc(133.333dvh - 36px);max-width:1160px;margin:auto;background:#fff;border-radius:24px;overflow:hidden}
+.entryHero{background:#16224A;color:#fff;padding:65px 48px;display:flex;flex-direction:column;justify-content:center}
+.entryHero img{width:130px;height:130px;object-fit:contain}
+.entryHero h1{font-size:43px;letter-spacing:-1.8px;line-height:1.4;margin-top:24px}
+.entryHero p{color:#c6d4eb;line-height:1.9;margin-top:24px}
+.entryLogo{color:#f3f0ca;font-weight:700;letter-spacing:1px;font-size:16px}
+.entryContent{padding:55px 45px;display:flex;flex-direction:column;justify-content:center}
+.entryContent h2{font-size:25px;margin-bottom:13px}
+.entryContent>p{color:#5E6782;margin-bottom:28px;line-height:1.8}
+.entryButtons{display:flex;flex-direction:column;gap:12px}
+.entryButtons button{min-height:52px;font-size:16px}
+.steps{display:flex;gap:6px;margin-bottom:22px}
+.steps i{flex:1;height:5px;border-radius:3px;background:#e2e7f0}
+.steps i.on{background:#2C64DB}
+.choiceRow{display:flex;flex-wrap:wrap;gap:6px}
+.choiceRow button{border:1px solid #ced8e8;border-radius:9px;padding:8px 12px;font-size:14px;min-height:40px;background:#fff}
+.choiceRow button.on{background:#16224A;color:#fff;border-color:#16224A}
+.hint{font-size:13px;color:#61708b;font-weight:400}
+.social{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kakao{background:#FEE500;color:#191919;border-radius:9px;font-weight:650}
+.naver{background:#03C75A;color:#fff;border-radius:9px;font-weight:650}
+.or{display:flex;align-items:center;gap:12px;color:#61708b;font-size:13px;margin:6px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:#e4e9f0}
+.accountGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.panel{background:#fff;border:1px solid #e5e8ef;border-radius:14px;padding:18px}
+.panel h2{margin-bottom:12px}
+.screen{display:none}
+.screen.on{display:block}
+@media(max-width:1100px){.app{padding:12px}.shell,.shell.noagent{grid-template-columns:minmax(0,1fr)}.nav{position:static;min-height:0;flex-direction:row;padding:6px 12px;border-radius:14px;align-items:center;gap:8px}.brand{flex-direction:row;margin:0 auto 0 0;gap:7px}.brand img{width:39px;height:39px}.brand small{display:none}.navButton{flex-direction:row;padding:7px 12px}.accountButton{margin:0}.agent{display:none}}
+@media(max-width:760px){.app{padding:8px}.navButton span{display:none}.workspace{padding:20px 12px}h1{font-size:25px}.toolbar{display:block}.toolbar>.inlineActions{margin-top:10px}.column{width:73vw;min-width:232px;flex:0 0 73vw}.dialogGrid,.compareGrid,.accountGrid{grid-template-columns:1fr}.entry{display:block}.entryHero{padding:32px 26px}.entryHero img{width:80px;height:80px}.entryHero h1{font-size:30px;margin-top:13px}.entryContent{padding:32px 22px}.pageHeader{flex-wrap:wrap}}
+/* 랜딩 디자인(하늘 그라데이션, 3D 로봇, 둥근 알약 버튼, 부드러운 그림자)으로 덮어쓰기 */
+body{font-family:"Noto Sans KR",system-ui,sans-serif;letter-spacing:-.3px;background:linear-gradient(180deg,#F6F9FF,#E6F0FF 60%,#CFE2FF) fixed}
+.nav,.agent,.entry{border-radius:28px;box-shadow:0 30px 60px -30px rgba(22,34,74,.25);border:1px solid #fff}
+.workspace{background:rgba(255,255,255,.55);border:1px solid #fff;border-radius:28px;box-shadow:0 30px 60px -30px rgba(22,34,74,.18)}
+.schedule,.draftSummary,.panel{border-radius:22px;border:1px solid #fff;box-shadow:0 10px 24px -14px rgba(22,34,74,.3)}
+.column{background:linear-gradient(160deg,#fff,#EAF2FF);border:1px solid #fff;border-radius:24px;box-shadow:0 20px 40px -28px rgba(22,34,74,.3)}
+.policyCard{border-radius:18px;border-color:#E6ECF6;box-shadow:0 10px 24px -16px rgba(22,34,74,.28)}
+.chosen{border-color:#2C64DB}
+.primaryButton,.secondaryButton,.outlineButton,.addButton,.chosenButton,.filter,.profileChip,.recommendLink,.choiceRow button{border-radius:999px}
+.primaryButton{background:#16224A;border-color:#16224A;font-weight:700}
+.primaryButton:hover{background:#0F1836}
+.filterActive{background:#16224A}
+h1{font-weight:800;letter-spacing:-1.2px}
+.eyebrow{color:#2C64DB;font-weight:700}
+.entryHero{background:radial-gradient(700px 420px at 70% 30%,#fff 0,transparent 60%),linear-gradient(180deg,#F6F9FF,#E6F0FF 60%,#CFE2FF);color:#16224A}
+.entryHero p{color:#5E6782}
+.entryLogo{color:#2C64DB}
+.entryHero img{width:200px;height:200px;filter:drop-shadow(0 18px 18px rgba(22,34,74,.18))}
+.brand img{width:64px;height:64px}
+.agentHead img{width:48px;height:48px}
+.agentMessage{border-radius:20px 20px 20px 6px;background:#F1F5FC}
+.userMessage{border-radius:20px 20px 6px 20px;background:#16224A;color:#fff}
+.dialog{border-radius:28px}
+.backdrop{background:rgba(22,34,74,.45);backdrop-filter:blur(6px)}
+.navActive{background:#EAF1FF;color:#2C64DB}
+.todayChip{background:#16224A}
+.scheduleChip{border-radius:999px;background:#fff;border-color:#D6E2F5}
+.scheduleChip.todayChip{background:#16224A;color:#fff;border-color:#16224A}
+.emptyState{border-radius:18px}
+.emptyState::before{content:"";display:block;width:90px;height:90px;margin:0 auto 8px;background:url(robot-magnifier.png) center/contain no-repeat}
+.bell{position:relative;width:46px;height:46px;border-radius:999px;background:#fff;border:1px solid #D6E2F5;display:flex;align-items:center;justify-content:center}
+.bell svg{width:22px;height:22px}
+.bell b{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:99px;background:#E1574C;color:#fff;font-size:12px;line-height:20px;padding:0 5px}
+.bellPanel{display:none;position:absolute;right:0;top:56px;width:380px;background:#fff;border-radius:22px;box-shadow:0 30px 60px -20px rgba(22,34,74,.35);border:1px solid #E6ECF6;padding:14px;z-index:50}
+.bellPanel.open{display:block}
+.noteList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.noteList li{padding:11px 12px;border-radius:14px;cursor:pointer;display:flex;flex-direction:column;gap:3px;font-size:14px}
+.noteList li:hover{background:#F1F5FC}
+.noteList li.unread{background:#EEF4FF}
+.noteList li.noteWarn{box-shadow:inset 3px 0 0 #E1AA74}
+.noteList small{color:#5E6782;font-size:13px}
+.noteKind{font-size:12px;font-weight:700;color:#2C64DB}
+.noteWarn .noteKind{color:#a8692c}
+.changeBox{background:#FAF5E8;border:1px solid #EAD7B5;border-radius:16px;padding:14px;margin:14px 0}
+.changeRow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.changeRow span{background:#fff;border-radius:12px;padding:10px;font-size:14px}
+.changeRow small{display:block;color:#5E6782;font-size:12px;margin-bottom:3px}
+.changeRow s{color:#8a90a2}
+.changeBox blockquote{margin:6px 0 0;font-size:14px;color:#5E6782;line-height:1.7}
+.search{height:40px;border:1px solid #D6E2F5;border-radius:999px;padding:0 16px;background:#fff;min-width:220px;font-size:14px}
+.search:focus{outline:none;border-color:#2C64DB;box-shadow:0 0 0 4px rgba(44,100,219,.12)}
+.toastAct{margin-left:12px;color:#9FC1FF;font-weight:700;min-height:0;padding:0}
+.typing{display:flex;gap:5px;width:64px}
+.typing i{width:7px;height:7px;border-radius:50%;background:#9AA6C2;animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes blink{50%{opacity:.25;transform:translateY(-3px)}}
+.toTop{position:fixed;right:28px;bottom:28px;width:50px;height:50px;border-radius:50%;background:#16224A;color:#fff;font-size:20px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:60}
+.toTop.show{opacity:1;pointer-events:auto}
+@media print{.nav,.agent,.toTop,.roadmapHeader button,.pageHeader button{display:none!important}html{zoom:1}.shell{display:block}}
+.periodTrack{overflow:visible}
+.flag{position:absolute;top:-6px;width:4px;height:52px;margin-left:-2px;background:#16224A;border-radius:2px;transform-origin:50% 100%;z-index:4;opacity:0;animation:plant .55s cubic-bezier(.3,1.5,.5,1) forwards}
+.flag i{position:absolute;left:4px;top:2px;width:0;height:0;border-left:26px solid var(--fc);border-top:10px solid transparent;border-bottom:10px solid transparent;transform-origin:0 50%;animation:wave 2.4s ease-in-out infinite}
+.flag::after{content:"";position:absolute;left:-5px;bottom:-3px;width:14px;height:5px;border-radius:50%;background:rgba(22,34,74,.18)}
+.flag em{position:absolute;left:8px;top:24px;font-style:normal;font-size:11px;font-weight:700;color:var(--fc);white-space:nowrap;background:#fff;padding:0 4px;border-radius:4px}
+.flag.open{--fc:#12965A}.flag.soon{--fc:#E07B39}.flag.check{--fc:#D4A72C}.flag.blocked{--fc:#9AA3B5}
+.flag.blocked i{animation:none}
+@keyframes plant{0%{opacity:0;transform:translateY(-60px) rotate(-12deg)}60%{opacity:1;transform:translateY(4px) rotate(4deg)}100%{opacity:1;transform:none}}
+@keyframes wave{50%{transform:skewY(-8deg) scaleX(.9)}}
+.flagLegend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:13px;color:#5E6782;margin:0 0 12px}
+.flagLegend .flag.still{position:relative;top:0;height:22px;opacity:1;animation:none;margin:0 2px 0 4px}
+.flagLegend .flag.still i{border-left-width:14px;border-top-width:6px;border-bottom-width:6px;animation:none}
+.flagLegend .flag.still::after{display:none}
+@media(prefers-reduced-motion:reduce){.flag,.flag i{animation:none;opacity:1}}
+.topRight{display:flex;align-items:center;gap:4px}
+.star{min-height:30px;width:30px;border-radius:50%;font-size:18px;color:#B9C3D6;line-height:1}
+.star:hover{background:#F1F5FC}.star.on{color:#E8A93B}
+.totalBox{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:8px 14px;border-radius:16px;background:linear-gradient(160deg,#fff,#EAF2FF)}
+.totalLabel{font-size:12px;color:#5E6782}
+.totalNum{font-size:22px;font-weight:800;color:#2C64DB;font-variant-numeric:tabular-nums}
+.totalSub{font-size:12px;color:#5E6782}
+.bump .totalNum{display:inline-block;animation:bump .4s ease}
+@keyframes bump{40%{transform:scale(1.08)}}
+.draftSummary .sectionHeader{align-items:flex-start}
+.checkBar{height:6px;border-radius:99px;background:#E6ECF6;overflow:hidden;margin-bottom:8px}
+.checkBar i{display:block;height:100%;background:#12965A;transition:width .3s}
+.checkList{list-style:none;margin:0 0 6px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.checkList label{display:flex;gap:8px;align-items:center;font-size:14px;background:#F5F7FB;border-radius:10px;padding:8px 10px;cursor:pointer}
+.checkList input{width:17px;height:17px;accent-color:#12965A}
+.checkList input:checked+span{text-decoration:line-through;color:#8a90a2}
+.saveItems li.diff{border-color:#9FC1FF;background:#EEF4FF}
+/* 본 화면은 75% 비율을 기본으로 */
+html{zoom:.75}
+/* 경로 제작 중 화면 */
+#building{position:fixed;inset:0;z-index:300;display:none;flex-direction:column;align-items:center;justify-content:center;gap:26px;background:linear-gradient(180deg,#F6F9FF,#E6F0FF 60%,#CFE2FF)}
+#building.on{display:flex}
+.trail{position:relative;width:620px;max-width:86vw;height:230px}
+.trail svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.trail path{fill:none;stroke:#2C64DB;stroke-width:4;stroke-linecap:round;stroke-dasharray:2 14;stroke-dashoffset:0}
+.trail .drawn{stroke-dasharray:900;stroke-dashoffset:900;stroke:#16224A;stroke-width:5;stroke-dasharray:900;animation:draw 3s ease-in-out forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.walker{position:absolute;width:120px;offset-path:path("M20 190 C 140 190, 160 60, 300 90 S 470 200, 600 50");offset-rotate:0deg;offset-anchor:50% 90%;animation:walk 3s ease-in-out forwards}
+.walker img{width:100%;animation:bob .35s ease-in-out infinite alternate}
+@keyframes walk{from{offset-distance:0%}to{offset-distance:100%}}
+@keyframes bob{to{transform:translateY(-6px) rotate(2deg)}}
+.pin{position:absolute;font-size:0;width:26px;height:34px;opacity:0;transform:scale(.3);animation:pop .4s cubic-bezier(.2,1.6,.4,1) forwards}
+.pin::before{content:"";position:absolute;left:3px;bottom:0;width:3px;height:32px;background:#16224A;border-radius:2px}
+.pin::after{content:"";position:absolute;left:6px;top:2px;border-left:20px solid #12965A;border-top:8px solid transparent;border-bottom:8px solid transparent}
+@keyframes pop{to{opacity:1;transform:none}}
+#buildText{font-size:22px;font-weight:800;color:#16224A}
+#buildSub{font-size:15px;color:#5E6782;margin-top:-14px}
+.buildBar{width:320px;max-width:70vw;height:6px;border-radius:99px;background:#fff;overflow:hidden}
+.buildBar i{display:block;height:100%;width:0;background:#2C64DB;border-radius:99px;animation:fill 3.2s ease-in-out forwards}
+@keyframes fill{to{width:100%}}
+@media(prefers-reduced-motion:reduce){.walker,.walker img,.trail .drawn,.pin,.buildBar i{animation-duration:.01s}}
+</style>
+</head>
+<body>
+<div id="building" aria-live="polite"><div class="trail"><svg viewBox="0 0 620 230"><path d="M20 190 C 140 190, 160 60, 300 90 S 470 200, 600 50"/><path class="drawn" d="M20 190 C 140 190, 160 60, 300 90 S 470 200, 600 50"/></svg><span class="pin" style="left:150px;top:96px;animation-delay:.8s"></span><span class="pin" style="left:330px;top:62px;animation-delay:1.5s"></span><span class="pin" style="left:470px;top:120px;animation-delay:2.2s"></span><div class="walker"><img src="robot-map.png" alt=""></div></div><p id="buildText">경로 제작 중...</p><p id="buildSub">내 일정과 맞는 공고를 찾고 있어요</p><div class="buildBar"><i></i></div></div>
+<div class="app">
+
+<!-- 1. 회원가입 -->
+<section class="screen" id="s-signup">
+  <div class="entry">
+    <div class="entryHero">
+      <span class="entryLogo">PATHFINDER</span>
+      <img src="robot-flag.png" alt="" style="margin-top:28px">
+      <h1>계획을 저장하면<br>바뀐 공고를 대신 지켜볼게요</h1>
+      <p>계정을 만들면 여러 계획을 저장하고, 다른 기기에서도 같은 경로를 열 수 있어요. 둘러보기만 하려면 예시로 시작해도 돼요.</p>
+    </div>
+    <div class="entryContent">
+      <div class="steps"><i class="on"></i><i></i><i></i></div>
+      <h2>회원가입</h2>
+      <p>이메일로 만들거나, 쓰던 계정으로 바로 시작하세요.</p>
+      <form class="form" onsubmit="event.preventDefault();go('onboarding')">
+        <div class="social"><button type="button" class="kakao" onclick="go('onboarding')">카카오로 시작</button><button type="button" class="naver" onclick="go('onboarding')">네이버로 시작</button></div>
+        <div class="or">또는 이메일로</div>
+        <label>이메일<input type="email" placeholder="name@example.com" autocomplete="off"></label>
+        <label>비밀번호 <span class="hint">영문·숫자 포함 8자 이상</span><input type="password" autocomplete="off"></label>
+        <label>비밀번호 확인<input type="password" autocomplete="off"></label>
+        <label class="checkboxLabel"><input type="checkbox" checked> (필수) 이용약관 동의</label>
+        <label class="checkboxLabel"><input type="checkbox" checked> (필수) 개인정보 수집·이용 동의</label>
+        <label class="checkboxLabel"><input type="checkbox"> (선택) 마감 임박·공고 변경 알림 받기</label>
+        <button class="primaryButton" style="min-height:52px;font-size:16px">가입하고 내 정보 입력하기</button>
+        <p class="hint" style="text-align:center">이미 계정이 있나요? <a href="login.html">로그인</a> · <a href="#board" onclick="demo()">예시로 둘러보기</a></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- 2. 내 정보 입력 (F01) -->
+<section class="screen" id="s-onboarding">
+  <div class="entry">
+    <div class="entryHero">
+      <span class="entryLogo">PATHFINDER</span>
+      <img src="robot-wave.png" alt="" style="margin-top:28px">
+      <h1>판정에 필요한 것만<br>몇 가지 여쭤볼게요</h1>
+      <p>답을 건너뛰면 그 값에 기대는 정책은 ‘확인 필요’로 남겨요. 입력한 정보는 판정 서버에서만 쓰고, 외부 AI에는 보내지 않아요.</p>
+    </div>
+    <div class="entryContent">
+      <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+      <h2>내 정보</h2>
+      <form class="form" onsubmit="event.preventDefault();go('building')">
+        <label>출생연월<input type="month" value="2000-04"></label>
+        <label>거주 시군구<select><option>인천광역시 남동구</option><option>서울특별시 관악구</option><option>경기도 수원시</option></select></label>
+        <label>최종 학력<select><option>대학교 졸업</option><option>대학교 재학</option><option>고등학교 졸업</option></select></label>
+        <label>지금 상태 <span class="hint">여러 개 고를 수 있어요</span>
+          <div class="choiceRow" data-multi><button type="button" class="on">교육 수강 중</button><button type="button" class="on">미취업</button><button type="button">재직 중</button><button type="button">창업 준비</button></div></label>
+        <label>앞으로 예정된 일 <span class="hint">날짜는 보드의 내 일정에서 바꿀 수 있어요</span>
+          <div class="choiceRow" data-multi><button type="button" class="on">수료 12.19</button><button type="button" class="on">취업 2027.1.20</button><button type="button">이사</button><button type="button">창업</button></div></label>
+        <label>관심 분야
+          <div class="choiceRow" data-single><button type="button" class="on">취업·일자리</button><button type="button">창업</button><button type="button">주거</button><button type="button">교육·학습</button><button type="button">생활·복지</button></div></label>
+        <label>지금 받고 있는 지원 <span class="hint">중복 수혜 판정에 써요</span><select><option>없음</option><option>국민내일배움카드</option><option>모름</option></select></label>
+        <div class="inlineActions" style="justify-content:space-between"><button type="button" class="textButton" onclick="go('signup')">이전</button><button class="primaryButton" style="min-height:48px;padding:0 22px">정책 보드 열기</button></div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- 3~5. 작업 화면: 정책 선택 / 로드맵 / 계정 -->
+<section class="screen" id="s-work">
+  <div class="shell" id="shell">
+    <nav class="nav">
+      <div class="brand"><img src="robot-face.png" alt=""><strong>Pathfinder</strong><small>갈림길</small></div>
+      <a class="navButton" href="#board" data-tab="board"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="14" rx="1.5"/></svg><span>정책 선택</span></a>
+      <a class="navButton" href="#saved" data-tab="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span>관심 정책</span></a>
+      <a class="navButton" href="#roadmap" data-tab="roadmap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></svg><span>내 정책 로드맵</span></a>
+      <a class="navButton accountButton" href="#account" data-tab="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg><span>계정</span></a>
+    </nav>
+
+    <main class="workspace">
+      <!-- 정책 선택 -->
+      <div class="screen" id="t-board">
+        <div class="pageHeader">
+          <div><p class="eyebrow">정책 선택하기</p><h1><span class="demoBadge">예시 프로필</span>내 계획에 맞는 정책을 시점별로 담아요</h1><p class="subtitle">기준일 2026.11.19 · 공고 데이터 기준 2026.11.18</p></div>
+          <div class="inlineActions" style="position:relative"><button class="bell" id="bellBtn" onclick="toggleBell(event)" aria-label="알림"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><b id="bellCount"></b></button><div class="bellPanel" id="bellPanel"></div><button class="primaryButton" onclick="openSave()">계획 저장</button></div>
+        </div>
+        <div class="profileChips" id="chips"></div>
+
+        <div class="schedule">
+          <div class="sectionHeader"><div><h2>내 일정</h2><span>칩을 누르면 날짜를 바꿀 수 있어요</span></div>
+            <div class="inlineActions"><button class="textButton" id="undoBtn" onclick="undo()" disabled>되돌리기</button><button class="textButton" onclick="toast('오늘이 속한 열로 이동했어요')">오늘</button><button class="textButton" onclick="toast('추가할 일정을 고르세요: 이사 · 창업')">+ 일정 추가</button></div></div>
+          <div class="scheduleScroll"><div class="scheduleAxis" id="axis"></div></div>
+        </div>
+
+        <div class="draftSummary">
+          <div class="sectionHeader" style="padding-bottom:10px"><h2>내 계획<em id="draftCount">0개</em></h2><div class="totalBox" id="totalBox"></div><span>담은 정책과 겹침 사유가 여기에 모여요</span></div>
+          <div class="choiceList" id="draft"></div>
+        </div>
+
+        <div class="toolbar">
+          <div class="inlineActions" style="gap:10px"><input id="q" class="search" type="search" placeholder="정책 이름 검색  ( / )" oninput="render()"><div class="categoryFilters" id="filters"></div></div>
+          <div class="inlineActions">
+            <label class="toggle"><input type="checkbox" id="recToggle" onchange="render()"> AI 추천 경로 보기</label>
+            <label class="toggle"><input type="checkbox" id="blockToggle" onchange="render()"> 신청 불가 모아보기</label>
+          </div>
+        </div>
+        <div id="recSummary"></div>
+        <div class="boardScroll"><div class="board" id="boardEl"></div></div>
+      </div>
+
+      <!-- 내 정책 로드맵 -->
+      <div class="screen" id="t-roadmap">
+        <div class="pageHeader"><div><p class="eyebrow">내 정책 로드맵</p><h1>저장한 계획을 날짜 위에서 봐요</h1><p class="subtitle">저장 당시 기준 2026.11.19 · ‘오늘 기준으로 다시 보기’로 최신 공고와 비교해요</p></div>
+          <button class="outlineButton" onclick="toast('복사본을 새 초안으로 열었어요');location.hash='board'">복사해 편집</button><button class="outlineButton" onclick="print()">인쇄 · PDF</button></div>
+        <div class="roadmapHeader"><select class="picker" id="planPicker" onchange="renderRoadmap()"></select><button class="secondaryButton" onclick="toast('오늘 기준으로 다시 판정했어요. 바뀐 항목 0개')">오늘 기준으로 다시 보기</button><button class="primaryButton" onclick="openPlanCompare()">계획 비교</button></div>
+        <div class="schedule"><div class="sectionHeader"><h2>이 계획의 일정</h2><span id="rmEvents"></span></div></div>
+        <div class="periodLegend"><span><i></i>공식 접수 기간</span><span><i></i>내 신청 가능 기간</span></div><div class="flagLegend"><span class="flag open still"><i></i></span>신청 가능<span class="flag soon still"><i></i></span>곧 마감 (30일 이내)<span class="flag check still"><i></i></span>확인 필요<span class="flag blocked still"><i></i></span>지금 일정으로 신청 불가</div>
+        <div class="roadmapScroll"><div class="roadmapTable" id="roadmapEl"></div></div>
+      </div>
+
+      <!-- 관심 정책 -->
+      <div class="screen" id="t-saved">
+        <div class="pageHeader"><div><p class="eyebrow">관심 정책</p><h1>별표한 정책을 모아 봐요</h1><p class="subtitle">담기는 ‘이 계획에서 신청할 것’, 별표는 ‘일단 관심 있음’이에요. 자격이 생기는 시점이 오면 알려 드려요.</p></div></div>
+        <div class="dialogGrid" id="savedGrid"></div>
+      </div>
+      <!-- 계정 -->
+      <div class="screen" id="t-account">
+        <div class="pageHeader"><div><p class="eyebrow">계정</p><h1>내 정보와 저장 위치</h1></div><a class="outlineButton" href="login.html" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center">로그아웃</a></div>
+        <div class="accountGrid">
+          <div class="panel"><h2>계정 상태</h2><dl class="facts"><dt>표시 이름</dt><dd>예시 사용자 <span class="demoBadge">예시 프로필</span></dd><dt>저장 방식</dt><dd>이 브라우저에 저장</dd><dt>저장한 계획</dt><dd id="accCount">2개</dd></dl><p class="emptyHint">로그인하면 ‘내 계정에 저장’으로 바뀌고 다른 기기에서도 열려요.</p></div>
+          <div class="panel"><h2>내 정보</h2><dl class="facts"><dt>출생연월</dt><dd>2000년 4월</dd><dt>거주지</dt><dd>인천광역시 남동구</dd><dt>학력</dt><dd>대학교 졸업</dd><dt>지금 상태</dt><dd>교육 수강 중 · 미취업</dd><dt>받고 있는 지원</dt><dd>없음</dd></dl><button class="outlineButton" onclick="go('onboarding')">내 정보 수정</button></div>
+          <div class="panel"><h2>알림</h2><label class="toggle" style="margin-bottom:10px"><input type="checkbox" checked> 담은 정책 마감 7일 전</label><label class="toggle" style="margin-bottom:10px"><input type="checkbox" checked> 담은 정책 공고가 바뀌었을 때</label><label class="toggle"><input type="checkbox"> 새로 열린 추천 정책</label></div>
+          <div class="panel"><h2>최근 알림</h2><ul class="saveItems" style="margin:0" id="accNotes"></ul></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="agent" id="agent">
+      <div class="agentHead"><img src="robot-face.png" alt=""><div><h2>길잡이</h2><small>일정을 말하면 보드에 바로 반영해요</small></div></div>
+      <div class="agentMessages" id="msgs">
+        <div class="agentMessage">안녕하세요. 수료는 12월 19일, 취업은 1월 20일로 잡혀 있어요. 날짜가 바뀌면 말씀만 해 주세요.</div>
+      </div>
+      <div class="agentExamples">
+        <button onclick="say('취업을 2월 13일로 옮겨줘')">취업을 2월 13일로 옮겨줘</button>
+        <button onclick="say('왜 저는 1월 19일까지예요?')">왜 저는 1월 19일까지예요?</button>
+        <button onclick="say('추천해줘')">추천해줘</button>
+      </div>
+      <form class="agentForm" onsubmit="event.preventDefault();const t=this.q.value.trim();if(t){say(t);this.q.value=''}"><textarea name="q" placeholder="예: 3월 1일 서울로 이사해"></textarea><button class="primaryButton">보내기</button></form>
+      <p class="agentFoot">날짜·자격·중복 판정은 규칙 엔진이 하고, 길잡이는 설명만 해요.</p>
+    </aside>
+  </div>
+</section>
+</div>
+
+<!-- 모달: 시점 전체 보기 / 상세 / 비교·교체 / 저장 / 달력 -->
+<div class="backdrop" id="bd" onclick="if(event.target===this)closeDlg()"><div class="dialog" id="dlg" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// 화면 검증용 가상 데이터 (명세서 1장의 시연 흐름 기준)
+const TODAY=new Date(2026,10,19);
+const CAT={job:['취업·일자리','#2C64DB'],startup:['창업','#8a6bd1'],housing:['주거','#E1AA74'],edu:['교육·학습','#2e9b72'],life:['생활·복지','#d06b7c']};
+const ev={course:new Date(2026,11,19),job:new Date(2027,0,20)};
+let history=[];
+const P=[
+ {id:'p1',amt:70,stage:'now',cat:'edu',t:'국민내일배움카드 훈련장려금',sup:'훈련 출석률 80% 이상이면 월 최대 11만 6천 원',off:[2026,0,1,2026,11,31]},
+ {id:'p2',amt:240,stage:'now',cat:'housing',t:'청년 월세 한시 특별지원',sup:'월 최대 20만 원, 최장 12개월',off:[2026,9,1,2026,10,26],rec:1},
+ {id:'p3',stage:'now',cat:'life',t:'청년 마음건강 바우처',sup:'전문 심리상담 8회 이용권',off:[2026,1,1,2026,11,15],check:'소득 기준 확인 필요 · 건강보험료 기준을 입력하지 않았어요'},
+ {id:'p4',amt:300,stage:'now',cat:'job',t:'국민취업지원제도 1유형',sup:'구직촉진수당 월 50만 원 × 6개월',off:[2026,0,1,2026,11,31],block:'교육 수강 중에는 참여할 수 없어요 · 수료 후 열에서 다시 보여요'},
+ {id:'p5',amt:90,stage:'course',cat:'job',t:'수료생 구직 지원',sup:'수료 뒤 구직 활동비 월 30만 원 × 3개월',off:[2027,0,22,2027,1,26],changed:{field:'접수 시작',before:'2027년 1월 5일',after:'2027년 1월 22일',quote:'“사업 일정 조정에 따라 2027년 1차 접수 시작일을 1월 22일(수)로 변경합니다.”',at:'2026.11.21'},personal:'job',rec:1},
+ {id:'p6',amt:300,stage:'course',cat:'job',t:'국민취업지원제도 1유형',sup:'구직촉진수당 월 50만 원 × 6개월',off:[2026,0,1,2027,11,31],personal:'job',conflict:'p5'},
+ {id:'p7',amt:15,stage:'course',cat:'edu',t:'청년 자격증 응시료 지원',sup:'국가기술자격 응시료 연 3회까지',off:[2026,11,20,2027,2,31]},
+ {id:'p8',stage:'course',cat:'housing',t:'청년 전세보증금 이자 지원',sup:'보증금 대출 이자 연 최대 2%',off:[2026,11,1,2027,5,30]},
+ {id:'p9',stage:'job',cat:'job',t:'청년 일자리 도약 장려금',sup:'입사 6개월 근속 시 기업과 함께 지원',off:[2027,0,1,2027,11,31],rec:1},
+ {id:'p10',amt:360,stage:'job',cat:'life',t:'청년 내일 저축계좌',sup:'월 10만 원 저축 시 정부 매칭 30만 원',off:[2027,4,1,2027,4,20]},
+ {id:'p11',stage:'job',cat:'housing',t:'중소기업 취업 청년 전월세 대출',sup:'연 1.5% 금리, 최대 1억 원',off:[2027,0,1,2027,11,31]},
+ {id:'p12',stage:'job',cat:'startup',t:'예비창업패키지',sup:'사업화 자금 최대 1억 원',off:[2027,1,1,2027,2,10],check:'창업 예정일이 없어요 · 일정에 창업을 추가하면 판정해요'},
+];
+let chosen={p5:'course',p2:'now'};
+try{const sv=JSON.parse(localStorage.getItem('pf.draft')||'null');if(sv)chosen=sv}catch(e){}
+function save(){try{localStorage.setItem('pf.draft',JSON.stringify(chosen))}catch(e){}}
+let filter='all';
+let tab='board';
+const fmt=d=>`${d.getMonth()+1}월 ${d.getDate()}일`;
+const fmtY=d=>d.getFullYear()!==2026?`${d.getFullYear()}년 ${fmt(d)}`:fmt(d);
+const short=d=>`${d.getMonth()+1}.${d.getDate()}`;
+const day=86400000;
+const dd=d=>Math.round((d-TODAY)/day);
+const off=p=>[new Date(p.off[0],p.off[1],p.off[2]),new Date(p.off[3],p.off[4],p.off[5])];
+function deadline(p){const [s,e]=off(p);if(p.personal){const lim=new Date(ev[p.personal]-day);if(lim<e)return{d:lim,kind:'personal',e,s}}return{d:e,kind:'official',e,s}}
+const stages=()=>[
+ {id:'now',name:'지금',range:`11.19 ~ ${short(new Date(ev.course-day))}`,state:'교육 수강 중 · 미취업'},
+ {id:'course',name:'수료 후',range:`${short(ev.course)} ~ ${short(new Date(ev.job-day))}`,state:'수료 · 미취업'},
+ {id:'job',name:'취업 후',range:`${short(ev.job)} ~`,state:'재직'}];
+function go(s){location.hash=s}
+function toast(t,act){const e=document.getElementById('toast');e.textContent=t;if(act){const b=document.createElement('button');b.className='toastAct';b.textContent=act[0];b.onclick=()=>{act[1]();e.classList.remove('show')};e.append(b)};e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),2600)}
+function demo(){toast('예시 프로필로 둘러보는 중이에요')}
+
+function build(){const b=document.getElementById('building');b.classList.remove('on');void b.offsetWidth;b.querySelectorAll('*').forEach(e=>{e.style.animation='none';void e.offsetWidth;e.style.animation=''});b.classList.add('on');
+ const steps=[['경로 제작 중...','내 일정과 맞는 공고를 찾고 있어요'],['자격을 따져 보는 중...','수료·취업 예정일로 기한을 계산하고 있어요'],['길목마다 깃발 꽂는 중...','겹쳐 받을 수 없는 지원을 골라내고 있어요']];
+ steps.forEach((s,i)=>setTimeout(()=>{buildText.textContent=s[0];buildSub.textContent=s[1]},i*1100));
+ setTimeout(()=>{b.classList.remove('on');location.replace('#board');toast('내 경로가 준비됐어요')},3500)}
+function route(){
+  if(location.hash==='#building'){build();return}
+  const h=(location.hash||'#signup').slice(1);
+  document.querySelectorAll('.app>.screen').forEach(s=>s.classList.remove('on'));
+  if(h==='signup'||h==='onboarding'){document.getElementById('s-'+h).classList.add('on');scrollTo(0,0);return}
+  tab=['board','roadmap','account','saved'].includes(h)?h:'board';
+  document.getElementById('s-work').classList.add('on');
+  document.querySelectorAll('#s-work main>.screen').forEach(s=>s.classList.toggle('on',s.id==='t-'+tab));
+  document.querySelectorAll('.navButton').forEach(a=>a.classList.toggle('navActive',a.dataset.tab===tab));
+  document.getElementById('shell').classList.toggle('noagent',tab==='account');
+  document.getElementById('agent').style.display=tab==='account'?'none':'';
+  if(tab==='roadmap')renderRoadmap();if(tab==='saved')renderSaved();
+}
+addEventListener('hashchange',route);
+
+function renderChips(){
+  const c=[['인천 거주',0],['교육 수강 중',0],['미취업',0],['취업 예정',0],['관심: 취업',0]];
+  document.getElementById('chips').innerHTML=c.map(([t])=>`<button class="profileChip" onclick="this.classList.toggle('mutedChip');toast(this.classList.contains('mutedChip')?'이 계획에서 \\''+this.textContent+'\\' 조건을 잠시 껐어요':'다시 켰어요')">${t}</button>`).join('')+`<button class="textButton" onclick="go('onboarding')">내 정보 수정</button>`;
+}
+function renderAxis(){
+  const start=new Date(2026,10,1),end=new Date(2027,3,1),span=end-start;
+  const x=d=>((d-start)/span*100).toFixed(2)+'%';
+  let h='';
+  for(let m=0;m<5;m++){const d=new Date(2026,10+m,1);h+=`<div class="monthTick" style="left:${x(d)}"><strong>${d.getMonth()+1}월</strong><span>${d.getFullYear()}</span></div>`}
+  h+=`<button class="scheduleChip todayChip" style="left:${x(TODAY)}"><span class="calendarGlyph">●</span><span><small>오늘</small>11월 19일</span></button>`;
+  h+=`<button class="scheduleChip" style="left:${x(ev.course)}" onclick="openCal('course')"><span class="calendarGlyph">▦</span><span><small>수료 예정</small>${fmt(ev.course)}</span></button>`;
+  h+=`<button class="scheduleChip ${ev.job-ev.course<20*day?'low':''}" style="left:${x(ev.job)}" onclick="openCal('job')"><span class="calendarGlyph">▦</span><span><small>취업 예정</small>${fmtY(ev.job)}</span></button>`;
+  document.getElementById('axis').innerHTML=h;
+}
+function warnFor(id){const p=P.find(q=>q.id===id);if(!p)return '';const {d,s}=deadline(p);if(d<s)return `현재 일정으로 신청 불가 · 접수 시작 ${fmtY(s)}, 자격 마지막 날 ${fmtY(d)}`;return ''}
+function renderDraft(){save();renderTotal();
+  const ids=Object.keys(chosen);
+  document.getElementById('draftCount').textContent=ids.length+'개';
+  document.getElementById('draft').innerHTML=ids.length?ids.map(id=>{const p=P.find(q=>q.id===id),w=warnFor(id),{d}=deadline(p);
+    return `<div class="choiceChip ${w?'choiceWarning':''}"><div>${p.t}<small>${stages().find(s=>s.id===chosen[id]).name} · ${w?'신청 불가':'기한 '+fmtY(d)}</small>${p.changed?`<p class="warningText">공고 변경 · ${p.changed.field} ${p.changed.before} → ${p.changed.after} <button class="textButton" style="min-height:0;padding:0 4px" onclick="openDetail('${id}')">원문 보기</button></p>`:''}${w?`<p class="warningText">${w}</p>`:''}</div><button aria-label="빼기" onclick="toggle('${id}')">×</button></div>`}).join(''):'<p class="emptyHint">아직 담은 정책이 없어요. 카드의 ‘담기’를 눌러 보세요.</p>';
+}
+function card(p,surface){
+  const {d,kind,e,s}=deadline(p),n=dd(d),sel=chosen[p.id],blockedNow=!!p.block||d<s;
+  const ddl=d<s?'마감':n===0?'D-day':`D−${n}`;
+  const urgent=n<=10&&n>=0;
+  const rec=document.getElementById('recToggle').checked&&p.rec;
+  return `<article class="policyCard ${sel?'chosen':''} ${rec?'recommended':''} ${blockedNow?'blocked':''}" id="${surface}-${p.id}">
+   <div class="cardTop"><span class="category"><i style="background:${CAT[p.cat][1]}"></i>${CAT[p.cat][0]}</span><span class="topRight"><button class="star ${stars.has(p.id)?'on':''}" onclick="toggleStar('${p.id}')" aria-label="관심 정책" aria-pressed="${stars.has(p.id)}">${stars.has(p.id)?'★':'☆'}</button><span class="dday ${urgent?'urgent':''}">${p.check?'기한 확인':ddl}</span></span></div>
+   <button class="cardTitle" onclick="openDetail('${p.id}')">${p.t}</button>${rec?'<span class="recommendBadge">추천</span>':''}
+   <p class="cardDeadline">${kind==='personal'?'내 예상 기한':'신청 기한'} ${fmtY(d)}</p>
+   ${kind==='personal'?`<p class="cardMeta">취업 예정일 기준 · 공고 마감 ${fmtY(e)}</p>`:''}
+   ${s>TODAY?`<p class="cardMeta">${fmtY(s)}부터 접수</p>`:''}
+   <p class="cardSupport">${p.sup}</p>
+   ${p.block?`<p class="cardWarning">${p.block}</p>`:''}${d<s&&!p.block?`<p class="cardWarning">현재 일정으로 신청 불가 · 취업 전날까지와 접수 기간이 겹치지 않아요</p>`:''}
+   ${p.check?`<p class="checkNote">${p.check}</p>`:''}
+   ${p.conflict&&chosen[p.conflict]?`<p class="cardWarning">계획에 담은 ‘${P.find(q=>q.id===p.conflict).t}’와 중복 불가</p>`:''}
+   <div class="cardBottom"><span>${sel&&sel!==p.stage?'다른 시점에 담음':''}</span>
+   ${blockedNow?'<span>담기 불가</span>':p.conflict&&chosen[p.conflict]?`<button class="addButton" onclick="openCompare('${p.conflict}','${p.id}')">비교·교체</button>`:sel===p.stage?`<button class="chosenButton" onclick="toggle('${p.id}')">✓ 담음</button>`:`<button class="addButton" onclick="toggle('${p.id}')">${sel?'이 시점에 담기':'담기'}</button>`}</div></article>`;
+}
+function visible(st){
+  const q=(document.getElementById('q')||{}).value?.trim()||'';
+  const blockOnly=document.getElementById('blockToggle').checked;
+  return P.filter(p=>p.stage===st&&(filter==='all'||p.cat===filter)&&(!q||p.t.includes(q)||p.sup.includes(q))).filter(p=>{const {d,s}=deadline(p);const b=!!p.block||d<s;return blockOnly?b:true})
+   .sort((a,b)=>deadline(a).d-deadline(b).d);
+}
+function render(){
+  renderAxis();renderDraft();
+  document.getElementById('filters').innerHTML=[['all','전체'],...Object.entries(CAT).map(([k,v])=>[k,v[0]])].map(([k,t])=>`<button class="filter ${filter===k?'filterActive':''}" onclick="filter='${k}';render()">${t}</button>`).join('');
+  const rec=document.getElementById('recToggle').checked;
+  document.getElementById('recSummary').innerHTML=rec?`<div class="recommendSummary"><div class="sectionHeader" style="padding:0"><h2>AI 추천 경로 · 3개</h2><button class="primaryButton" onclick="openSave(true)">새 계획으로 저장</button></div>
+   <div class="recommendLinks">${P.filter(p=>p.rec).map(p=>`<button class="recommendLink" onclick="document.getElementById('board-${p.id}').scrollIntoView({behavior:'smooth',block:'center',inline:'center'})"><small>${stages().find(s=>s.id===p.stage).name}</small>${p.t}</button>`).join('')}</div>
+   <p class="emptyHint" style="margin-top:9px">조합은 규칙 엔진이 확정했고, 길잡이가 이유를 정리했어요. 확인 필요 후보는 넣지 않았어요.</p></div>`:'';
+  document.getElementById('boardEl').innerHTML=stages().map(s=>{const list=visible(s.id),all=P.filter(p=>p.stage===s.id).length;
+   return `<section class="column"><button class="columnHeader" onclick="openStage('${s.id}')" aria-label="${s.name} 정책 ${all}개 전체 보기"><h2>${s.name}<span>${list.length}/${all}</span></h2><p>${s.range} · ${s.state}</p></button>
+   <div class="columnCards">${list.length?list.map(p=>card(p,'board')).join(''):'<div class="emptyState">이 필터에 맞는 정책이 없어요</div>'}</div>
+   ${list.length>=4?'<button class="moreButton" onclick="openStage(\''+s.id+'\')">더 보기</button>':''}</section>`}).join('');
+}
+function toggle(id){const p=P.find(q=>q.id===id);if(chosen[id]===p.stage){delete chosen[id];const st=p.stage;toast('계획에서 뺐어요',['되돌리기',()=>{chosen[id]=st;render();save()}])}else{chosen[id]=p.stage;toast(`‘${p.t}’를 담았어요`)}render();if(document.getElementById('bd').classList.contains('open')&&dlgMode)dlgMode()}
+
+let dlgMode=null;
+function openDlg(html,wide,mode){const d=document.getElementById('dlg');d.className='dialog'+(wide?' dialogWide':'');d.innerHTML=html;document.getElementById('bd').classList.add('open');dlgMode=mode||null}
+function closeDlg(){document.getElementById('bd').classList.remove('open');dlgMode=null}
+addEventListener('keydown',e=>{if(e.key==='Escape')closeDlg()});
+const head=(eb,t)=>`<div class="dialogHeader"><div><p class="eyebrow">${eb}</p><h2>${t}</h2></div><button class="iconButton" onclick="closeDlg()" aria-label="닫기">×</button></div>`;
+
+function openStage(id){const s=stages().find(x=>x.id===id);const f=()=>openDlg(head(`${s.range} · ${s.state}`,`${s.name} · 정책 ${visible(id).length}개`)+`<div class="dialogGrid">${visible(id).map(p=>card(p,'grid')).join('')}</div>`,true,f);f()}
+function openDetail(id){const p=P.find(q=>q.id===id),{d,kind,e,s}=deadline(p),st=stages().find(x=>x.id===p.stage);
+ const f=()=>openDlg(head(`${CAT[p.cat][0]} · 2027년 1차 모집`,p.t)+`
+ <dl class="facts"><dt>지원 내용</dt><dd>${p.sup}</dd><dt>해당 시점</dt><dd>${st.name} (${st.range})</dd><dt>공식 접수</dt><dd>${fmtY(s)} ~ ${fmtY(e)}</dd>
+ <dt>내 신청 기간</dt><dd>${fmtY(s<TODAY?TODAY:s)} ~ ${fmtY(d)}</dd><dt>계산 이유</dt><dd>${kind==='personal'?`취업 예정일 ${fmtY(ev.job)} 전날까지만 미취업 자격이 유지돼요`:'공고 마감이 대표 기한이에요'}</dd>${p.conflict?`<dt>제한 상대</dt><dd>${P.find(q=>q.id===p.conflict).t} (동시 수혜 불가)</dd>`:''}</dl>
+ ${p.check?`<p class="checkNote">${p.check}</p>`:''}
+ ${p.changed?`<div class="changeBox"><p class="eyebrow">공고가 바뀌었어요 · ${p.changed.at} 확인</p><div class="changeRow"><span><small>이전</small><s>${p.changed.field} ${p.changed.before}</s></span><span><small>지금</small><b>${p.changed.field} ${p.changed.after}</b></span></div><blockquote>${p.changed.quote}</blockquote>${warnFor(id)?`<p class="warningText">이 변경으로 ${warnFor(id)}. 취업 예정일을 늦추거나 다른 정책으로 바꿔 보세요.</p>`:''}</div>`:''}
+ ${checklist(id)}
+ <div class="detailSection"><h3>공식 근거</h3><div class="evidence"><strong>2027년 수료생 구직 지원 사업 공고</strong><blockquote>“신청일 현재 미취업 상태인 훈련 수료자로서, 수료일로부터 1년이 지나지 않은 사람”</blockquote><span class="emptyHint">확인일 2026.11.18 · 검토 완료 · <a href="#" onclick="event.preventDefault();toast('시연용 화면이에요')">원문 열기</a></span></div></div>
+ <div class="dialogActions"><button class="outlineButton" onclick="toast('내 캘린더에 마감일 알림을 넣었어요 (시연)')">캘린더에 추가</button><button class="outlineButton" onclick="navigator.clipboard?.writeText('${p.t}');toast('정책 이름을 복사했어요')">공유</button><button class="outlineButton" onclick="closeDlg()">닫기</button>${chosen[id]?`<button class="chosenButton" onclick="toggle('${id}')">✓ 담음 · 빼기</button>`:`<button class="primaryButton" onclick="toggle('${id}')">담기</button>`}</div>`,false,f);f()}
+function openCompare(a,b){const A=P.find(q=>q.id===a),B=P.find(q=>q.id===b);
+ const box=(p,l)=>`<div class="compareItem"><p class="eyebrow">${l}</p><h3>${p.t}</h3><p>${p.sup}</p><p>예상 기한 <b>${fmtY(deadline(p).d)}</b></p><p>공고 마감 ${fmtY(deadline(p).e)}</p></div>`;
+ openDlg(head('중복 수혜 제한','어느 쪽을 계획에 둘까요?')+`<div class="compareGrid">${box(A,'계획에 담은 정책')+box(B,'바꿔 담을 후보')}</div>
+ <div class="evidence"><strong>제한 근거</strong><blockquote>“국민취업지원제도 참여자는 같은 기간 수료생 구직 지원을 함께 받을 수 없음”</blockquote></div>
+ <div class="dialogActions"><button class="outlineButton" onclick="closeDlg()">취소</button><button class="primaryButton" onclick="delete chosen['${a}'];chosen['${b}']=P.find(q=>q.id==='${b}').stage;closeDlg();render();toast('바꿔 담았어요')">${A.t} 대신 ${B.t} 담기</button></div>`)}
+function openSave(fromRec){const ids=fromRec?P.filter(p=>p.rec).map(p=>p.id):Object.keys(chosen);
+ const warn=ids.filter(warnFor).length;
+ openDlg(head(fromRec?'추천을 새 계획으로':'계획 저장','이름을 붙여 저장해요')+`<form class="form" onsubmit="event.preventDefault();saves.push({name:this.n.value.trim()||'내 계획',ids:${JSON.stringify(ids)}});closeDlg();toast('이 브라우저에 저장했어요')"><label>계획 이름 <span class="hint">1~35자</span><input name="n" maxlength="35" value="${fromRec?'추천 경로':'수료 후 바로 취업'}"></label></form>
+ <ul class="saveItems">${ids.map(id=>{const p=P.find(q=>q.id===id);return `<li>${p.t}<small>${stages().find(s=>s.id===p.stage).name} · ${warnFor(id)?'현재 일정으로 신청 불가':'기한 '+fmtY(deadline(p).d)}${fromRec&&!chosen[id]?' · 추가':''}</small></li>`}).join('')}</ul>
+ ${warn?`<p class="checkNote">신청 불가 ${warn}개가 있어요. 그대로 보관할 수도 있어요.</p>`:''}
+ <div class="dialogActions"><button class="outlineButton" onclick="closeDlg()">취소</button><button class="primaryButton" ${ids.length?'':'disabled'} onclick="document.querySelector('#dlg form').requestSubmit()">저장</button></div>`)}
+let calKey,calMonth;
+function openCal(k){calKey=k;calMonth=new Date(ev[k].getFullYear(),ev[k].getMonth(),1);drawCal()}
+function drawCal(){const y=calMonth.getFullYear(),m=calMonth.getMonth(),first=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate();
+ let g='일월화수목금토'.split('').map(w=>`<span>${w}</span>`).join('')+'<i></i>'.repeat(first);
+ for(let i=1;i<=n;i++){const sel=ev[calKey].getFullYear()===y&&ev[calKey].getMonth()===m&&ev[calKey].getDate()===i;g+=`<button class="calendarDay ${sel?'calendarSelected':''}" onclick="setDate(${y},${m},${i})">${i}</button>`}
+ openDlg(head('날짜 한 번 누르면 바로 반영돼요',calKey==='job'?'취업 예정일':'수료 예정일')+`<div class="calendarHeader"><button class="iconButton" onclick="calMonth=new Date(${y},${m-1},1);drawCal()">‹</button><strong>${y}년 ${m+1}월</strong><button class="iconButton" onclick="calMonth=new Date(${y},${m+1},1);drawCal()">›</button></div><div class="calendarGrid">${g}</div>`)}
+function setDate(y,m,d){history.push({k:calKey,d:ev[calKey]});ev[calKey]=new Date(y,m,d);closeDlg();render();document.getElementById('undoBtn').disabled=false;
+ const p=P.find(q=>q.id==='p5');toast(`${calKey==='job'?'취업':'수료'} 예정일을 ${fmtY(ev[calKey])}로 옮겼어요 · ${p.t} 기한 ${fmtY(deadline(p).d)}`)}
+function undo(){const h=history.pop();if(!h)return;ev[h.k]=h.d;render();document.getElementById('undoBtn').disabled=!history.length;toast('되돌렸어요')}
+
+function say(t){const m=document.getElementById('msgs');m.insertAdjacentHTML('beforeend',`<div class="agentMessage userMessage">${t.replace(/</g,'&lt;')}</div>`);
+ let r='';const mt=t.match(/(\d{1,2})월\s*(\d{1,2})일/);
+ if(/취업/.test(t)&&mt){const before=ev.job;history.push({k:'job',d:before});ev.job=new Date(+mt[1]<11?2027:2026,+mt[1]-1,+mt[2]);document.getElementById('undoBtn').disabled=false;render();const p=P.find(q=>q.id==='p5');r=`취업 예정일을 ${fmtY(before)}에서 ${fmtY(ev.job)}로 옮겼어요. ${p.t}의 예상 기한은 ${fmtY(deadline(p).d)}예요. 되돌리려면 내 일정의 ‘되돌리기’를 누르세요.`}
+ else if(/왜/.test(t)){const p=P.find(q=>q.id==='p5'),x=deadline(p);r=`${p.t}은 공고 마감이 ${fmtY(x.e)}이지만, 미취업 자격은 취업 예정일 ${fmtY(ev.job)} 전날까지예요. 그래서 내 기한은 ${fmtY(x.d)}예요.`}
+ else if(/추천/.test(t)){document.getElementById('recToggle').checked=true;render();r='보드 위에 추천 경로를 펼쳤어요. 시점마다 최대 2개, 확인 필요 후보는 뺐어요.'}
+ else if(/이사/.test(t)&&!mt){r='몇 월 며칠에 이사하시나요? 날짜가 정해지면 바로 일정에 넣을게요.'}
+ else r='일정 변경, 기한 설명, 추천을 도와드릴 수 있어요. 정책을 담는 건 카드의 ‘담기’ 버튼으로 직접 해 주세요.';
+ m.insertAdjacentHTML('beforeend','<div class="agentMessage typing" id="typing"><i></i><i></i><i></i></div>');m.scrollTop=m.scrollHeight;
+ setTimeout(()=>{document.getElementById('typing')?.remove();m.insertAdjacentHTML('beforeend',`<div class="agentMessage">${r}</div>`);m.scrollTop=m.scrollHeight},900)}
+
+const saves=[{name:'수료 후 바로 취업 (편집 중)',ids:null},{name:'예시 · 주거 먼저 챙기기',ids:['p2','p8','p11']}];
+function renderRoadmap(){
+ const pk=document.getElementById('planPicker'),cur=pk.value;
+ pk.innerHTML=saves.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');pk.value=cur&&cur<saves.length?cur:0;
+ document.getElementById('accCount').textContent=saves.length+'개';
+ const ids=saves[pk.value].ids||Object.keys(chosen);
+ document.getElementById('rmEvents').textContent=`오늘 11.19 · 수료 ${short(ev.course)} · 취업 ${short(ev.job)}`;
+ const start=new Date(2026,10,1),end=new Date(2027,4,1),span=end-start,x=d=>Math.max(0,Math.min(100,(d-start)/span*100));
+ let h=`<div class="roadmapTicks"><strong>정책</strong><div class="tickTrack">${[0,1,2,3,4,5].map(i=>{const d=new Date(2026,10+i,1);return `<span class="periodMonth" style="left:${x(d)}%">${d.getFullYear()===2027&&d.getMonth()===0?'2027 ':''}${d.getMonth()+1}월</span>`}).join('')}</div></div>`;
+ if(!ids.length)h+='<div class="emptyState" style="margin:16px">이 계획에 담은 정책이 없어요</div>';
+ ids.forEach((id,i)=>{const p=P.find(q=>q.id===id),{d,s,e}=deadline(p),ps=s<TODAY?TODAY:s,ok=d>=ps;
+  const st=!ok?['blocked','신청 불가']:p.check?['check','확인 필요']:dd(d)<=30?['soon','곧 마감']:['open','신청 가능'];
+  const flag=`<span class="flag ${st[0]}" style="left:${x(ok?d:s)}%;animation-delay:${.25+i*.22}s" title="${st[1]} · ${fmtY(ok?d:s)}"><i></i><em>${st[1]}</em></span>`;
+  h+=`<div class="roadmapRow"><div class="roadmapPolicy"><button onclick="openDetail('${id}')">${p.t}</button><small>${stages().find(q=>q.id===p.stage).name} · ${CAT[p.cat][0]}</small></div>
+  <div class="periodTrack"><div class="officialBar" style="left:${x(s)}%;width:${x(new Date(+e+day))-x(s)}%"></div>
+  ${ok?`<div class="personalBar ${p.check?'uncertainBar':''}" style="left:${x(ps)}%;width:${x(new Date(+d+day))-x(ps)}%"></div>`:''}${flag}
+  <p class="periodText">${ok?`${fmtY(ps)}부터 ${fmtY(d)}까지 신청할 수 있어요 · 공고 마감 ${fmtY(e)}`:`현재 일정으로 신청 불가 · 접수 시작 ${fmtY(s)}, 자격 마지막 날 ${fmtY(d)}`}</p></div></div>`});
+ document.getElementById('roadmapEl').innerHTML=h;
+}
+document.querySelectorAll('.choiceRow').forEach(r=>r.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(r.hasAttribute('data-single'))r.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.toggle('on')}));
+
+const NOTES=[
+ {id:'n1',kind:'공고 변경',pid:'p5',t:'수료생 구직 지원 공고가 바뀌었어요',d:'접수 시작 1월 5일 → 1월 22일 · 지금 일정으로는 신청 불가',when:'오늘',unread:1,warn:1},
+ {id:'n2',kind:'마감 임박',pid:'p2',t:'청년 월세 한시 특별지원 마감 D-7',d:'내 계획 ‘지금’ 열에 담겨 있어요',when:'오늘',unread:1},
+ {id:'n3',kind:'새로 열림',pid:'p7',t:'청년 자격증 응시료 지원 접수가 열려요',d:'12월 20일부터 · 수료 후 열 추천 후보',when:'어제',unread:0}];
+function renderNotes(){
+ const n=NOTES.filter(x=>x.unread).length,c=document.getElementById('bellCount');c.textContent=n||'';c.style.display=n?'':'none';
+ const item=x=>`<li class="${x.unread?'unread':''} ${x.warn?'noteWarn':''}" onclick="openNote('${x.id}')"><span class="noteKind">${x.kind}</span><strong>${x.t}</strong><small>${x.d} · ${x.when}</small></li>`;
+ document.getElementById('bellPanel').innerHTML=`<div class="sectionHeader" style="padding:0 4px 8px"><h2>알림</h2><button class="textButton" onclick="event.stopPropagation();NOTES.forEach(x=>x.unread=0);renderNotes()">모두 읽음</button></div><ul class="noteList">${NOTES.map(item).join('')}</ul><a class="textButton" href="#account" style="display:block;text-align:center;text-decoration:none">알림 설정</a>`;
+ const a=document.getElementById('accNotes');if(a)a.innerHTML=NOTES.map(x=>`<li style="cursor:pointer" onclick="location.hash='board';setTimeout(()=>openNote('${x.id}'),50)">${x.t}<small>${x.d}</small></li>`).join('');
+}
+function toggleBell(e){e.stopPropagation();document.getElementById('bellPanel').classList.toggle('open')}
+document.addEventListener('click',e=>{const p=document.getElementById('bellPanel');if(p&&!p.contains(e.target))p.classList.remove('open')});
+function openNote(id){const x=NOTES.find(n=>n.id===id);x.unread=0;renderNotes();document.getElementById('bellPanel').classList.remove('open');openDetail(x.pid)}
+
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&tab==='board'){e.preventDefault();document.getElementById('q').focus()}});
+const topBtn=document.createElement('button');topBtn.className='toTop';topBtn.setAttribute('aria-label','맨 위로');topBtn.textContent='↑';topBtn.onclick=()=>scrollTo({top:0,behavior:'smooth'});document.body.append(topBtn);
+addEventListener('scroll',()=>topBtn.classList.toggle('show',scrollY>500));
+
+// 관심 정책(별표)
+let stars=new Set();try{stars=new Set(JSON.parse(localStorage.getItem('pf.stars')||'["p9","p12"]'))}catch(e){}
+function toggleStar(id){stars.has(id)?stars.delete(id):stars.add(id);try{localStorage.setItem('pf.stars',JSON.stringify([...stars]))}catch(e){}
+ const p=P.find(q=>q.id===id);toast(stars.has(id)?`‘${p.t}’를 관심 정책에 넣었어요`:'관심 정책에서 뺐어요');render();if(tab==='saved')renderSaved();if(dlgMode)dlgMode()}
+function renderSaved(){const g=document.getElementById('savedGrid');const l=P.filter(p=>stars.has(p.id));
+ g.innerHTML=l.length?l.map(p=>card(p,'saved')).join(''):'<div class="emptyState" style="grid-column:1/-1">아직 별표한 정책이 없어요. 카드 오른쪽 위 ☆을 눌러 보세요.</div>'}
+// 받을 수 있는 총액
+const won=v=>v>=10000?(v/10000).toFixed(v%10000?1:0)+'억':v.toLocaleString()+'만';
+function sumFor(ids){let t=0,u=0,b=0;ids.forEach(id=>{const p=P.find(q=>q.id===id);if(p.block||warnFor(id)){b++;return}p.amt?t+=p.amt:u++});return{t,u,b}}
+function renderTotal(){const el=document.getElementById('totalBox');if(!el)return;const {t,u,b}=sumFor(Object.keys(chosen));
+ el.innerHTML=`<span class="totalLabel">담은 정책으로 받을 수 있는 현금성 지원</span><strong class="totalNum">최대 ${won(t)} 원</strong><span class="totalSub">${u?`금액 미정 지원 ${u}개 별도 · `:''}${b?`신청 불가 ${b}개 제외`:'신청 불가 없음'}</span>`;
+ el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump')}
+// 신청 준비 체크리스트
+const DOCS={job:['신분증','수료(예정)증명서','구직 신청서(고용24)','통장 사본'],housing:['신분증','임대차계약서','월세 이체 내역','주민등록등본'],edu:['신분증','훈련 출석 확인서','통장 사본'],life:['신분증','건강보험료 납부 확인서'],startup:['신분증','사업계획서','창업 교육 이수증']};
+let checks={};try{checks=JSON.parse(localStorage.getItem('pf.checks')||'{}')}catch(e){}
+function checklist(id){const p=P.find(q=>q.id===id),docs=DOCS[p.cat],c=checks[id]||[],done=docs.filter((_,i)=>c[i]).length;
+ return `<div class="detailSection"><h3>신청 준비 체크리스트 <span class="hint">${done}/${docs.length}</span></h3><div class="checkBar"><i style="width:${done/docs.length*100}%"></i></div><ul class="checkList">${docs.map((d,i)=>`<li><label><input type="checkbox" ${c[i]?'checked':''} onchange="tick('${id}',${i},this.checked)"><span>${d}</span></label></li>`).join('')}</ul><p class="hint">시연용 예시 서류예요. 실제 서류는 공고 원문을 따라요.</p></div>`}
+function tick(id,i,v){(checks[id]=checks[id]||[])[i]=v;try{localStorage.setItem('pf.checks',JSON.stringify(checks))}catch(e){}const y=document.getElementById('dlg').scrollTop;if(dlgMode)dlgMode();document.getElementById('dlg').scrollTop=y}
+// 두 계획 비교
+function planIds(i){return saves[i].ids||Object.keys(chosen)}
+function openPlanCompare(a=0,b=1){const f=()=>{const opt=sel=>saves.map((s,i)=>`<option value="${i}" ${i==sel?'selected':''}>${s.name}</option>`).join('');
+ const col=i=>{const ids=planIds(i),{t,u,b:bl}=sumFor(ids),dl=ids.map(id=>deadline(P.find(q=>q.id===id))).filter(x=>x.d>=x.s).sort((x,y)=>x.d-y.d)[0];
+  return `<div class="compareItem"><p class="totalNum" style="font-size:24px">최대 ${won(t)} 원</p><p class="hint">${u?`금액 미정 ${u}개 · `:''}신청 불가 ${bl}개${dl?` · 가장 빠른 기한 ${fmtY(dl.d)}`:''}</p><ul class="saveItems">${ids.map(id=>{const p=P.find(q=>q.id===id),other=planIds(i===a?b:a).includes(id);return `<li class="${other?'':'diff'}">${p.t}<small>${stages().find(s=>s.id===p.stage).name} · ${warnFor(id)||p.block?'신청 불가':'기한 '+fmtY(deadline(p).d)}${other?'':' · 이 계획에만 있음'}</small></li>`}).join('')}</ul></div>`};
+ openDlg(head('같은 날짜 기준으로 나란히','두 계획 비교')+`<div class="compareGrid"><select class="picker" onchange="openPlanCompare(+this.value,${b})">${opt(a)}</select><select class="picker" onchange="openPlanCompare(${a},+this.value)">${opt(b)}</select>${col(a)}${col(b)}</div><div class="dialogActions"><button class="outlineButton" onclick="closeDlg()">닫기</button></div>`,true,f)};f()}
+renderChips();render();renderNotes();route();
+</script>
+</body>
+</html>
