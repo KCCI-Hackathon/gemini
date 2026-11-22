@@ -1,0 +1,10 @@
+import { signup } from "@/lib/account/auth";
+import { context, jsonBody, rejectCrossSite, reply } from "@/lib/account/http";
+
+export const runtime = "nodejs";
+
+export async function POST(req: Request) {
+  const blocked = rejectCrossSite(req); if (blocked) return blocked;
+  const body = await jsonBody(req); if (!body.ok) return body.res;
+  return reply(await signup(body.body, context(req)));
+}
