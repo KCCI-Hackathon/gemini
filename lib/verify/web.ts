@@ -28,6 +28,26 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+const FOCUS_KEYWORDS = /지원\s*대상|신청\s*자격|자격|연령|나이|만\s*\d+\s*세|소득|중위|거주|주소|신청\s*기간|접수|모집\s*기간|지원\s*내용|지원\s*금액|제출\s*서류|구비\s*서류/;
+
+/** AI에게 보낼 본문 줄이기: 자격·기간·서류 키워드 문단과 앞뒤 문단을 모아 limit자로 만든다. 없으면 앞에서 자른다 */
+export function focusText(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const paras = text.split("\n");
+  const picked = new Set<number>();
+  let size = 0;
+  for (let i = 0; i < paras.length && size < limit; i++) {
+    if (!FOCUS_KEYWORDS.test(paras[i])) continue;
+    for (const j of [i - 1, i, i + 1]) {
+      if (j < 0 || j >= paras.length || picked.has(j)) continue;
+      picked.add(j);
+      size += paras[j].length + 1;
+    }
+  }
+  if (!picked.size) return text.slice(0, limit);
+  return [...picked].sort((a, b) => a - b).map((i) => paras[i]).join("\n").slice(0, limit);
+}
+
 export function normalizeSpace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
@@ -122,6 +142,9 @@ export function createWeb(opts: { fetchFn?: typeof fetch; extraHosts: string[] }
 
   return {
     async openPage(url: string, signal?: AbortSignal) {
+      // 이미 열어 둔 페이지는 다시 요청하지 않고 열기 횟수도 세지 않는다
+      const cached = pages.get(url);
+      if (cached !== undefined) return { ok: true, text: cached };
       if (!isAllowedUrl(url, opts.extraHosts)) return { ok: false, text: "허용되지 않은 도메인입니다. 정부·공공기관·지자체·주관기관의 공식 사이트만 열 수 있습니다." };
       if (opens >= LIMITS.opens) return { ok: false, text: `페이지 열기 한도(${LIMITS.opens}회)에 도달했습니다.` };
       opens++;
