@@ -39,14 +39,17 @@ export const PlannerInputSchema = z.object({
 const PeriodSchema = z.object({ start: z.string().refine(isDate), end: z.string().refine(isDate).nullable() });
 const ReasonSchema = z.object({ code: z.string(), message: z.string(), evidenceId: z.string().optional(), eventId: z.string().optional(), relatedOfferingId: z.string().optional() });
 const CardSchema = z.object({
-  policyId: z.string(), offeringId: z.string(), roundLabel: z.string(), title: z.string(), category: z.enum(["job", "startup", "housing", "edu", "life"]),
+  policyId: z.string(), offeringId: z.string(), roundLabel: z.string(), roundId: z.string().nullable().default(null), title: z.string(), category: z.enum(["job", "startup", "housing", "edu", "life"]),
   summary: z.string(), support: z.string(), org: z.string(), dataVersion: z.string(), reviewed: z.boolean(),
   official: z.object({ kind: z.enum(["fixed", "rolling", "budget", "unknown"]), start: z.string().refine(isDate).nullable(), end: z.string().refine(isDate).nullable(), closeAt: z.string().nullable() }),
   rules: z.array(z.object({ key: z.enum(["trained", "unemployed", "employed", "in_training", "business_registered"]), kind: z.enum(["requires", "excludes"]), reviewed: z.boolean(), evidenceId: z.string() })),
   restrictions: z.array(z.object({ otherId: z.string(), reviewed: z.boolean(), action: z.enum(["application", "benefit"]), direction: z.enum(["both", "outgoing"]), period: PeriodSchema.nullable(), otherPeriod: PeriodSchema.nullable(), evidenceId: z.string() })),
-  evidence: z.array(z.object({ evidenceId: z.string(), title: z.string(), quote: z.string(), url: z.string().nullable(), reviewedAt: z.string(), reviewed: z.boolean() })),
+  overlapAssessment: z.enum(["no_restriction_found", "reviewed_rules", "unresolved"]).default("unresolved"),
+  evidence: z.array(z.object({ evidenceId: z.string(), title: z.string(), quote: z.string(), url: z.string().nullable(), reviewedAt: z.string(), reviewed: z.boolean(), overlapReview: z.object({ source: z.enum(["agent", "research"]), verdict: z.enum(["supported", "contradicted", "insufficient"]).nullable(), judgement: z.enum(["blocked", "needs_check"]), model: z.string().nullable(), reason: z.string().nullable() }).optional() })),
   stageId: z.string(), personalWindow: PeriodSchema.nullable(), stageWindow: PeriodSchema.nullable(), applicationWindows: z.array(PeriodSchema), deadlineKind: z.enum(["official", "personal_estimate", "rolling", "unknown", "closed"]),
-  verifyLabel: z.string().nullable().default(null), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]), reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
+  verifyLabel: z.string().nullable().default(null), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]),
+  eligibility: z.enum(["eligible", "needs_check", "blocked"]).default("needs_check"), eligibilityReason: z.string().default("저장 당시 자격 분류 정보가 없어 현재 기준 확인이 필요해요."),
+  reasons: z.array(ReasonSchema), selectedStageId: z.string().nullable(), otherStageIds: z.array(z.string()), conflicts: z.array(z.string()), canReplace: z.boolean(),
 });
 export const EvaluationSchema = z.object({
   questions: z.array(z.object({

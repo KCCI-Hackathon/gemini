@@ -287,7 +287,7 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
         for (const p of picks) {
           const c = cards.get(String(p.offering_id) + "|" + String(p.stage_id));
           // 지금 평가에 없거나 blocked 인 카드는 버린다(G3). 시점당 3개, 같은 회차는 한 번.
-          if (!c || c.availability === "blocked" || kept.some(k => k.offeringId === c.offeringId) || kept.filter(k => k.stageId === c.stageId).length >= 3) { dropped++; continue; }
+          if (!c || c.availability === "blocked" || c.eligibility !== "eligible" || kept.some(k => k.offeringId === c.offeringId) || kept.filter(k => k.stageId === c.stageId).length >= 3) { dropped++; continue; }
           const why = typeof p.why === "string" ? p.why.trim() : "";
           const whyOk = why && guardResponse(why, known).ok && !numbersOutside(why, allowed);
           kept.push({ offeringId: c.offeringId, stageId: c.stageId, why: [whyOk ? why : c.reasons[0]?.message ?? (c.availability === "eligible" ? "조건 기준 신청 가능" : "확인 필요")] });

@@ -26,6 +26,16 @@ function stripVerifyLabel<T>(value: T): T {
   for (const card of copy.cards ?? []) delete card.verifyLabel;
   return copy as T;
 }
+function stripEligibilityFields<T>(value: T): T {
+  const copy = structuredClone(value) as { cards?: Record<string, unknown>[] };
+  for (const card of copy.cards ?? []) {
+    delete card.eligibility;
+    delete card.eligibilityReason;
+    delete card.overlapAssessment;
+    delete card.roundId;
+  }
+  return copy as T;
+}
 
 test("F-1: a plan saved before verifyLabel existed opens with its name, choices and dates, and no badge", () => {
   const storage = new MemoryStorage();
@@ -40,6 +50,17 @@ test("F-1: a plan saved before verifyLabel existed opens with its name, choices 
   expect(opened.input.choices).toEqual(plan.input.choices);
   expect(opened.input.events).toEqual(plan.input.events);
   expect(opened.savedEvaluation.cards.every(c => c.verifyLabel === null)).toBe(true);
+});
+
+test("old saved plan cards restore with cautious tab defaults instead of disappearing", () => {
+  const storage = new MemoryStorage();
+  const plan = savedSnapshot(current(), "분류 이전 계획", "manual");
+  const old = { ...plan, savedEvaluation: stripEligibilityFields(plan.savedEvaluation) };
+  storage.setItem(`pathfinder.plans.v2:${old.planId}`, JSON.stringify(old));
+  const opened = createPlanRepository(storage).getPlan(old.planId)!;
+  expect(opened.input.choices).toEqual(plan.input.choices);
+  expect(opened.savedEvaluation.cards).toHaveLength(plan.savedEvaluation.cards.length);
+  expect(opened.savedEvaluation.cards.every(card => card.eligibility === "needs_check")).toBe(true);
 });
 
 test("F-1: a tab draft saved before verifyLabel existed is restored after refresh", () => {

@@ -1,13 +1,14 @@
 import { addMonths, toKstDate } from "@/lib/date";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
-import { loadOverlap } from "@/lib/data/overlap";
+import { hasOverlapIssue, loadOverlap, loadOverlapNotices } from "@/lib/data/overlap";
 import { blocksParticipation, evaluateRules, type Benefit } from "@/lib/judge/overlap";
 import { judgePolicy, type Profile } from "@/lib/judge";
 import { categoryOf, policyNotice } from "@/lib/route/roadmap";
 import { isDate } from "./dates";
 import { evaluatePlanner, type BaseEvaluator, type DraftConflictEvaluator } from "./evaluate";
 import { plannedFor, restrictionVerdict } from "./overlap-bridge";
+import { hasOverlapLanguage } from "./eligibility";
 import type { Evaluation, Offering, PlanEvent, PlannerInput } from "./types";
 
 /**
@@ -23,7 +24,7 @@ function officialPeriod(rolling: boolean, start: string | null | undefined, end:
 export function backendDraftConflict(now: Date, benefits: Benefit[] = []): DraftConflictEvaluator {
   const approved = loadOverlap();
   return (card, chosen) => {
-    const rules = approved.get(card.policyId);
+    const rules = approved.get(card.policyId)?.filter(rule => rule.target_round_id === null || rule.target_round_id === (card.roundId ?? null));
     if (!rules) return { blocked: false, uncertain: false, reasons: [], evidence: [], conflicts: [] };
     const { planned_conflicts } = evaluateRules(rules, benefits, plannedFor(card, chosen), now);
     const verdict = restrictionVerdict(planned_conflicts, card.policyId, "planned");
@@ -55,15 +56,33 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
   const catalog: Offering[] = policies.flatMap(p => {
     const v = verified.get(p.id);
     const rounds = v?.rounds?.length ? v.rounds : [null];
-    return rounds.map(round => ({
-      policyId: p.id, offeringId: `${p.id}:${round?.id ?? `${(v?.apply.start ?? p.applyStart ?? today).slice(0, 4)}-current`}`, roundLabel: round?.notice.title ?? "현재 수집된 공고", title: v?.name ?? p.name,
+    const overlapRules = loadOverlap().get(p.id) ?? [];
+    const overlapNotices = loadOverlapNotices(p.id);
+    const restrictionText = [p.texts.addQualification, p.texts.excluded, p.texts.income, p.texts.support, p.texts.description,
+      v?.notes, ...(v?.restrictionQuotes.map(q => q.text) ?? []), ...(v?.confirmedRelations.map(r => r.quote.text) ?? []),
+      ...(v?.statusConditions.quotes.map(q => q.text) ?? []), ...(v?.rounds?.flatMap(r => r.conditions.map(c => c.quote.text)) ?? [])]
+      .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const hasRestrictionLanguage = hasOverlapLanguage(restrictionText);
+    return rounds.map(round => {
+      const roundRules = overlapRules.filter(rule => rule.target_round_id === null || rule.target_round_id === (round?.id ?? null));
+      const invalidRoundRule = overlapRules.some(rule => rule.target_round_id !== null && !v?.rounds?.some(item => item.id === rule.target_round_id));
+      const missingSourcePolicy = overlapRules.some(rule => !policyMap.has(rule.source_policy_id));
+      const overlapAssessment = hasOverlapIssue(p.id) || missingSourcePolicy || invalidRoundRule
+        ? "unresolved" as const
+        : roundRules.length
+          ? "reviewed_rules" as const
+          : overlapRules.length || overlapNotices.length || v?.restrictionQuotes.length || v?.confirmedRelations.length || hasRestrictionLanguage || !restrictionText
+            ? "unresolved" as const
+            : "no_restriction_found" as const;
+      return {
+      policyId: p.id, offeringId: `${p.id}:${round?.id ?? `${(v?.apply.start ?? p.applyStart ?? today).slice(0, 4)}-current`}`, roundId: round?.id ?? null, roundLabel: round?.notice.title ?? "현재 수집된 공고", title: v?.name ?? p.name,
       verifyLabel: policyNotice(p, v, round?.notice.applyStart ?? today).verifyLabel,
       category: categoryOf(p.category), summary: p.texts.description || p.texts.support, support: p.texts.support, org: p.supervisingOrg,
       official: officialPeriod(v?.apply.type === "always" || (!v && p.applyPeriodType === "always"), round ? round.notice.applyStart : v ? v.apply.start : p.applyStart, round ? round.notice.applyEnd : v ? v.apply.end : p.applyEnd, v?.apply.endTime ?? null),
-      rules: [], regions: p.zipCodes, restrictions: (v?.confirmedRelations ?? []).flatMap(r => r.otherId ? [{ otherId: r.otherId, reviewed: true, action: "benefit" as const, direction: "both" as const, period: null, otherPeriod: null, evidenceId: `restriction:${p.id}:${r.otherId}` }] : []),
+      rules: [], regions: p.zipCodes, restrictions: (v?.confirmedRelations ?? []).flatMap(r => r.otherId ? [{ otherId: r.otherId, reviewed: true, action: "benefit" as const, direction: "both" as const, period: null, otherPeriod: null, evidenceId: `restriction:${p.id}:${r.otherId}` }] : []), overlapAssessment,
       reviewed: !!round && round.status === "approved" && round.conditions.every(c => !!c.supportsConfirmed), dataVersion: snapshot.asOf,
       evidence: [...(round?.conditions.map((c, i) => ({ evidenceId: `${round.id}:${i}`, title: round.notice.title, quote: c.quote.text, url: c.quote.url ?? round.notice.url, reviewedAt: c.supportsConfirmed?.at ?? round.notice.checkedAt, reviewed: !!c.supportsConfirmed })) ?? v?.statusConditions.quotes.map((q, i) => ({ evidenceId: `${p.id}:${i}`, title: v.name, quote: q.text, url: q.url ?? v.sources[0].url, reviewedAt: v.sources[0].checkedAt, reviewed: false })) ?? []), ...(v?.confirmedRelations.flatMap(r => r.otherId ? [{ evidenceId: `restriction:${p.id}:${r.otherId}`, title: `중복 수혜 제한 · ${r.otherName}`, quote: r.quote.text, url: r.quote.url ?? v.sources[0].url, reviewedAt: v.sources[0].checkedAt, reviewed: true }] : []) ?? [])],
-    }));
+    }; });
   });
   const baseEvaluator: BaseEvaluator = (o, atProfile, date) => {
     const p = policyMap.get(o.policyId)!;
@@ -79,6 +98,7 @@ export function evaluateRequest(profile: Profile, input: PlannerInput, now: Date
     if (axes.personal.value === "code_met_unreviewed") reasons.unshift({ code: "UNREVIEWED", message: "일부 조건 충족 · 공고 확인 필요" });
     if (axes.recruitment === "unknown" && availability !== "blocked") { availability = "needs_check"; reasons.push({ code: "UNKNOWN_RECRUITMENT", message: "최신 공고의 접수 기간 확인 필요" }); }
     if (availability !== "blocked" && overlap.availability) availability = overlap.availability;
+    if (o.overlapAssessment === "unresolved" && availability !== "blocked") reasons.push({ code: "UNRESOLVED_OVERLAP", message: "중복수혜 문구 또는 적용 근거를 확인해 주세요" });
     return { ...overlap, availability, reasons: [...overlap.reasons, ...reasons] };
   };
   const boundaries = [...verified.values()].flatMap(v => v.lookback ? [...profile.events, ...(input.events ?? [])].filter(e => e.type === "training_completion" || e.type === "employment").map(e => addMonths(e.date, v.lookback!.months)) : []);

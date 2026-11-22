@@ -34,12 +34,12 @@ function scripted(turns: Turn[]) {
 vi.setConfig({ testTimeout: 30_000 });
 beforeEach(() => { resetCounselState(); resetLimits?.(); });
 
-test("G1: recommend — picks are all in the current evaluation and not blocked", async () => {
-  const m = scripted([{ name: "get_evaluation", input: {} }, { name: "finish_plan", input: { summary: "시점별로 골랐어요", picks: open.slice(0, 2).map(c => ({ offering_id: c.offeringId, stage_id: c.stageId, why: "지금 열려 있어요" })) } }]);
+test("G1: a positive AI suggestion cannot promote cards that are not classified eligible", async () => {
+  const m = scripted([{ name: "get_evaluation", input: {} }, { name: "finish_plan", input: { summary: "시점별로 골랐어요", picks: open.filter(c => c.eligibility !== "eligible").slice(0, 2).map(c => ({ offering_id: c.offeringId, stage_id: c.stageId, why: "지금 열려 있어요" })) } }]);
   const out = await handleCounsel(demo, m.ctx());
-  expect(out.body.kind).toBe("plan");
-  expect(out.body.source).toBe("ai");
-  for (const p of out.body.picks!) expect(ev.cards.find(c => c.offeringId === p.offeringId && c.stageId === p.stageId)?.availability).not.toBe("blocked");
+  expect(out.body.kind).toBe("fallback");
+  expect(out.body.source).toBe("rule");
+  expect(out.body.picks).toEqual(ev.recommendations.map(c => ({ ...c, why: [] })));
 });
 test("G1: the agent may ask one question first, with a target the code turns into answer options", async () => {
   const m = scripted([{ name: "get_open_questions", input: {} }, { name: "ask_user", input: { text: "교육은 언제 끝나요?", target: { kind: "event", event: "training_completion" } } }]);
@@ -60,11 +60,11 @@ test("G2: a free question is answered with citations from the card's evidence; n
   expect(out.body).toMatchObject({ kind: "answer", source: "ai", citations: [{ evidenceId: card.evidence[0].evidenceId }] });
 });
 
-test("G3: a blocked card picked by the model is dropped, the rest are kept", async () => {
-  const m = scripted([{ name: "finish_plan", input: { summary: "골랐어요", picks: [{ offering_id: blocked.offeringId, stage_id: blocked.stageId, why: "좋아요" }, { offering_id: open[0].offeringId, stage_id: open[0].stageId, why: "열려 있어요" }] } }]);
+test("G3: blocked and needs-check cards picked by the model are dropped", async () => {
+  const uncertain = open.find(card => card.eligibility === "needs_check")!;
+  const m = scripted([{ name: "finish_plan", input: { summary: "골랐어요", picks: [{ offering_id: blocked.offeringId, stage_id: blocked.stageId, why: "좋아요" }, { offering_id: uncertain.offeringId, stage_id: uncertain.stageId, why: "확인했어요" }] } }]);
   const out = await handleCounsel(demo, m.ctx());
-  expect(out.body.picks).toEqual([expect.objectContaining({ offeringId: open[0].offeringId })]);
-  expect(out.body.notice).toContain("1개");
+  expect(out.body).toMatchObject({ kind: "fallback", source: "rule", picks: ev.recommendations.map(c => ({ ...c, why: [] })) });
 });
 test("G3: when every pick is dropped the rule recommendation replaces it", async () => {
   const m = scripted([{ name: "finish_plan", input: { summary: "골랐어요", picks: [{ offering_id: blocked.offeringId, stage_id: blocked.stageId, why: "좋아요" }] } }]);

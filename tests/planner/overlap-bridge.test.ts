@@ -16,6 +16,7 @@ const RENT_SRC = "20250617005400110952", RENT_YEONSU = "20260406005400212400"; /
 test("I1 receiving national program blocks challenge support", () => {
   const c = card(run([{ policyId: NATIONAL, status: "receiving" }]), CHALLENGE);
   expect(c.availability).toBe("blocked");
+  expect(c.eligibility).toBe("blocked");
   expect(c.reasons[0]).toMatchObject({ code: "PARTICIPATION_CONFLICT" });
   expect(c.reasons[0].message).toContain("국민취업지원제도");
   expect(c.evidence.find(e => e.evidenceId === c.reasons[0].evidenceId)?.quote).toBeTruthy();
@@ -30,12 +31,15 @@ test("I2 partial restriction does not lower the verdict", () => {
   };
   const verdict = restrictionVerdict([partial], "virtual", "current");
   expect(verdict.availability).toBeNull();
-  const ev = evaluatePlanner(DEMO_PROFILE, { revision: 0, events: DEMO_EVENTS, choices: [], mutedKeys: [], preferredCategory: "all" }, demoCatalog(), now,
+  const catalog = demoCatalog().map(o => o.offeringId === "demo-housing" ? { ...o, overlapAssessment: "reviewed_rules" as const } : o);
+  const ev = evaluatePlanner(DEMO_PROFILE, { revision: 0, events: DEMO_EVENTS, choices: [], mutedKeys: [], preferredCategory: "all" }, catalog, now,
     o => o.offeringId === "demo-housing" ? { ...verdict, availability: verdict.availability ?? "eligible" } : { availability: "eligible", reasons: [] });
-  const before = evaluatePlanner(DEMO_PROFILE, { revision: 0, events: DEMO_EVENTS, choices: [], mutedKeys: [], preferredCategory: "all" }, demoCatalog(), now, () => ({ availability: "eligible", reasons: [] }));
+  const before = evaluatePlanner(DEMO_PROFILE, { revision: 0, events: DEMO_EVENTS, choices: [], mutedKeys: [], preferredCategory: "all" }, catalog, now, () => ({ availability: "eligible", reasons: [] }));
   const pick = (e: Evaluation) => e.cards.find(c => c.offeringId === "demo-housing" && c.stageId === "current")!;
   expect(pick(before).availability).toBe("eligible");
   expect(pick(ev).availability).toBe(pick(before).availability);
+  expect(pick(ev).eligibility).toBe("eligible");
+  expect(pick(ev).eligibilityReason).toContain("미지급");
   expect(pick(ev).reasons).toContainEqual(expect.objectContaining({ code: "PARTIAL_RESTRICTION", message: "청년월세 지원 수혜 시 해당 월 청년월세 지급액 미지급" }));
   expect(pick(ev).reasons.some(r => r.message.includes("조사 메모"))).toBe(false);
 });
@@ -62,6 +66,9 @@ test("monthly payment distinguishes confirmed rent restrictions from missing fac
 test("I5 unknown benefit produces an answerable question", () => {
   const ev = run();
   expect(card(ev, CHALLENGE).availability).toBe("needs_check");
+  expect(card(ev, CHALLENGE).eligibility).toBe("needs_check");
+  const evidence = card(ev, CHALLENGE).evidence.find(e => e.overlapReview?.source === "agent");
+  if (evidence?.overlapReview?.verdict === "supported") expect(card(ev, CHALLENGE).eligibility).toBe("needs_check"); // 조항 근거가 supported여도 수혜 사실이 비면 사용자 분류는 확인 필요
   expect(ev.questions.some(q => q.policyId === CHALLENGE && q.answerKind === "receiving")).toBe(true);
   const answered = run([{ policyId: NATIONAL, status: "eligible_unpaid" }, { policyId: JOBSEEK, status: "eligible_unpaid" }]);
   expect(answered.questions.filter(q => q.policyId === CHALLENGE && [NATIONAL, JOBSEEK].includes(q.sourcePolicyId))).toEqual([]);
