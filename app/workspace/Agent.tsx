@@ -27,7 +27,7 @@ function AiQuestionCard({ text, target, onAnswer, onSkip, onLater, onShowRecomme
   </fieldset>;
 }
 import s from "./workspace.module.css";
-export type Message = { id: number; role: "assistant" | "user"; text: string };
+export type Message = { id: number; role: "assistant" | "user"; text: string; /** AI 답을 못 받은 안내. 마지막 것에만 ‘다시 시도’를 붙인다 */ retry?: boolean };
 type AnswerHandler = (question: BenefitQuestion, answer: BenefitAnswer) => void;
 
 /** "해당 사업" 대신 실제 원인 사업 이름으로 묻는다. 답하면 판정이 바뀌는 대상 정책도 함께 보여 준다. */
@@ -68,10 +68,10 @@ function QuestionCard({ question, onAnswer, busy, month, targetTitle }: { questi
   </fieldset>;
 }
 
-export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, recommendationAt, cards, planLoading, loadingAction = "recommend", today, aiQuestion, onAiAnswer, onAiSkip, onAiLater, onShowRecommendation, consentNeeded, onConsent, consentOn, onConsentOff }: {
+export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, recommendationAt, cards, planLoading, loadingAction = "recommend", today, aiQuestion, onAiAnswer, onAiSkip, onAiLater, onShowRecommendation, consentNeeded, onConsent, consentOn, onConsentOff, onRetry, onNewChat }: {
   messages: Message[]; onSend: (text: string) => void; onClose: () => void; busy: boolean;
   aiQuestion?: { text?: string; target: CounselTarget; preparedAnswers?: ReadonlySet<string> } | null; onAiAnswer?: (value: string) => void; onAiSkip?: () => void; onAiLater?: () => void;
-  onShowRecommendation?: () => void;
+  onShowRecommendation?: () => void; onRetry?: () => void; onNewChat?: () => void;
   consentNeeded?: boolean; onConsent?: () => void; consentOn?: boolean; onConsentOff?: () => void;
   recommendation?: AiRecommendation | null; recommendationAt?: number | null; cards?: Card[]; planLoading?: boolean; loadingAction?: "message" | "recommend" | "followup";
   questions?: BenefitQuestion[]; onAnswer: AnswerHandler; today?: string;
@@ -106,6 +106,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
       <div className={s.agentHead}>
         {avatarFailed ? <span className={s.agentAvatarFallback} role="img" aria-label="PathFinder 길잡이">🤖</span> : <img className={s.agentAvatar} src="/pathfinder/robot-face.png" alt="PathFinder 길잡이" onError={() => setAvatarFailed(true)} />}
         <div><h2>길잡이</h2><small>일정을 말하면 보드에 바로 반영해요</small></div>
+        {onNewChat && messages.length > 1 && <button type="button" className={s.textButton} onClick={onNewChat} disabled={busy} title="대화만 지워요. 작성 중인 계획과 담은 정책은 그대로예요.">새 대화</button>}
         <button className={`${s.iconButton} ${s.agentClose}`} onClick={onClose} aria-label="에이전트 닫기">×</button>
       </div>
       {/* AI 상담 동의 전에는 안내문과 동의 버튼만 패널을 채우고, 채팅은 쓸 수 없다 */}
@@ -116,7 +117,7 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
         <button className={s.primaryButton} onClick={onConsent}>AI 상담 사용</button>
       </section> : <>
       <div className={s.agentMessages} role="log" aria-live="polite">
-        {messages.map(m => <Fragment key={m.id}><div className={`${s.agentMessage} ${m.role === "user" ? s.userMessage : ""}`}><span className={s.srOnly}>{m.role === "user" ? "나" : "길잡이"}: </span>{m.text}</div>
+        {messages.map(m => <Fragment key={m.id}><div className={`${s.agentMessage} ${m.role === "user" ? s.userMessage : ""}`}><span className={s.srOnly}>{m.role === "user" ? "나" : "길잡이"}: </span>{m.text}{m.retry && onRetry && !planLoading && m.id === messages[messages.length - 1]?.id && <button type="button" className={s.textButton} onClick={onRetry} disabled={busy}>다시 시도</button>}</div>
           {inlineRecommendation && m.id === recommendationAt && recommendationBlock}</Fragment>)}
         {consentOn && <button className={s.textButton} onClick={onConsentOff}>AI 상담 끄기</button>}
         {aiQuestion?.text && <AiQuestionCard key={aiQuestion.text} text={aiQuestion.text} target={aiQuestion.target} busy={busy} number={aiQuestion.preparedAnswers ? aiQuestion.preparedAnswers.size + 1 : undefined} onAnswer={v => onAiAnswer?.(v)} onSkip={() => onAiSkip?.()} onLater={onAiLater} onShowRecommendation={onShowRecommendation} />}

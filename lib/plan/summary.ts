@@ -18,7 +18,7 @@ export type AiSummary = {
   answered: string[];
 };
 
-const SCHOOL: Record<string, string> = { "0049004": "고등학교 졸업", "0049005": "대학 재학", "0049006": "대학 졸업 예정", "0049007": "대학 졸업", "0049008": "석·박사" };
+const SCHOOL: Record<string, string> = { "0049004": "고등학교 졸업", "0049005": "대학교 재학", "0049006": "대학 졸업 예정", "0049007": "대학 졸업", "0049008": "석·박사" };
 const EVENT: Record<string, string> = { training_completion: "수료", employment: "취업", business_registration: "사업자등록", relocation: "이사" };
 const ANSWER: Record<string, string> = { participating_national_employment_support: "국민취업지원제도 참여", recent_history: "최근 6개월 취업·훈련 이력" };
 

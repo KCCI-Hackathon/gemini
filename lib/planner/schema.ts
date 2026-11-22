@@ -51,6 +51,8 @@ const CardSchema = z.object({
   rules: z.array(z.object({ key: z.enum(["trained", "unemployed", "employed", "in_training", "business_registered"]), kind: z.enum(["requires", "excludes"]), reviewed: z.boolean(), evidenceId: z.string() })),
   restrictions: z.array(z.object({ otherId: z.string(), reviewed: z.boolean(), action: z.enum(["application", "benefit"]), direction: z.enum(["both", "outgoing"]), period: PeriodSchema.nullable(), otherPeriod: PeriodSchema.nullable(), evidenceId: z.string() })),
   overlapAssessment: z.enum(["no_restriction_found", "reviewed_rules", "unresolved"]).default("unresolved"),
+  // 예전에 저장한 계획에는 없다. 화면에서 http(s)만 다시 걸러 연다.
+  links: z.array(z.object({ url: z.string().max(2000), kind: z.enum(["notice", "official", "apply", "ref"]), checked: z.boolean(), checkedAt: z.string().nullable() })).max(10).default([]),
   evidence: z.array(z.object({ evidenceId: z.string(), title: z.string(), quote: z.string(), url: z.string().nullable(), reviewedAt: z.string(), reviewed: z.boolean(), overlapReview: z.object({ source: z.enum(["agent", "research"]), verdict: z.enum(["supported", "contradicted", "insufficient"]).nullable(), judgement: z.enum(["blocked", "needs_check"]), model: z.string().nullable(), reason: z.string().nullable() }).optional() })),
   stageId: z.string(), personalWindow: PeriodSchema.nullable(), stageWindow: PeriodSchema.nullable(), applicationWindows: z.array(PeriodSchema), deadlineKind: z.enum(["official", "personal_estimate", "rolling", "unknown", "closed"]),
   verifyLabel: z.string().nullable().default(null), daysLeft: z.number().nullable(), availability: z.enum(["eligible", "needs_check", "blocked"]),
