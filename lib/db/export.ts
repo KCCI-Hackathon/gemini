@@ -29,7 +29,7 @@ function passingRun(db:DatabaseSync,root:string,inputs:Record<string,string>):st
     const runPath="data/overlap-agent/runs/"+safeId(report.run_id)+".json";
     const runBytes=readFileSync(join(root,runPath));
     if(sha(runBytes)!==report.runSha256) return null;
-    const run=z.object({run_id:z.string(),complete:z.literal(true),snapshotSha256:z.string(),researchSha256:z.string(),casesSha256:z.string(),
+    const run=z.object({run_id:z.string(),complete:z.literal(true),incremental:z.literal(false).optional(),snapshotSha256:z.string(),researchSha256:z.string(),casesSha256:z.string(),
       requests:z.array(z.object({hash:z.string().regex(/^[0-9a-f]{64}$/),model:z.string(),stage:z.string(),completed:z.literal(true),responseSha256:z.string()})).min(1)
     }).parse(JSON.parse(runBytes.toString("utf8")));
     if(run.run_id!==report.run_id || run.snapshotSha256!==report.snapshotSha256 || run.casesSha256!==report.casesSha256 ||

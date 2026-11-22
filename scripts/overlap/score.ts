@@ -22,6 +22,7 @@ export type RunReport=z.infer<typeof reportSchema> & {
   correctSupported:{numerator:number,denominator:number},controlsContradicted:{numerator:number,denominator:number}
   reviewTimings?:{model:string;sampleCount:number;averageMs:number|null}[],
   attemptStats?:RunState["attempts"],
+  selection?:{candidatePolicies:number;incremental:boolean},
 };
 function hasProof(r: Omit<RunReport,"passed">) {
   if(!r.complete || !r.total || r.covered>r.total || r.falseBlocked || r.wrongSupported || r.wrongTotal!==3) return false;
@@ -49,7 +50,7 @@ function hasProof(r: Omit<RunReport,"passed">) {
   });
 }
 export function reportPasses(value:RunReport):boolean {
-  return reportSchema.safeParse(value).success && value.passed && hasProof(value);
+  return !value.selection?.incremental && reportSchema.safeParse(value).success && value.passed && hasProof(value);
 }
 const clean=(s:string)=>s.replace(/[\s·ㆍ]/g,"");
 function mentions(a:string,b:string) {
@@ -120,7 +121,8 @@ export function score(cases:Case[],agent:CandidateSet,checks:Verification[],run:
     correctSupported:{numerator:verified.filter(c=>c.verdict==="supported" && c.validQuote).length,denominator:verified.length},
     controlsContradicted:{numerator:controls.filter(c=>c.verdict==="contradicted" && c.validQuote).length,denominator:controls.length},
     ...(measured.length ? { reviewTimings } : {}),
-    ...(run.attempts ? { attemptStats:run.attempts } : {})
+    ...(run.attempts ? { attemptStats:run.attempts } : {}),
+    ...(run.candidateIds ? { selection:{candidatePolicies:run.candidateIds.length,incremental:!!run.incremental} } : {})
   };
   report.passed=hasProof(report);
   return report;

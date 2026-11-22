@@ -49,6 +49,7 @@ const State=z.object({
   run_id:z.string(),startedAt:z.iso.datetime(),snapshotSha256:z.string(),casesSha256:z.string(),researchSha256:z.string(),
   requests:z.array(Entry), exhausted:z.record(z.string(),z.number()),complete:z.boolean(),lastCall:z.number(),
   compact:z.boolean().optional(),
+  candidateIds:z.array(z.string()).optional(), incremental:z.boolean().optional(),
   cooldown:z.record(z.string(),z.number()).optional(),
   attempts:z.record(z.string(),z.object({success:z.int(),failed:z.int(),retries:z.int()})).optional()
 });
@@ -72,6 +73,7 @@ function dailyExhausted(error:unknown,model:ModelId) {
     (!v.quotaDimensions?.model || v.quotaDimensions.model===model) && /requests.*per.?day|requests.*daily/i.test([v.quotaId,v.quotaMetric].join(" "))));
 }
 type Options={dir:string,runId:string,inputs:Pick<RunState,"snapshotSha256"|"casesSha256"|"researchSha256">,compact?:boolean,
+  candidateIds?:string[],incremental?:boolean,
   live:boolean,apiKey?:string,fetchFn?:typeof fetch,now?:()=>number,sleep?:(ms:number)=>Promise<void>};
 export function makeSession(o:Options) {
   const now=o.now??Date.now;
@@ -80,7 +82,8 @@ export function makeSession(o:Options) {
   if(!o.live && !existsSync(path)) throw Error("재생할 실행 기록 없음: "+path);
   const state:RunState=existsSync(path)?State.parse(JSON.parse(readFileSync(path,"utf8"))):{
     ...o.inputs,run_id:o.runId,startedAt:new Date(now()).toISOString(),requests:[],exhausted:{},complete:false,lastCall:0,
-    ...(o.compact ? { compact: true, attempts: {}, cooldown: {} } : {})
+    ...(o.compact ? { compact: true, attempts: {}, cooldown: {} } : {}),
+    ...(o.candidateIds ? { candidateIds: o.candidateIds, incremental: !!o.incremental } : {})
   };
   if(state.run_id!==o.runId || Object.entries(o.inputs).some(([k,v])=>state[k as keyof RunState]!==v)) throw Error("실행 입력 해시 불일치");
   const persist=()=>writeAtomic(path,jsonBytes(state));

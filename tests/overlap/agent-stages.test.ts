@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import snapshot from "@/data/snapshot/current.json";
-import { batchFields, selectFields, selectRegion } from "@/scripts/overlap/select";
+import { batchFields, screenPolicyIds, selectFields, selectRegion } from "@/scripts/overlap/select";
 import { extract, extractPair } from "@/scripts/overlap/extract";
 import { linkMentions } from "@/scripts/overlap/link";
 import { verifyClaims } from "@/scripts/overlap/verify";
@@ -16,6 +16,16 @@ const policies = [{ plcyNo: b, plcyNm: "내 사업", ptcpPrpTrgtCn: text, aplyPr
 const ask: Ask = async req => ({ model: req.model ?? model, hash: String(req.pass).repeat(64), text: JSON.stringify([raw]) });
 const run = { run_id: "run", startedAt: "2026-11-20T10:00:00Z" };
 describe("중복수혜 에이전트 단계", () => {
+  it("기존 연결과 제한 표현만 선별하며 지역과 일반 자격 제한은 선별 기준으로 쓰지 않는다", () => {
+    const rows = [
+      { plcyNo: "1", plcyNm: "기존 연결" },
+      { plcyNo: "2", plcyNm: "신규 정책", plcySprtCn: "받고 있는 다른 사업의 지원금을 차감합니다." },
+      { plcyNo: "3", plcyNm: "일반 자격", ptcpPrpTrgtCn: "나이 제한" },
+      { plcyNo: "4", plcyNm: "다른 지역", zipCd: "11110", addAplyQlfcCndCn: "유사 사업 참여 중" },
+    ];
+    expect(screenPolicyIds(rows, new Set(["1"]))).toEqual(["1", "2", "4"]);
+    expect(screenPolicyIds(rows, new Set(["1"]), new Set(["1", "3", "4"]))).toEqual(["1", "4"]);
+  });
   it("자르지 않은 세 종류의 필드를 정책번호 순으로 보낸다", () => {
     const fields = selectFields(snapshot.records);
     expect(selectRegion(snapshot.records)).toHaveLength(1127);

@@ -12,7 +12,7 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
   const temp=mkdtempSync(join(tmpdir(),"overlap-replay-"));
   const root=join(temp,"first"), copy=join(temp,"copy");
   function inputs(to:string){
-    for(const p of ["snapshot","verified","verify-results","verify-eval","verify-replay","regions.json","route-links.json","overlap-agent/cases.json","overlap-agent/research.json"]){
+    for(const p of ["snapshot","verified","verify-results","verify-eval","verify-replay","regions.json","route-links.json","overlap-agent/cases.json","overlap-agent/research.json","overlap/approved.json"]){
       const dest=join(to,"data",p);
       mkdirSync(join(dest,".."),{recursive:true});cpSync(join("data",p),dest,{recursive:true});
     }
@@ -54,6 +54,8 @@ it("재생은 저장 응답만 사용하고 빈 폴더에서 같은 점수·배�
       { model: "gemini-3.8-flash", sampleCount: 0, averageMs: null },
     ]);
     expect(reportPasses(first)).toBe(true);
+    expect(first.selection?.candidatePolicies).toBeLessThan(4020);
+    expect(reportPasses({...first,selection:{candidatePolicies:1,incremental:true}})).toBe(false);
     expect(reportPasses({...first,controls:Array(3).fill(first.controls[0])})).toBe(false);
     expect(reportPasses({...first,requests:[...first.requests,{...first.requests.at(-1)!,model:"gemini-3-flash-preview"}]})).toBe(false);
     expect(reportPasses({...first,controls:first.controls.map((v,i)=>i?v:{...v,verdict:"supported"})})).toBe(false);
