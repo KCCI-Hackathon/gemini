@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { BenefitsSchema } from "@/lib/judge/overlap";
 import { isDate } from "./dates";
 import { regionOptions } from "@/lib/data/regions";
 import { StatusKey } from "@/lib/data/verified";
 const regions = new Set(regionOptions().map(r => r.code));
 export const ProfileSnapshotSchema = z.object({
+  benefits: BenefitsSchema.optional(),
   birthYm: z.string().refine(value => isDate(`${value}-01`)), sigungu: z.string().refine(value => regions.has(value)), school: z.string().regex(/^\d{7}$/),
   currentStatus: z.array(StatusKey), interest: z.enum(["job", "keep_searching", "startup"]), participating: z.array(z.string()), source: z.enum(["demo_persona", "user"]),
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration", "relocation"]), date: z.string().refine(isDate), status: z.enum(["scheduled", "completed", "simulated"]) })),
