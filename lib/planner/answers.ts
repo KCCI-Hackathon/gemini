@@ -6,12 +6,15 @@ export type BenefitAnswer =
   | { kind: "not_receiving" }
   | { kind: "selected" }
   | { kind: "not_selected" }
-  | { kind: "ended"; lastPaymentDate: string };
+  | { kind: "ended"; lastPaymentDate: string }
+  | { kind: "monthly_amount"; month: string; amountWon: number };
 
 export function applyAnswer(benefits: Benefit[], q: BenefitQuestion, a: BenefitAnswer): Benefit[] {
   const policyId = q.sourcePolicyId;
   const row: Benefit = a.kind === "ended"
     ? { policyId, status: "ended", lastPaymentDate: a.lastPaymentDate }
+    : a.kind === "monthly_amount"
+    ? { policyId, status: "receiving", monthlyPayment: { month: a.month, amountWon: a.amountWon } }
     : { policyId, status: a.kind === "not_receiving" || a.kind === "not_selected" ? "eligible_unpaid" : a.kind };
   return [...benefits.filter(benefit => benefit.policyId !== policyId), row];
 }

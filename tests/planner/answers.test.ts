@@ -16,6 +16,11 @@ test("not receiving is stored as eligible_unpaid", () => {
 test("ended answer replaces an earlier receiving row", () => {
   expect(applyAnswer([{ policyId: SRC, status: "receiving" }], q("ended_date"), { kind: "ended", lastPaymentDate: "2026-08-01" })).toEqual([{ policyId: SRC, status: "ended", lastPaymentDate: "2026-08-01" }]);
 });
+test("monthly amount is stored as receiving with a monthly payment", () => {
+  expect(applyAnswer([], q("monthly_amount"), { kind: "monthly_amount", month: "2026-11", amountWon: 200000 })).toEqual([
+    { policyId: SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 200000 } },
+  ]);
+});
 test("saved plan without benefits still loads", () => {
   expect(ProfileSnapshotSchema.safeParse({ ...PERSONA_A }).success).toBe(true);
   expect(ProfileSnapshotSchema.safeParse({ ...PERSONA_A, benefits: [{ policyId: SRC, status: "receiving" }] }).success).toBe(true);

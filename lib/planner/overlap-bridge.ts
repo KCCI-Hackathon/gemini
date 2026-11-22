@@ -35,13 +35,15 @@ export function restrictionVerdict(list: Restriction[], targetPolicyId: string, 
       if (!r.restricted_item) availability ??= "needs_check";
       const rule = rules?.find(rule => rule.rule_id === r.ruleId);
       const condition = rule?.condition_type;
-      const answerKind = condition === "within_months_after_end" ? "ended_date" : condition;
+      const params = rule?.condition_params ?? {};
+      const asksAmount = condition === "receiving" && ("min_amount_won" in params || "payment_month" in params);
+      const answerKind = condition === "within_months_after_end" ? "ended_date" : asksAmount ? "monthly_amount" : condition;
       let message = `기관 확인 필요 · ${r.reason}`;
       const asksForStatus = rule?.judgement === "blocked" && (
         r.reason === "실제 수급 여부 확인 필요" || r.reason === "선정 여부 확인 필요" ||
-        r.reason === "지급 종료 여부 확인 필요" || r.reason === "마지막 지급일 확인 필요"
+        r.reason === "지급 종료 여부 확인 필요" || r.reason === "마지막 지급일 확인 필요" || r.reason === "해당 월 지급액 확인 필요"
       );
-      if (asksForStatus && r.question && (answerKind === "receiving" || answerKind === "selected" || answerKind === "ended_date")) {
+      if (asksForStatus && r.question && (answerKind === "receiving" || answerKind === "selected" || answerKind === "ended_date" || answerKind === "monthly_amount")) {
         message = r.question;
         questions.push({ policyId: targetPolicyId, sourcePolicyId: r.sourceId, sourceName: r.sourceName,
           ruleId: r.ruleId, question: r.question, answerKind });

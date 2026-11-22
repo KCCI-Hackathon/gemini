@@ -2,14 +2,27 @@
 import { useEffect, useRef, useState } from "react";
 import type { BenefitAnswer } from "@/lib/planner/answers";
 import type { AiRecommendation, BenefitQuestion, Card } from "@/lib/planner/types";
+import { toKstDate } from "@/lib/date";
 import { Robot } from "./Robot";
 import s from "./workspace.module.css";
 export type Message = { id: number; role: "assistant" | "user"; text: string };
 type AnswerHandler = (question: BenefitQuestion, answer: BenefitAnswer) => void;
 
-function QuestionCard({ question, onAnswer, busy }: { question: BenefitQuestion; onAnswer: AnswerHandler; busy: boolean }) {
+function QuestionCard({ question, onAnswer, busy, month }: { question: BenefitQuestion; onAnswer: AnswerHandler; busy: boolean; month: string }) {
   const [date, setDate] = useState("");
+  const [amount, setAmount] = useState("");
   const selected = question.answerKind === "selected";
+  if (question.answerKind === "monthly_amount") return <fieldset className={s.agentMessage} disabled={busy}>
+    <legend>{question.question}</legend>
+    <form onSubmit={e => {
+      e.preventDefault();
+      onAnswer(question, { kind: "monthly_amount", month, amountWon: Number(amount) });
+    }}>
+      <label>이번 달 받은 금액(원)<input type="number" inputMode="numeric" min={0} step={1} required value={amount} onChange={e => setAmount(e.target.value)} /></label>
+      <button disabled={!/^\d+$/.test(amount)}>입력</button>
+    </form>
+    <button onClick={() => onAnswer(question, { kind: "not_receiving" })}>안 받아요</button>
+  </fieldset>;
   return <fieldset className={s.agentMessage} disabled={busy}>
     <legend>{question.question}</legend>
     {selected ? <button onClick={() => onAnswer(question, { kind: "selected" })}>선정됐어요</button>
@@ -26,17 +39,17 @@ function QuestionCard({ question, onAnswer, busy }: { question: BenefitQuestion;
   </fieldset>;
 }
 
-export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, cards, planLoading }: {
+export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, cards, planLoading, today }: {
   messages: Message[]; onSend: (text: string) => void; onClose: () => void; busy: boolean;
   recommendation?: AiRecommendation | null; cards?: Card[]; planLoading?: boolean;
-  questions?: BenefitQuestion[]; onAnswer: AnswerHandler;
+  questions?: BenefitQuestion[]; onAnswer: AnswerHandler; today?: string;
 }) {
   const first = questions?.[0];
   const [text, setText] = useState(""); const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" }); }, [messages.length, recommendation, planLoading]);
   function send(value: string) { if (!value.trim() || busy) return; onSend(value.trim()); setText(""); }
   return <aside className={s.agent} aria-label="정책 길잡이"><div className={s.agentHead}><Robot /><div><h2>나의 정책 길잡이</h2><small>일정부터 차근차근</small></div><button className={`${s.iconButton} ${s.agentClose}`} onClick={onClose} aria-label="에이전트 닫기">×</button></div>
-    {first && <QuestionCard key={first.ruleId} question={first} onAnswer={onAnswer} busy={busy} />}
+    {first && <QuestionCard key={first.ruleId} question={first} onAnswer={onAnswer} busy={busy} month={(today ?? toKstDate(new Date())).slice(0, 7)} />}
     <div className={s.agentMessages} role="log" aria-live="polite">{messages.map(m => <div key={m.id} className={`${s.agentMessage} ${m.role === "user" ? s.userMessage : ""}`}><span className={s.srOnly}>{m.role === "user" ? "나" : "길잡이"}: </span>{m.text}</div>)}{planLoading && <p role="status">AI 추천 경로를 확인하고 있어요…</p>}
       {recommendation && <div className={s.agentMessage}>
         <strong>{recommendation.source === "ai" ? "AI 추천 경로" : "조건 기준 추천 경로"}</strong>

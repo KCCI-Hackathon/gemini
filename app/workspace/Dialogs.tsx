@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Benefit, Profile } from "@/lib/judge/types";
 import { regionOptions } from "@/lib/data/regions";
-import { addMonths } from "@/lib/date";
+import { addMonths, toKstDate } from "@/lib/date";
 import { addDays, fullDate, isDate } from "@/lib/planner/dates";
 import { CATEGORIES, EVENT_NAMES, type Card, type Draft, type PlanEvent } from "@/lib/planner/types";
 import { newId, recommendationDiff } from "@/lib/planner/state";
@@ -53,7 +53,8 @@ const benefitStatuses = {
 };
 
 function BenefitFields({ benefits, onChange }: { benefits: Benefit[]; onChange: (rows: Benefit[]) => void }) {
-  const [sources, setSources] = useState<{ policyId: string; name: string }[]>([]);
+  const [sources, setSources] = useState<{ policyId: string; name: string; asksAmount?: boolean }[]>([]);
+  const month = toKstDate(new Date()).slice(0, 7);
   const [error, setError] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
@@ -77,11 +78,18 @@ function BenefitFields({ benefits, onChange }: { benefits: Benefit[]; onChange: 
     {benefits.map((row, i) => <fieldset key={row.policyId}>
       <legend>{sources.find(source => source.policyId === row.policyId)?.name ?? row.policyId}</legend>
       <label>수혜 상태<select value={row.status ?? ""} onChange={e => {
-        update(i, { ...row, status: e.target.value as keyof typeof benefitStatuses, lastPaymentDate: undefined });
+        update(i, { ...row, status: e.target.value as keyof typeof benefitStatuses, lastPaymentDate: undefined, ...(e.target.value === "receiving" ? {} : { monthlyPayment: undefined }) });
       }}>
         {!(row.status && row.status in benefitStatuses) && <option value={row.status ?? ""}>기존 상태 유지</option>}
         {Object.entries(benefitStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
+      {row.status === "receiving" && sources.find(source => source.policyId === row.policyId)?.asksAmount && <label>이번 달 받은 금액(원)
+        <input type="number" inputMode="numeric" min={0} step={1} value={row.monthlyPayment?.month === month ? row.monthlyPayment.amountWon : ""}
+          onChange={e => {
+            const amountWon = Number(e.target.value);
+            if (e.target.value === "") update(i, { ...row, monthlyPayment: undefined });
+            else if (Number.isInteger(amountWon) && amountWon >= 0) update(i, { ...row, monthlyPayment: { month, amountWon } });
+          }} /></label>}
       {row.status === "ended" && <label>마지막 지급일<input type="date" value={row.lastPaymentDate ?? ""}
         onChange={e => update(i, { ...row, lastPaymentDate: e.target.value || undefined })} /></label>}
       <button type="button" onClick={() => onChange(benefits.filter((_, index) => index !== i))}>삭제</button>

@@ -36,7 +36,7 @@ export type Card = Offering & {
   conflicts: string[]; canReplace: boolean;
 };
 export type ChoiceWarning = Choice & { title: string; message: string; otherStageIds: string[] };
-export type AnswerKind = "receiving" | "selected" | "ended_date";
+export type AnswerKind = "receiving" | "selected" | "ended_date" | "monthly_amount";
 export type BenefitQuestion = {
   policyId: string; sourcePolicyId: string; sourceName: string;
   ruleId: string; question: string; answerKind: AnswerKind;

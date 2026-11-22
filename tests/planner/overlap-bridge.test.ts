@@ -41,7 +41,7 @@ test("monthly payment distinguishes confirmed rent restrictions from missing fac
   expect(card(unknown, RENT_YEONSU, "current").reasons).toContainEqual(expect.objectContaining({
     code: "RESTRICTION_QUESTION", message: expect.stringContaining("지급액 확인 필요"),
   }));
-  expect(unknown.questions.some(q => q.policyId === RENT_YEONSU && q.sourcePolicyId === RENT_SRC)).toBe(false);
+  expect(unknown.questions).toContainEqual(expect.objectContaining({ policyId: RENT_YEONSU, sourcePolicyId: RENT_SRC, answerKind: "monthly_amount" }));
 });
 test("I5 unknown benefit produces an answerable question", () => {
   const ev = run();
