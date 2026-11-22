@@ -1,7 +1,10 @@
 import type { Profile } from "@/lib/judge/types";
 import type { Offering, PlanEvent, Category, Rule, Restriction } from "./types";
 export const DEMO_PROFILE: Profile = { birthYm: "2000-04", sigungu: "28185", school: "0049007", currentStatus: ["in_training", "unemployed"], interest: "job", events: [], participating: [], source: "demo_persona" };
-export const PERSONA_DEMO_EVENTS: PlanEvent[] = [{ id: "ev-course", type: "training_completion", date: "2026-12-19", status: "scheduled" }];
+// 취업 예정일은 시연 원본 수료일 + 정확히 1개월. /api/plan 이 개월 수로만 받으므로 이 격자 위에 있어야 AI 계획이 화면과 같은 날짜를 쓴다.
+export const PERSONA_DEMO_EVENTS: PlanEvent[] = [{ id: "ev-course", type: "training_completion", date: "2026-12-19", status: "scheduled" }, { id: "ev-job", type: "employment", date: "2027-01-19", status: "scheduled" }];
+// 에이전트 패널 예시 버튼. 첫 줄은 위 취업 예정일을 +1개월(격자 위) 옮긴다.
+export const AGENT_EXAMPLES = ["취업을 2월 19일로 옮겨줘", "왜 제 기한은 더 빠른가요?", "나에게 맞는 경로 추천해줘"] as const;
 export const DEMO_EVENTS: PlanEvent[] = [{ id: "ev-course", type: "training_completion", date: "2026-12-19", status: "scheduled" }, { id: "ev-job", type: "employment", date: "2027-01-20", status: "scheduled" }];
 const rule = (key: Rule["key"], kind: Rule["kind"] = "requires"): Rule => ({ key, kind, reviewed: true, evidenceId: "fixture-rule-1" });
 export function demoCatalog(): Offering[] {
