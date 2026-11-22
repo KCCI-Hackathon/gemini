@@ -46,7 +46,7 @@ describe("서버 자격 탭 분류", () => {
       { offeringId: "p1:r1", stageId: "next", eligibility: "eligible" },
       { offeringId: "p1:r2", stageId: "current", eligibility: "needs_check" },
     ]);
-    expect(counts).toEqual({ blocked: 1, needs_check: 1, eligible: 1 });
+    expect(counts).toEqual({ blocked: 1, needs_check: 1, eligible: 1, all: 2 }); // 전체 탭은 신청 불가를 뺀 확인 필요 + 신청 가능
     expect(counts.blocked + counts.needs_check + counts.eligible).toBe(3);
   });
 

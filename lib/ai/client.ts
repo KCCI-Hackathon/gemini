@@ -36,3 +36,22 @@ export function makeAiClient(env: Env): AnthropicLike {
   if (isGemini(env)) return geminiClient({ apiKey: env.GEMINI_API_KEY!, model: env.GEMINI_MODEL || "gemini-3.5-flash" });
   return new Anthropic() as unknown as AnthropicLike;
 }
+
+// 임시: Gemini 요청 한도 때문에 시연용으로 검증 에이전트를 GPT(OpenAI)로 돌린다. VERIFY_AI_PROVIDER 로 직접 고를 수도 있다.
+// 상담 · 추천이 openai 면 추가 설정 없이 openai, 아니면 AI_PROVIDER 그대로. 중복수혜 · 상담 에이전트는 영향 없음.
+export const verifyProvider = (env: Env) => env.VERIFY_AI_PROVIDER || (env.PLAN_AI_PROVIDER === "openai" ? "openai" : env.AI_PROVIDER);
+const verifyModel = (env: Env) => env.OPENAI_VERIFY_MODEL || env.OPENAI_MODEL;
+/** 검증 에이전트: 외부 AI 스위치가 켜져 있고, 고른 공급자의 키(openai 는 모델까지)가 있는가 */
+export function verifyAiConfigured(env: Env): boolean {
+  if (env.EXTERNAL_AI_ENABLED !== "true") return false;
+  const p = verifyProvider(env);
+  if (p === "openai") return !!env.OPENAI_API_KEY && !!verifyModel(env);
+  return p === "gemini" ? !!env.GEMINI_API_KEY : !!env.ANTHROPIC_API_KEY;
+}
+/** 검증 에이전트용 클라이언트 */
+export function makeVerifyClient(env: Env): AnthropicLike {
+  const p = verifyProvider(env);
+  if (p === "openai") return openaiClient({ apiKey: env.OPENAI_API_KEY!, model: verifyModel(env)! });
+  if (p === "gemini") return geminiClient({ apiKey: env.GEMINI_API_KEY!, model: env.GEMINI_MODEL || "gemini-3.5-flash" });
+  return new Anthropic() as unknown as AnthropicLike;
+}
