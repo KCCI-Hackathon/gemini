@@ -22,7 +22,8 @@ test("F-3: the question shown, the answer stored and the re-judgement all use th
   expect(ask.question).toBe("11월에 실제로 지급받은 금액은 얼마인가요?");
   const q: BenefitQuestion = { policyId: RENT_YEONSU, sourcePolicyId: RENT_SRC, sourceName: "청년월세", ruleId: ask.ruleId, question: ask.question!, answerKind: "monthly_amount", month: ask.month };
   const saved = applyAnswer(receiving, q, { kind: "monthly_amount", month: q.month!, amountWon: 0 });
-  expect(saved).toContainEqual({ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 0 } });
+  // 앞서 "받고 있어요"라고 한 상태는 0원 입력으로 지우지 않는다
+  expect(saved).toEqual([{ policyId: RENT_SRC, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 0 } }]);
   expect(amountAsk(saved, nov)).toBeUndefined();
   // 12월은 따로 묻는다. 11월 답이 12월을 덮지 않고, 12월 답이 11월을 지우지 않는다.
   expect(amountAsk(saved, dec)?.month).toBe("2026-12");

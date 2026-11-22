@@ -25,11 +25,12 @@ test("J-1: a monthly amount question carries its month and is only asked for a m
 test("J-1: answering 0 won for the asked month closes that question", () => {
   const q: BenefitQuestion = { policyId: "t", sourcePolicyId: "20250617005400110952", sourceName: "청년월세", ruleId: "rr", question: "해당 월에 실제로 지급받은 금액은 얼마인가요?", answerKind: "monthly_amount", month: "2026-12" };
   const saved = applyAnswer([], q, { kind: "monthly_amount", month: "2026-12", amountWon: 0 });
-  expect(saved).toContainEqual({ policyId: q.sourcePolicyId, status: "receiving", monthlyPayment: { month: "2026-12", amountWon: 0 } });
+  // 0원만으로는 수급 여부를 모른다: 상태 없이 그 달 기록만
+  expect(saved).toEqual([{ policyId: q.sourcePolicyId, monthlyPayment: { month: "2026-12", amountWon: 0 } }]);
 });
 test("J-1: '안 받아요' on a monthly question is saved as 0 won for that month, which closes the amount rule", () => {
   const q: BenefitQuestion = { policyId: "t", sourcePolicyId: "20250617005400110952", sourceName: "청년월세", ruleId: "rr", question: "q", answerKind: "monthly_amount", month: "2026-11" };
-  expect(applyAnswer([], q, { kind: "not_receiving" })).toEqual([{ policyId: q.sourcePolicyId, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 0 } }]);
+  expect(applyAnswer([], q, { kind: "not_receiving" })).toEqual([{ policyId: q.sourcePolicyId, status: "eligible_unpaid", monthlyPayment: { month: "2026-11", amountWon: 0 } }]);
 });
 test("J-1: answering another month keeps the month already answered", () => {
   const q: BenefitQuestion = { policyId: "t", sourcePolicyId: "20250617005400110952", sourceName: "청년월세", ruleId: "rr", question: "q", answerKind: "monthly_amount", month: "2026-12" };
@@ -90,4 +91,24 @@ test("J-9: a policy whose lookback period is still running is blocked in that st
   const lookback = run().cards.filter(c => c.reasons.some(r => r.code === "PERIOD"));
   for (const c of lookback) expect(c.availability).toBe("blocked");
   expect(lookback.length).toBeGreaterThan(0);
+});
+
+// 독립 검증 발견: 금액 질문의 '안 받아요'(0원)를 수급 중으로 저장하면, 같은 출처의 일반 '수급 중' 규칙이 다른 카드를 막는다.
+test("a 'not receiving' answer to an amount question does not make a sibling 'currently receiving' rule block another card", async () => {
+  const { loadOverlap } = await import("@/lib/data/overlap");
+  const { evaluateRules } = await import("@/lib/judge/overlap");
+  const SRC = "20250617005400110952", SIBLING = "20260406005400212462", AMOUNT_TARGET = "20260406005400212400";
+  const amountRule = loadOverlap().get(AMOUNT_TARGET)!.find(r => r.source_policy_id === SRC)!;
+  const q: BenefitQuestion = { policyId: AMOUNT_TARGET, sourcePolicyId: SRC, sourceName: "청년월세", ruleId: amountRule.rule_id, question: "11월에 실제로 지급받은 금액은 얼마인가요?", answerKind: "monthly_amount", month: "2026-11" };
+  const saved = applyAnswer([], q, { kind: "not_receiving" });
+  const siblingRules = loadOverlap().get(SIBLING)!.filter(r => r.source_policy_id === SRC);
+  const sibling = evaluateRules(siblingRules, saved, [], now).current_restrictions;
+  expect(sibling.some(r => r.state === "applies")).toBe(false);
+  // 금액 규칙 쪽은 그 달 0원으로 닫힌다
+  const amount = evaluateRules([amountRule], saved, [], now).current_restrictions;
+  expect(amount.some(r => r.need === "monthly_amount")).toBe(false);
+});
+test("a positive amount is still saved as receiving", () => {
+  const q: BenefitQuestion = { policyId: "t", sourcePolicyId: "20250617005400110952", sourceName: "청년월세", ruleId: "r", question: "q", answerKind: "monthly_amount", month: "2026-11" };
+  expect(applyAnswer([], q, { kind: "monthly_amount", month: "2026-11", amountWon: 200000 })).toEqual([{ policyId: q.sourcePolicyId, status: "receiving", monthlyPayment: { month: "2026-11", amountWon: 200000 } }]);
 });
