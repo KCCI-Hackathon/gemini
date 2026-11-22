@@ -6,15 +6,26 @@ import type { StatusKey, VerifiedPolicy } from "@/lib/data/verified";
 import { judgeRegion } from "./region";
 import { REASON, type JudgeOpts, type PersonalValue, type Profile } from "./types";
 
-/** 생년월과 기준일로 가능한 만 나이 범위. 기준일이 생일 달이면 두 값 */
-export function ageRange(birthYm: string, refYmd: string): [number, number] {
+/** 생일이 있으면 해당 기준일의 만 나이를, 월 정보만 있으면 기존 범위를 반환한다. */
+export function ageRange(birthYm: string, refYmd: string, birthDate?: string): [number, number] {
   const [by, bm] = birthYm.split("-").map(Number);
-  const [ry, rm] = refYmd.split("-").map(Number);
+  const [ry, rm, rd] = refYmd.split("-").map(Number);
   const base = ry - by;
+  if (birthDate && /^\d{4}-\d{2}-\d{2}$/.test(birthDate) && birthDate.slice(0, 7) === birthYm) {
+    const [, birthMonth, birthDay] = birthDate.split("-").map(Number);
+    // 2월 29일 생일은 평년의 3월 1일에 나이가 바뀌는 기준으로 계산한다.
+    const anniversaryMonth = birthMonth === 2 && birthDay === 29 && !isLeapYear(ry) ? 3 : birthMonth;
+    const anniversaryDay = birthMonth === 2 && birthDay === 29 && !isLeapYear(ry) ? 1 : birthDay;
+    const passed = rm > anniversaryMonth || (rm === anniversaryMonth && rd >= anniversaryDay);
+    const age = base - (passed ? 0 : 1);
+    return [age, age];
+  }
   if (rm > bm) return [base, base];
   if (rm < bm) return [base - 1, base - 1];
   return [base - 1, base];
 }
+
+function isLeapYear(year: number) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
 
 /** 이벤트를 적용한 현재 상태. scheduled는 반영하지 않는다 */
 /** 그날까지 일어난(가정 포함) 사건만 반영한 상태. 예정(scheduled)은 반영하지 않는다 */
@@ -79,17 +90,18 @@ function judgeAge(
   birthYm: string,
   refYmd: string | null,
   today: string,
+  birthDate?: string,
 ) {
   if (min == null && max == null) return;
   const outside = (a: number) => (min != null && a < min) || (max != null && a > max);
   if (refYmd) {
-    const [lo, hi] = ageRange(birthYm, refYmd);
+    const [lo, hi] = ageRange(birthYm, refYmd, birthDate);
     if (outside(lo) && outside(hi)) verdict.push("ineligible", `나이 조건(${min ?? ""}~${max ?? ""}세) 밖`);
     else if (outside(lo) || outside(hi)) verdict.push("needs_check", REASON.ageBoundary);
     return;
   }
   // 기준일 미상: 오늘 기준 ±1년 안에서 경계에 걸리면 확인 필요
-  const [lo, hi] = ageRange(birthYm, today);
+  const [lo, hi] = ageRange(birthYm, today, birthDate);
   if (outside(lo - 1) && outside(hi + 1) && outside(lo) && outside(hi)) verdict.push("ineligible", `나이 조건(${min ?? ""}~${max ?? ""}세) 밖`);
   else if (outside(lo - 1) || outside(hi + 1) || outside(lo) || outside(hi)) verdict.push("needs_check", REASON.ageBoundary);
 }
@@ -141,7 +153,7 @@ export function judgePersonal(
     // 나이
     if (v.age) {
       const ref = v.age.referenceRule === "fixed_date" ? v.age.referenceDate : v.age.referenceRule === "apply_date" ? today : null;
-      judgeAge(verdict, v.age.min, v.age.max, profile.birthYm, ref, today);
+      judgeAge(verdict, v.age.min, v.age.max, profile.birthYm, ref, today, profile.birthDate);
     }
     // 회차별 규칙이 있으면 신청 시점의 회차로 조건마다 판정한다
     if (v.rounds?.length) {
@@ -195,7 +207,7 @@ export function judgePersonal(
   }
 
   // 비검증 정책: 코드 조건
-  judgeAge(verdict, p.minAge, p.maxAge, profile.birthYm, null, today);
+  judgeAge(verdict, p.minAge, p.maxAge, profile.birthYm, null, today, profile.birthDate);
   const jobs = p.jobCodes.filter((c) => c !== "0013010");
   if (jobs.length && !p.jobCodes.includes("0013010")) {
     const mine = [...status].flatMap((s) => CODE_OF_STATUS[s] ?? []);

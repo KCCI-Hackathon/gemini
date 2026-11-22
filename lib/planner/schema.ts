@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { BenefitsSchema } from "@/lib/judge/overlap";
+import { isBirthPairConsistent, isValidBirthDate } from "@/lib/judge/birth-date";
 import { isDate } from "./dates";
 import { regionOptions } from "@/lib/data/regions";
 import { StatusKey } from "@/lib/data/verified";
 const regions = new Set(regionOptions().map(r => r.code));
 export const ProfileSnapshotSchema = z.object({
   benefits: BenefitsSchema.optional(),
-  birthYm: z.string().refine(value => isDate(`${value}-01`)), sigungu: z.string().refine(value => regions.has(value)), school: z.string().regex(/^\d{7}$/),
+  birthYm: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), birthDate: z.string().refine(value => isValidBirthDate(value), "생년월일은 실제 날짜이며 미래일 수 없어요.").optional(), sigungu: z.string().refine(value => regions.has(value)), school: z.string().regex(/^\d{7}$/),
   currentStatus: z.array(StatusKey), interest: z.enum(["job", "keep_searching", "startup"]), participating: z.array(z.string()), source: z.enum(["demo_persona", "user"]),
   events: z.array(z.object({ type: z.enum(["training_completion", "employment", "business_registration", "relocation"]), date: z.string().refine(isDate), status: z.enum(["scheduled", "completed", "simulated"]) })),
+}).superRefine((profile, ctx) => {
+  if (!isBirthPairConsistent(profile.birthYm, profile.birthDate)) ctx.addIssue({ code: "custom", message: "생년월일과 출생연월이 일치하지 않아요.", path: ["birthDate"] });
 });
 export const EventSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), type: z.enum(["training_completion", "employment", "business_registration", "relocation"]),
