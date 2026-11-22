@@ -7,7 +7,7 @@ import { ChatPanel, DetailPanel, PlanModal, type PlanDraft } from "../planner/Pa
 import { isChanging, RoadmapGrid } from "../planner/Roadmap";
 import { PipelineBoard } from "../planner/PipelineBoard";
 import s from "../planner/planner.module.css";
-import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "../planner/shared";
+import { CAT_ORDER, CATS, CIRCLED, DEMO, SCHOOLS, addMonthsYmd, groupPlanPicks, type AiPicks, type ChatMessage, type ChatQuestion, type Ok, type Profile, type TimelinePlan } from "../planner/shared";
 
 type Answers = Record<string, string>;
 type Session = { profile: Profile; plan: TimelinePlan; answers: Answers };
@@ -267,9 +267,8 @@ export default function Page() {
       else if (body.fallback || !body.plan) push({ role: "ai", text: "AI가 만든 계획에 확인할 수 없는 내용이 있어 쓰지 않았어요. 로드맵을 그대로 봐 주세요." });
       else {
         const stations = body.plan.stations as { label: string; items: { policyId: string; name: string; why: string }[] }[];
-        const picks: AiPicks = {};
-        let rank = 0;
-        for (const st of stations) for (const i of st.items) if (!picks[i.policyId]) picks[i.policyId] = { rank: ++rank, station: st.label, why: i.why };
+        const picks = groupPlanPicks(stations);
+        const rank = Object.keys(picks).length;
         setAiPicks(picks);
         setOnlyAi(true);
         showToast(`AI가 정책 ${rank}개를 골라 로드맵에 표시했어요`);
