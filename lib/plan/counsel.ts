@@ -77,8 +77,13 @@ export type CounselBody = {
   timedOut?: boolean;
   disabled?: boolean;
   reason?: "users_off" | "consent";
+  /** AI 답을 받지 못한 이유. 없으면 정상 응답(또는 AI가 스스로 조건 기준 추천을 고른 경우). 화면이 이유와 재시도 여부를 보여 준다 */
+  failure?: CounselFailure;
+  retryable?: boolean;
   error?: string;
 };
+// network · client_timeout 은 브라우저에서만 붙인다(연결 실패 · 화면이 기다리다 끊음)
+export type CounselFailure = "users_off" | "consent" | "not_configured" | "quota" | "timeout" | "provider" | "bad_response" | "network" | "client_timeout";
 type Out = { status: number; body: CounselBody };
 export type CounselCtx = { env: Record<string, string | undefined>; ip: string; now: Date; makeClient: (action: "recommend" | "message") => AnthropicLike; moderate?: Moderate };
 
@@ -188,8 +193,8 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   const persona = isDemoPersona(req);
   // 실사용자: 운영 스위치 + 화면 동의 둘 다(설계 7장). 아니면 GPT 호출 0회(G5).
   // 거절 이유를 나눠 보낸다: 화면이 동의 안 함(다시 동의 요청)과 운영 스위치 꺼짐(규칙 추천으로)을 다르게 안내한다.
-  if (!persona && ctx.env.PLAN_AI_FOR_USERS !== "true") return { status: 403, body: { kind: "none", disabled: true, reason: "users_off", error: "지금은 실제 사용자 AI 상담이 꺼져 있어요." } };
-  if (!persona && !req.consent) return { status: 403, body: { kind: "none", disabled: true, reason: "consent", error: "AI 상담 사용에 동의해 주세요." } };
+  if (!persona && ctx.env.PLAN_AI_FOR_USERS !== "true") return { status: 403, body: { kind: "none", disabled: true, reason: "users_off", failure: "users_off", retryable: false, error: "지금은 실제 사용자 AI 상담이 꺼져 있어요." } };
+  if (!persona && !req.consent) return { status: 403, body: { kind: "none", disabled: true, reason: "consent", failure: "consent", retryable: false, error: "AI 상담 사용에 동의해 주세요." } };
   if (req.action === "message" && !req.message?.trim()) return { status: 400, body: { kind: "none", error: "메시지가 비어 있어요." } };
 
   // 식별 정보 지우기(G6). 이력에도 똑같이.
@@ -206,9 +211,9 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   // 같은 대화에서 주제 밖이 2번 연속이면 그 뒤 메시지는 AI 를 부르지 않는다(설계 7.1).
   if (req.action === "message" && req.outOfScopeStreak >= 2) return { status: 200, body: { kind: "out_of_scope", text: OUT_OF_SCOPE } };
   const aiAction = req.action === "recommend" ? "recommend" : "message";
-  if (!planAiConfigured(ctx.env, aiAction)) return { status: 503, body: ruleFallback(evaluation, "AI가 꺼져 있어 조건 기준 경로를 표시해요") };
+  if (!planAiConfigured(ctx.env, aiAction)) return { status: 503, body: ruleFallback(evaluation, "AI가 꺼져 있어 조건 기준 경로를 표시해요", { failure: "not_configured", retryable: false }) };
 
-  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: ruleFallback(evaluation, "오늘의 AI 사용 한도에 도달해 조건 기준 경로를 표시해요") };
+  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: ruleFallback(evaluation, "오늘의 AI 사용 한도에 도달해 조건 기준 경로를 표시해요", { failure: "quota", retryable: false }) };
   // 욕설 · 혐오 · 자해 검사. 검사 실패는 닫힌 쪽(보내지 않음).
   if (message && ctx.env.MODERATION_ENABLED === "true") {
     const m = ctx.moderate ? await ctx.moderate(message) : { error: true as const };
@@ -225,8 +230,12 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
     if (key && body.source === "ai") cache.set(key, body);
     return { status: 200, body: withRedaction(body) };
   } catch (error) {
-    if (!(error instanceof DeadlineExceeded)) throw error;
-    return { status: 200, body: withRedaction(ruleFallback(evaluation, "AI 정리 제한 시간을 넘겨 조건 기준 경로를 표시해요", { timedOut: true })) };
+    if (!(error instanceof DeadlineExceeded)) {
+      // 예상 못 한 오류도 500 대신 이유를 돌려준다. 로그에는 오류 종류만(요청 본문 · 키는 남기지 않음).
+      console.error("[counsel] 처리 실패:", error instanceof Error ? error.name : typeof error);
+      return { status: 502, body: ruleFallback(evaluation, "AI 응답을 처리하지 못해 조건 기준 경로를 표시해요", { failure: "provider", retryable: true }) };
+    }
+    return { status: 200, body: withRedaction(ruleFallback(evaluation, "AI 정리 제한 시간을 넘겨 조건 기준 경로를 표시해요", { timedOut: true, failure: "timeout", retryable: true })) };
   }
 }
 
@@ -255,7 +264,7 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
   // 근거 밖 숫자 검사용: 이번 턴에 AI 에게 보낸 자료와 사용자 글의 숫자
   const allowed = new Set<string>();
   const sent = (s: string) => { for (const n of numberSet(s)) allowed.add(n); return s; };
-  const fallback = (notice = "AI 설명을 불러오지 못해 조건 기준 경로를 표시해요") => ruleFallback(ev, notice);
+  const fallback = (notice = "AI 설명을 불러오지 못해 조건 기준 경로를 표시해요", failure?: CounselFailure) => ruleFallback(ev, notice, failure ? { failure, retryable: true } : {});
 
   const scoped = scopeIsEmpty(scope) ? "" : ` 사용자가 원한 범위: ${scopeLabel(scope, ev.stages)}. 이 범위 안 카드만 고르세요.`;
   const task = completedQuestionnaire ? `질문을 마쳤어요. 현재 판정과 선호 분야를 반영해 finish_plan으로 시점마다 2~3개씩 추천하세요.${scoped}`
@@ -270,14 +279,16 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
     let res: Anthropic.Beta.BetaMessage;
     try {
       res = await client.beta.messages.create({ model: "configured-by-adapter", max_tokens: MAX_TOKENS, system: SYSTEM, tools, messages }, { signal: deadline.signal, timeout: deadline.remainingMs(), maxRetries: 0 });
-    } catch {
+    } catch (error) {
       deadline.signal.throwIfAborted();
-      return fallback(); // 429 · 503 · 네트워크 오류(G7)
+      // 원인 확인용: 제공자 오류 문구 앞부분만(요청 본문 · 키 · 사용자 글은 남기지 않음)
+      console.error("[counsel] 모델 호출 실패:", error instanceof Error ? error.message.slice(0, 160) : typeof error);
+      return fallback("AI 제공자가 응답하지 않아 조건 기준 경로를 표시해요", "provider"); // 429 · 503 · 네트워크 오류(G7)
     }
-    if (res.stop_reason === "refusal") return fallback();
+    if (res.stop_reason === "refusal") return fallback(undefined, "bad_response");
     messages.push({ role: "assistant", content: res.content });
     const uses = res.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-    if (!uses.length) return codeQuestion() ?? (req.action === "recommend" ? fallback() : { kind: "none" });
+    if (!uses.length) return codeQuestion() ?? (req.action === "recommend" ? fallback(undefined, "bad_response") : { kind: "none", failure: "bad_response", retryable: true });
     const results: Record<string, unknown>[] = [];
     for (const u of uses) {
       if (completedQuestionnaire && !tools.some(tool => tool.name === u.name)) return fallback("답변을 반영한 조건 기준 경로를 표시해요.");
@@ -362,5 +373,5 @@ async function runCounsel(req: CounselRequest, persona: boolean, message: string
     }
     messages.push({ role: "user", content: results });
   }
-  return codeQuestion() ?? fallback(); // 도구 턴 상한
+  return codeQuestion() ?? fallback(undefined, "bad_response"); // 도구 턴 상한
 }

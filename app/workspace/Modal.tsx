@@ -40,5 +40,5 @@ export function Modal({ title, onClose, children, wide = false }: { title: strin
       else document.querySelector<HTMLButtonElement>('[id^="stage-"] button')?.focus();
     };
   }, []);
-  return <div className={s.backdrop} style={{ zIndex: 100 + depth * 10 }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div ref={ref} tabIndex={-1} className={`${s.dialog} ${wide ? s.dialogWide : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}><div className={s.dialogHeader}><h2 id={titleId}>{title}</h2><button className={s.iconButton} onClick={onClose} aria-label={`${title} 닫기`}>×</button></div>{children}</div></div>;
+  return <div className={s.backdrop} style={{ zIndex: 100 + depth * 10 }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div ref={ref} tabIndex={-1} className={`${s.dialog} ${wide ? s.dialogWide : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}><div className={s.dialogHeader}><h2 id={titleId}>{title}</h2><button className={s.iconButton} onClick={onClose} aria-label={`${title} 닫기`}>×</button></div><div className={s.dialogBody}>{children}</div></div></div>;
 }

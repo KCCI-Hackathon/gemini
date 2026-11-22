@@ -25,7 +25,7 @@ export const STATUS_STYLE: Record<RoadmapStatus, { bg: string; fg: string }> = {
 
 export const SCHOOLS: [string, string][] = [
   ["0049004", "고등학교 졸업"],
-  ["0049005", "대학 재학"],
+  ["0049005", "대학교 재학"],
   ["0049006", "대학 졸업 예정"],
   ["0049007", "대학 졸업"],
   ["0049008", "석·박사"],

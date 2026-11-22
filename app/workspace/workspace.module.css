@@ -340,14 +340,37 @@ html:has(.app) { zoom:.75; }
 .compareBox summary::before { content:"▸"; color:var(--muted); transition:transform .15s; }
 .compareBox[open] summary::before { transform:rotate(90deg); }
 .compareBox summary span { color:var(--muted); font-size:13px; }
-.compareFields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+/* 저장 계획 비교 : 두 계획을 나란히 고르고, 결과는 네 묶음(첫 계획에만 · 공통 · 시점 변경 · 둘째 계획에만)으로 */
+.compareBox[open] summary { margin-bottom:16px; }
+.comparePair { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:stretch; }
+.planSlot { min-width:0; border:1px solid #dfe5ee; border-radius:16px; padding:14px 16px; background:#fbfcfe; display:flex; flex-direction:column; gap:10px; }
+.planSlot.tone_a { border-top:4px solid #2C64DB; }
+.planSlot.tone_b { border-top:4px solid #E1AA74; }
+.compareVs { align-self:center; font-size:12px; font-weight:800; color:var(--muted); background:#eef2f8; border-radius:999px; padding:6px 10px; }
 .compareField { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:700; color:var(--muted); }
 .compareField .picker { width:100%; min-width:0; }
-.compareResult { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:14px; }
-.compareResult>div { border:1px solid #dfe5ee; border-radius:12px; padding:12px; background:#fbfcfe; }
-.compareResult strong span { color:#2C64DB; margin-left:4px; }
-.compareResult p { margin:6px 0 0; font-size:13px; line-height:1.5; }
-@media(max-width:760px) { .compareFields { grid-template-columns:1fr; } }
+.planFacts { display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 12px; margin:0; font-size:13px; }
+.planFacts dt { color:var(--muted); }
+.planFacts dd { margin:0; color:#16224A; font-weight:600; overflow-wrap:anywhere; }
+.compareEmpty { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
+.compareEmpty p { margin:0; color:var(--muted); font-size:14px; line-height:1.7; }
+.compareEmpty .planSlot { width:min(100%,420px); }
+.compareResult { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:16px; }
+.compareGroup { min-width:0; border:1px solid #dfe5ee; border-radius:14px; padding:14px; background:#fff; }
+.compareGroup header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.compareGroup.tone_a { border-left:4px solid #2C64DB; }
+.compareGroup.tone_b { border-left:4px solid #E1AA74; }
+.compareGroup.tone_both { border-left:4px solid #37877D; }
+.compareGroup.tone_moved { border-left:4px solid #9474B3; }
+.compareCount { min-width:26px; text-align:center; border-radius:999px; background:#eef2f8; color:#16224A; font-size:13px; font-weight:800; padding:2px 8px; }
+.compareHint { margin:4px 0 10px; font-size:12px; color:var(--muted); line-height:1.5; }
+.compareGroup ul { list-style:none; margin:0; padding:0; display:grid; gap:8px; max-height:320px; overflow-y:auto; }
+.compareGroup li { display:flex; flex-direction:column; gap:2px; padding:8px 10px; border-radius:10px; background:#f6f8fc; font-size:13px; line-height:1.45; }
+.compareGroup li b { font-weight:700; color:#16224A; overflow-wrap:anywhere; }
+.compareGroup li small { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+.compareNone { margin:0; font-size:13px; color:var(--muted); }
+@media(max-width:1100px) { .compareResult { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:760px) { .comparePair { grid-template-columns:minmax(0,1fr); } .compareVs { justify-self:center; } .compareResult { grid-template-columns:minmax(0,1fr); } }
 
 /* 프로필 조건 칩: 켜진 조건은 초록 체크 + 색칠, 꺼진 조건은 회색 */
 .profileChip { display:inline-flex; align-items:center; gap:6px; }
@@ -369,3 +392,16 @@ html:has(.app) { zoom:.75; }
 .plantFlag.plantStill i { border-left-width:14px; border-top-width:6px; border-bottom-width:6px; animation:none; }
 .plantFlag.plantStill::after { display:none; }
 @media (prefers-reduced-motion:reduce) { .plantFlag,.plantFlag i { animation:none; opacity:1; } }
+/* 정책 상세의 공고 · 신청 링크 */
+.linkList { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.linkList li { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; }
+.linkList a { display:inline-flex; align-items:center; text-decoration:none; }
+.linkList small { color:var(--muted); font-size:13px; }
+/* 모달 : 제목 · 닫기는 고정, 내용만 스크롤한다(스크롤바가 제목 옆에 붙지 않게). 높이는 html zoom(0.75)을 되돌린 화면 높이 기준 */
+.dialog { display:flex; flex-direction:column; overflow:hidden; padding:0; max-height:calc(133.333dvh - 52px); }
+.dialogHeader { flex:none; margin:0; padding:22px 22px 14px; border-bottom:1px solid #edf0f4; }
+.dialogBody { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:16px 22px 0; }
+/* 저장 · 닫기 버튼은 내용이 길어도 아래에 붙어 있다 */
+.dialogBody .dialogActions { position:sticky; bottom:0; z-index:2; background:#fff; margin-bottom:0; padding-bottom:18px; }
+.dialogBody > :last-child:not(.dialogActions):not(form) { margin-bottom:22px; }
+@media(max-width:760px) { .dialog { padding:0; max-height:calc(133.333dvh - 24px); } .dialogHeader { padding:16px 18px 12px; } .dialogBody { padding:14px 18px 0; } }
