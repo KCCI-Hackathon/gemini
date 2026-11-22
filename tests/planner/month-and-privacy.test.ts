@@ -41,7 +41,8 @@ test("F-3: the agent's amount input names the question's month, not the browser'
 
 test("F-4: the privacy line matches each mode's real data path", () => {
   const user = renderToStaticMarkup(React.createElement(ProfileForm, { onSave: () => {} }));
-  expect(user).toContain("외부 AI로 보내지 않아요");
+  expect(user).not.toContain("외부 AI로 보내지 않아요");
+  expect(user).toContain("AI 상담에 동의한 경우에만");
   const demo = renderToStaticMarkup(React.createElement(ProfileForm, { onSave: () => {}, initial: { ...PERSONA_A, events: [] } }));
   expect(demo).not.toContain("입력 정보는 외부 AI로 보내지 않아요");
   expect(demo).toContain("시연 인물");
