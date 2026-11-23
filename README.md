@@ -8,7 +8,7 @@
 
 **수료 · 취업 · 이사 같은 내 일정을 넣으면,<br />시점마다 신청할 수 있는 청년 정책과 그 근거를 보여 주는 AI 정책 길잡이**
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-바로_체험하기-2C64DB?style=for-the-badge)](https://path-finder-flax-alpha.vercel.app/app)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-바로_체험하기-2C64DB?style=for-the-badge)](https://path-finder-flax-alpha.vercel.app/)
 <!-- TODO: 시연 영상 업로드 후 아래 줄의 주석을 풀고 링크 입력
 [![Demo Video](https://img.shields.io/badge/Demo_Video-3분_시연-16224A?style=for-the-badge)](영상_URL)
 -->
