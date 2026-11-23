@@ -22,3 +22,7 @@ test("A-3: the explain example is read as a question, not a schedule change", ()
   expect(parseScheduleCommand(AGENT_EXAMPLES[1], PERSONA_DEMO_EVENTS).type).toBe("explain");
   expect(parseScheduleCommand(AGENT_EXAMPLES[2], PERSONA_DEMO_EVENTS).type).toBe("recommend");
 });
+
+test("an explicit housing recommendation request enters the recommendation flow", () => {
+  expect(parseScheduleCommand("주거 관련정책 추천해줘", PERSONA_DEMO_EVENTS).type).toBe("recommend");
+});
