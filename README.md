@@ -1,163 +1,248 @@
+<div align="center">
+
+<img src="docs/assets/readme/pathfinder-robot.png" width="150" alt="PathFinder 길잡이 로봇" />
+
 # PathFinder
 
-## 2026-11-21 프론트엔드
+### 졸업 다음 달, 나는 무엇을 받을 수 있을까?
+
+**수료 · 취업 · 이사 같은 내 일정을 넣으면,<br />시점마다 신청할 수 있는 청년 정책과 그 근거를 보여 주는 AI 정책 길잡이**
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-바로_체험하기-2C64DB?style=for-the-badge)](https://path-finder-flax-alpha.vercel.app/app)
+<!-- TODO: 시연 영상 업로드 후 아래 줄의 주석을 풀고 링크 입력
+[![Demo Video](https://img.shields.io/badge/Demo_Video-3분_시연-16224A?style=for-the-badge)](영상_URL)
+-->
+
+![Next.js](https://img.shields.io/badge/Next.js_15-16224A?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React_19-16224A?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-2C64DB?logo=typescript&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-2C64DB?logo=sqlite&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-16224A?logo=vercel&logoColor=white)
+
+<sub>2026 대한민국 청년 CAREER FAIR AI 해커톤 출품작</sub>
+
+</div>
+
+<!-- TODO: 시연 GIF 추가. 추천 장면 = 이사 일정을 넣자 보드의 열과 신청 가능 여부가 바뀌는 10초
+<p align="center"><img src="docs/assets/readme/demo.gif" width="900" alt="PathFinder 시연" /></p>
+-->
+
+> **AI가 자격을 판단하지 않습니다.**
+> 코드가 판정하고, AI는 공식 근거를 찾아 설명하며, 근거가 없으면 "확인 필요"로 남깁니다.
+
+<br />
+
+## 왜 만들었나요
+
+직업훈련 수료를 앞둔 청년은 수료 뒤 구직을 이어가거나 첫 일자리에 들어갈 때, 알아 둔 지원을 **언제** 신청할 수 있는지 다시 판단해야 합니다.
+
+정책마다 자격을 보는 **기준 시점**이 다르기 때문입니다.
+
+| 정책 | 자격을 보는 시점 | 사용자가 판단할 것 |
+|---|---|---|
+| 경기청년 역량강화 기회지원 | 취업 여부는 **시험 응시일** 기준 | 취업 전에 본 시험이면 입사 후에도 검토 가능 |
+| K-뉴딜 아카데미 | 참여 제한은 **신청일** 기준, 개시 전 해소 시 증빙 검토 | 수료 예정일이 프로그램 개시일보다 빠른가 |
+| 청년도전지원사업 | 국민취업지원제도 **수혜 중 · 종료 후 기간**과 공고별 유형 | 내 종료일과 회차 · 유형이 맞는가 |
+
+결국 사용자는 자신의 수료일, 입사일, 참여 이력을 공고마다 직접 대조해야 합니다.
+
+이 과정에서 아직 신청할 수 있는 지원을 스스로 포기하거나, 조건을 놓친 채 신청했다가 절차를 다시 밟을 수 있습니다.
+
+정부도 2026년 청년 종합투자 추진전략에서 개별 사업 중심 전달로 청년이 필요한 지원을 [적시에 찾고 활용하기 어렵다](https://www.moel.go.kr/news/enews/report/enewsView.do?news_seq=19843)는 문제를 짚었습니다.
+
+대한상공회의소의 2023년 청년 구직자 300명 조사에서도 일자리 지원정책에 참여하지 않은 이유 1위는 [정보 탐색의 어려움과 선정 어려움에 대한 인식(각 29.2%)](https://kbcci.korcham.net/front/boardlink/boardlinkContentsView.do?boardId=13&contId=20120936354&menuId=5109)이었습니다.
+
+<br />
+
+## 무엇이 다른가요
+
+기존 서비스는 **"지금 내가 받을 수 있는 정책"** 을 찾는 데 강합니다.
+
+PathFinder는 여기에 **시간**을 더해 **"내 일정이 바뀌면 무엇이 열리고 닫히는가"** 에 답합니다.
+
+| 기존 서비스가 잘하는 것 | PathFinder가 더하는 것 |
+|---|---|
+| [온통청년](https://www.youthcenter.go.kr/youthPolicy/ythPlcyTotalSearch) : 정책 검색 · 비교 · AI 추천 · 자격 진단 | 수료 · 취업 · 이사 **예정일까지 반영한 시점별 판정** |
+| [혜택알리미](https://openservice.go.kr/walletBenefitNoti) : 실제 상태 변화에 따른 혜택 안내 | 변화가 일어나기 **전에** 결과를 미리 비교 |
+| 정책별 공고 마감일 안내 | 공고 마감과 다른 **내 개인 기한** 계산 |
+
+**예시.** K-뉴딜 아카데미의 공고 마감은 12월 31일이지만, 12월 19일에 수료하는 사용자의 현재 시점 신청 구간은 **12월 18일까지**로 계산됩니다. 수강 중 제한이 프로그램 개시일 전에 해소되는지는 단정하지 않고 **확인 필요**로 안내합니다.
+
+<br />
+
+## 핵심 기능
+
+| | 기능 | 사용자가 얻는 것 |
+|:---:|---|---|
+| 🗓️ | **시점별 정책 보드** | 현재 · 수료 후 · 취업 후 · 이사 후로 나뉜 신청 가능 정책 |
+| ⏰ | **내 기한 계산** | 공고 마감이 아닌 내 일정 기준의 실제 신청 기한 |
+| 🔍 | **공고 근거 확인** | 판단에 쓰인 공식 공고 문장과 대조 결과 |
+| 🚫 | **중복수혜 확인** | 함께 받을 수 없는 정책과 그 이유 |
+| 🤖 | **AI 길잡이** | 판정을 바꾸는 조건만 묻는 질문과 시점별 추천 경로 |
+| 🧭 | **계획 저장 · 비교 · 로드맵** | 여러 계획을 비교하고 날짜 위에서 확인 |
+
+<br />
+
+## 어떻게 동작하나요
+
+미리 검증한 데이터 위에서, 사용자의 일정이 바뀔 때마다 다시 계산합니다.
+
+<p align="center"><img src="docs/assets/readme/02-data-user-pipeline.png" width="920" alt="정책 수집부터 공고 대조, 중복수혜 분석, 사용자 판정과 AI 추천까지 이어지는 파이프라인" /></p>
+
+<br />
+
+## AI를 어떻게 썼나요
+
+정책 자격은 틀리면 사용자가 실제 기회를 잃는 영역입니다.
+
+그래서 **정해진 규칙으로 계산할 수 있는 판정은 코드에**, **비정형 공고를 읽고 사람의 말로 풀어야 하는 일은 AI에** 맡겼습니다.
+
+<p align="center"><img src="docs/assets/readme/03-ai-agents.png" width="920" alt="공고 검증, 중복수혜, 상담 추천 세 에이전트의 입력, AI 작업, 코드 검사, 결과" /></p>
+
+| 에이전트 | AI가 필요한 이유 | 실행 시점 |
+|---|---|---|
+| **공고 검증** | 기관마다 다른 형식의 공고에서 해당 회차와 조건을 찾아야 함 | 정책 검증 요청 시 |
+| **중복수혜** | 정책 원문에 자연어로 흩어진 제한 조항을 구조화해야 함 | 배포 전 배치 |
+| **상담 · 추천** | 사용자의 말을 이해하고 판정 결과를 쉽게 설명해야 함 | 사용자 요청 시 |
+
+<br />
+
+## AI를 어떻게 믿을 수 있나요
+
+모델이 틀려도 **신청할 수 없는 정책은 사용자 계획에 들어가지 않습니다.**
+
+<p align="center"><img src="docs/assets/readme/04-trust-by-design.png" width="920" alt="AI가 차단된 정책을 추천해도 코드가 제외하는 예시와 세 가지 안전장치" /></p>
+
+- **판정 분리** : AI의 추천은 서버가 계산한 카드 안에서만 채택되고, 차단된 카드는 버립니다.
+- **근거 강제** : 인용이 없는 답변과 전달한 자료에 없는 숫자는 사용자에게 보여 주지 않습니다.
+- **안전한 실패** : 모델 오류나 시간 초과가 나면 규칙 기반 추천으로 돌아갑니다.
+- **개인정보 최소화** : 실제 사용자는 동의한 뒤에만 AI를 쓰고, 식별 정보는 가리며 날짜는 상대 일수로 보냅니다.
+
+<br />
+
+## 시스템 구조
+
+<p align="center"><img src="docs/assets/readme/01-system-architecture.png" width="920" alt="사용자 화면, API, 처리 계층, 데이터, 외부 서비스로 구성된 PathFinder 시스템 구조" /></p>
+
+| 영역 | 기술 | 선택 이유 |
+|---|---|---|
+| 웹 · API | Next.js 15, React 19, TypeScript | 화면과 서버 판정을 하나의 타입 체계로 관리 |
+| 입력 검증 | Zod | 사용자 입력과 AI 응답을 같은 방식으로 검사 |
+| 데이터 | JSON 배포본, SQLite | 검증한 규칙을 버전으로 고정해 같은 입력에 같은 판정 보장 |
+| AI | OpenAI, Gemini | 작업별로 공급자와 모델을 환경변수로 교체 |
+| 품질 | Vitest, ESLint | 판정 · 에이전트 안전장치를 회귀 테스트로 보호 |
+| 배포 | Vercel (서울 리전) | 국내 사용자 기준의 응답 경로 |
+
+<details>
+<summary><b>폴더 구조</b></summary>
+
+```text
+.
+├─ app/        # 화면과 API 라우트
+├─ lib/
+│  ├─ judge/   # 규칙 판정 엔진
+│  ├─ planner/ # 시점별 평가와 플래너 상태
+│  ├─ route/   # 타임라인과 로드맵
+│  ├─ verify/  # 공고 검증 에이전트
+│  ├─ plan/    # 상담 · 추천 에이전트
+│  ├─ ai/      # AI 공급자 어댑터
+│  ├─ db/      # 규칙 적재와 배포본 내보내기
+│  └─ account/ # 계정 · 계획 · 알림
+├─ data/       # 정책 스냅샷과 승인 규칙
+├─ scripts/    # 데이터 수집 · 중복수혜 분석 · 평가
+├─ tests/      # 단위 · 통합 테스트
+└─ docs/       # 설계와 운영 문서
+```
+
+</details>
+
+<br />
+
+## 숫자로 보는 프로토타입
+
+<div align="center">
+
+| **4,020건** | **74개** | **3종** |
+|:---:|:---:|:---:|
+| 수집한 청년 정책 | 승인된 중복수혜 규칙 | 역할이 분리된 AI 에이전트 |
+
+<sub>정책 데이터 기준일 2026-11-16</sub>
+
+</div>
+
+<br />
+
+## 현재 범위와 본선 계획
+
+이번 프로토타입은 **"내 일정에 따라 바뀌는 정책 판단"** 의 전체 흐름을 끝까지 시연하는 데 집중했습니다.
+
+| 영역 | 우리가 만들려는 모습 | 현재 프로토타입 | 본선 고도화 |
+|---|---|---|---|
+| 공고 대조 | 모든 추천에 공식 원문 근거 | 정책별 탐색과 인용 검사 구현, 저장된 대조 기록 6건 | 상위 모델과 탐색 고도화로 공고 발견률 향상 |
+| 중복수혜 | 신청 전에 정책 간 충돌 발견 | 승인 규칙 74개 적용 | 규칙 범위 확대와 검토 자동화 |
+| 상담 · 추천 | 내 상황에 맞는 다음 행동 안내 | 판정 안에서 질문 · 답변 · 추천 | 상위 모델로 대화와 추천 품질 개선 |
+| 정책 데이터 | 항상 최신 공고 기준 | 2026-11-16 기준 고정 | 자동 수집과 변경 감지 |
+| 계정 · 알림 | 계획 저장과 마감 전 알림 | 프로토타입용 SQLite | 운영 DB와 실제 알림 발송 |
+
+**활용 시나리오.** 직업훈련기관의 수료 상담 전에 훈련생이 PathFinder로 자신의 일정별 정책과 확인할 질문을 정리하면, 상담 시간을 실제 진로 판단에 쓸 수 있습니다.
+
+> PathFinder는 신청 판단을 돕는 프로토타입입니다. 최종 자격과 선정 여부는 각 기관의 공고와 담당 기관의 확인을 따릅니다.
+
+<br />
+
+## 직접 실행하기
+
+Node.js 22.16 이상이 필요합니다. **AI 키 없이도** 규칙 판정과 플래너를 실행할 수 있습니다.
 
 ```bash
+git clone https://github.com/KCCI-Hackathon/pathfinder.git
+cd pathfinder
 npm ci
 npm run dev
 ```
 
-`http://localhost:3000`에서 새 플래너를 엽니다. 기존 화면은 `/legacy`에 보존했습니다.
+`http://localhost:3000/app` 에서 **예시로 둘러보기**를 누르면 시연 인물로 바로 시작합니다.
 
-- **예시로 둘러보기**: 명세서의 고정 기준일 2026-11-19와 12개 가상 정책으로 시연합니다. 수료생 구직 지원을 담고 취업일을 2027-02-13, 2027-01-03으로 바꿔 D−61 → D−85 → 신청 불가 → 되돌리기를 확인할 수 있습니다.
-- **내 정보로 시작**: 기존 정책 스냅샷·규칙 엔진을 이용합니다. 미검토 조건과 수혜 기간은 확인 필요로 남깁니다.
-- 정책 선택, 일정 편집, 추천 미리보기, 비교·교체, 여러 계획 저장과 일 단위 로드맵을 지원합니다. 저장은 현재 브라우저에만 적용되며 실제 로그인·기기 간 동기화는 포함하지 않습니다.
-- 외부 AI 없이 일정 문답과 조건 기준 추천을 사용할 수 있습니다. 기존 AI·검증 엔드포인트와 설정은 유지했습니다.
-- `/api/judge`의 선택적 `plannerV2` 입력·응답은 기존 필드와 공존합니다. 날짜·적격성·중복·추천은 서버가 계산합니다.
-- 구현 기준: `docs/superpowers/specs/2026-11-21-pathfinder.md`.
+<details>
+<summary><b>AI 기능 켜기 · 테스트 실행</b></summary>
 
-검증: `npm test -- --maxWorkers=2 --testTimeout=60000`, `npm run lint`, `npm run build`.
-전체 테스트의 워커 수는 로컬 환경의 동시 실행 시간 초과를 피하기 위해 제한합니다.
-
-취업·수료·창업이라는 갈림길에 선 청년에게, 상황 변화에 따라 달라지는 정책 자격을 보여주고, AI 에이전트가 공식 공고를 직접 찾아가 그 변화의 이유와 다음 행동을 안내하는 서비스입니다.
-(2026 대한민국 청년 CAREER FAIR AI 해커톤 출품용 프로토타입)
-
-## 구조
-
-- 판정은 서버 코드가 합니다(`lib/judge`). 사용자 정보는 외부 AI로 가지 않습니다.
-- 상태 전이(`lib/sim`): "오늘 수료/취업/사업자등록을 했다고 가정"한 전후 비교.
-- 정책 검증 에이전트(`lib/verify`): 정책 번호와 공개 데이터만 받아 공식 공고를 찾아가 대조합니다. 접근 범위·한도는 `lib/verify/web.ts`가 강제합니다.
-- 시간 흐름 시뮬레이션(`lib/route/timeline.ts`): 앞으로 12개월 동안 정책마다 신청 구간이 언제 열리고 닫히는지 계산합니다. 취업·사업자등록 시점을 개월 수로 바꿔 가며 볼 수 있습니다. 현재 공고 기준이며 언제 취업하는 것이 낫다는 판단은 하지 않습니다.
-- 상태 갈림길 루트(`lib/route`): 지금 → 수료한 뒤 → 취업/창업 갈림길. 마디 안의 번호는 `lib/route/weight.ts`의 "먼저 확인할 순서" 점수(우리가 정한 규칙, 이유와 점수를 화면에 표시)이고, 정책 사이 연결선은 공고 인용이 있는 것만 그립니다.
-- 상담 질문(`lib/agent/questions.ts`): 답하면 판정이 바뀌는 질문을 코드가 고릅니다. 답은 외부 AI로 가지 않습니다.
-- 상담 에이전트(`lib/agent/run.ts`): 가상 인물 시연 전용.
-- 계정·계정 저장 계획·알림(`lib/account`): 이메일·비밀번호 로그인, 서버 저장 계획, 화면 안 알림. 운영 DB를 정하기 전까지 SQLite이며 Vercel에서는 유지되지 않습니다. [API](docs/backend/2026-11-22-account-api.md)
-- 설계 문서: `docs/2026-11-16-policy-twin-design.md`, 구현 계획: `docs/superpowers/plans/2026-11-16-galimgil.md`
-
-## 실행
+`.env.example` 을 `.env.local` 로 복사한 뒤 값을 채웁니다.
 
 ```bash
-npm install
-npm test
-npm run build && npm run start
+EXTERNAL_AI_ENABLED=true
+PLAN_AI_PROVIDER=openai
+OPENAI_API_KEY=발급받은_키
+OPENAI_MODEL=사용할_모델
 ```
 
-환경변수(`.env.local`, 저장소에 올리지 않음): `.env.example` 참고.
-
-- `EXTERNAL_AI_ENABLED=true`일 때만 외부 AI를 부릅니다. 꺼져 있으면 저장된 검증 결과와 코드가 조립한 카드로 동작합니다.
-- `ANTHROPIC_API_KEY`: Claude API 키.
-- `YOUTH_POLICY_API_KEY`: 온통청년 API 키(데이터 수집 스크립트에만 필요, 배포 환경에는 넣지 않음).
-
-데이터 수집(제출본은 기준일 고정, 예약 실행은 비활성):
-
 ```bash
-npx tsx --env-file=.env.local --tsconfig tsconfig.json scripts/fetch-snapshot.ts
-```
-
-검증 에이전트 실행과 비교 실험:
-
-```bash
-npx tsx --env-file=.env.local --tsconfig tsconfig.json scripts/verify-batch.ts 20260406005400212445
-npx tsx --env-file=.env.local --tsconfig tsconfig.json scripts/verify-eval.ts --mode=agent
-npx tsx --env-file=.env.local --tsconfig tsconfig.json scripts/verify-eval.ts --mode=fixed
-```
-
-API 키 없이 저장 결과 만들기(개발 도구가 정한 도구 호출을 실제 검증 루프에 넣어 실행, 결과에 `producedBy: "claude_code_session"` 표시):
-
-```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-replay.ts run 20260406005400212445 data/verify-replay/turns.json --save
-```
-
-`data/verify-results/index.json`의 현재 6건은 이 방식으로 만든 것입니다(2026-11-17). 페이지 열기·허용 도메인·robots.txt·인용 대조는 서비스 코드가 수행했고, 어떤 페이지를 열고 무엇을 인용할지는 Claude Code가 정했습니다. Claude API로 실행한 결과가 아닙니다.
-
-## 중복수혜 규칙 실행
-
-중복수혜 에이전트는 로컬에서 공개 정책 원문을 분석합니다. 기존 `/api/verify`는 정책 한 건의 공식 공고를 대조합니다. 중복수혜 결과는 SQLite에서 검증하고 JSON으로 내보냅니다. 배포된 `/api/judge`는 이 JSON을 읽어 신청자의 수혜 사실과 대조합니다. [구현 계획](docs/backend/2026-11-19-overlap-agent-implementation-plan.md)
-
-Node 22.22에서 연구 조사본으로 배포 파일을 재생성하는 명령입니다.
-
-```bash
-npm ci
-npm run db:build -- --research-only
-npm run db:export
-npm run db:verify
-```
-
-새 Gemini 실행에는 프로젝트의 무료 할당량과 로컬 `.env.local`의 `GEMINI_API_KEY`가 필요합니다. 실호출은 `npm run overlap:agent -- --live`로 시작합니다. 실행 ID는 `data/overlap-agent/latest.json`에 기록됩니다. 중단 후에는 같은 입력으로 `--live --run-id <ID>`를 사용합니다. 최신 실행의 저장 응답을 다시 채점하고 배포본을 만드는 명령은 다음과 같습니다.
-
-```bash
-npm run overlap:agent -- --replay --run-id <ID>
-npm run db:build
-npm run db:export
-npm run db:verify
-```
-
-점수와 요청 해시는 `data/overlap-agent/report-<ID>.md`에서 확인합니다. 점수 기준을 통과하지 못한 실행은 종료 코드 2를 반환합니다. 적재·내보내기는 같은 실행과 원문의 검증을 통과한 에이전트 규칙만 조사본에 추가합니다. 이전 실행을 재현하려면 별도 작업 폴더에서 그 실행 기록과 저장 응답을 사용합니다.
-
-`POST /api/judge`에 기존 프로필과 함께 선택 입력인 `benefits`를 보낼 수 있습니다. 예를 들어 구직급여 지급이 종료됐다면 `{"policyId":"20250122005400110369","status":"ended","lastPaymentDate":"2026-07-15"}`를 배열에 담습니다. 정책별 `restrictions`에는 적용 여부·이유·인용 근거가, `planned_conflicts`에는 예정된 충돌이 들어갑니다. 응답의 `dataVersion`으로 사용한 규칙 버전을 식별합니다.
-
-## 중복수혜 스캔과 재검증
-
-새 중복수혜 실행은 전체 지역의 기존 배포 규칙에 연결된 정책과 참여 제한·추가 신청자격·지원 내용에 중복수혜 신호가 있는 정책을 먼저 고릅니다. 선택한 정책의 원문만 Gemini에 보냅니다. 기본 추출은 묶음당 한 번이며, 원문과 맞지 않는 응답은 한 번 정정 요청합니다. 추출과 사업명 후보 연결의 기본 모델은 `gemini-3.5-flash-lite`입니다. 전체 차단을 확정하려면 재검증 모델의 지지와 원문 근거 검사를 모두 통과해야 합니다.
-
-새 수집본과 이전 배포본을 검토할 때 `--previous-snapshot <이전 JSON>`을 추가하면 신규·변경 정책과 변경된 관계의 검토 대상으로 범위를 좁힙니다. 이 증분 실행의 결과는 검토용입니다. 전체 배포 규칙을 교체하는 검증에는 사용하지 않습니다.
-
-스캔은 원문 필드를 자르지 않고 약 12,000자씩 묶습니다. 오류가 난 필드를 식별할 수 있으면 해당 필드만 다시 보냅니다. 응답 형식이 깨졌거나 필드를 찾을 수 없으면 해당 묶음을 다시 보냅니다.
-
-재검증은 3 Flash부터 시작하고, 일일 한도가 확인되면 3.6 Flash, 3.8 Flash 순으로 이어갑니다. 원인 미확인 429·5xx·응답 없음이 세 번 연속이면 해당 재검증 모델을 10분간 쉬게 하고 다음 모델을 사용합니다. 프로젝트에서 쓸 수 없는 모델(HTTP 403·404)은 다음 한도 초기화까지 건너뜁니다.
-
-사업명 연결 후보는 같은 정식 명칭을 한 자리로 묶어 최대 8개를 보냅니다. 같은 이름의 레코드가 여러 개이면 B와 같은 시·도의 최신 레코드, 없으면 최신 중앙부처 레코드를 고르고, 둘 다 없으면 모델이 고른 레코드를 유지합니다.
-
-추출 응답은 입력한 모든 정책·필드에 조항 또는 `"kind":"none"` 행을 반환해야 합니다. 응답에서 빠진 필드는 오류로 기록하고 그 필드만 다시 묻습니다. 각 모델은 별도 반례를 통과해야 합니다. 보고서의 `reviewTimings`는 성공 응답 수와 평균 왕복 요청 시간(ms), `attemptStats`는 단계·모델별 성공·실패와 같은 모델 재시도 수를 기록합니다. 재시도 대기 시간은 평균에서 제외합니다.
-
-이전에 시작된 실행은 기록된 호출을 우선 재생합니다. 새 방식을 쓰려면 `npm run overlap:agent -- --live`로 새 실행을 시작합니다. 2.5 Flash-Lite 생성 권한이 있는 프로젝트에서는 `OVERLAP_SCAN_MODEL=gemini-2.5-flash-lite`를 설정할 수 있습니다. Gemini 모델별 실제 호출 한도는 [Google AI Studio](https://aistudio.google.com/rate-limit?timeRange=last-28-days)에서 프로젝트 단위로 확인합니다.
-
-## 정책 스냅샷 변경 확인
-
-자동 갱신은 구현하지 않았습니다. 수집부터 재배포까지의 수동 절차는 [정책 데이터 갱신 절차](docs/backend/2026-11-22-policy-data-refresh.md)에 있습니다.
-
-기존 배포에 사용한 스냅샷과 새 수집본을 비교합니다. 기본 설정은 기존 배포 규칙을 함께 읽어, 연결 정책의 변경이나 삭제로 재검증이 필요한 규칙을 표시합니다.
-
-```bash
-npm run snapshot:compare -- data/snapshot/current.json <새 스냅샷 JSON>
-```
-
-`added`, `changed`, `removed`는 정책 변경 목록이고, `revalidatePolicyIds`와 `rulesToReview`는 검토할 정책번호와 연결 규칙입니다. 수정일만 바뀐 정책은 변경 목록에 표시하고 재검증 대상에서는 제외합니다. 이 명령은 비교 결과를 출력합니다. 이후 검토를 통과한 규칙만 기존 SQLite 검증과 내보내기 절차로 배포합니다.
-
-## Vercel Preview 배포
-
-팀 Vercel 프로젝트에 GitHub 저장소를 연결하고 Node.js 22.x를 선택합니다. `backend/vercel-preview` 브랜치를 Preview로 배포합니다. 함수 리전은 `vercel.json`에서 서울(`icn1`)로 설정합니다. 현재 배포용 규칙과 버전은 `data/overlap/approved.json`과 `data/release/manifest.json`에서 가져옵니다.
-
-초기 Preview에서는 브랜치별 환경변수에 `EXTERNAL_AI_ENABLED=false`와 `PLAN_AI_FOR_USERS=false`를 설정합니다. 이 상태에서 자격 판정과 저장된 정책 검증 근거를 확인할 수 있습니다. 외부 AI를 확인하는 Preview에는 승인된 제공자의 키와 `EXTERNAL_AI_ENABLED=true`를 별도로 설정합니다.
-
-```bash
-npm ci
-npm run db:build -- --research-only
-npm run db:verify
-npm test
+npm test -- --maxWorkers=2 --testTimeout=60000
+npm run lint
 npm run build
-npm run smoke:preview -- <Preview URL>
 ```
 
-스모크 명령은 첫 화면과 세 시연 지역의 `/api/judge` 요청 8건을 확인합니다. 응답에서 배포 데이터 버전, 적용 상태, 근거 인용을 검사합니다.
+</details>
 
-외부 AI와 실제 사용자용 AI를 끈 서버에서는 `npm run smoke:api -- <서버 URL>`로 계획 API의 입력·권한 검사, 상담 카드의 기본 응답, 검증 API의 재확인 응답을 화면 없이 확인할 수 있습니다.
+<br />
 
-2026-11-21에 `Path-Finder` 팀의 `path-finder` 프로젝트에 [Preview](https://path-finder-bp79t76sc-path-finder10.vercel.app)를 배포했습니다. 기준 커밋은 `c70d768`, 데이터 버전은 `dd9153edea47`입니다. 서울 리전과 첫 화면 및 가상 요청 8건을 확인했습니다. Preview는 Vercel 로그인이 필요합니다. 보호된 Preview의 자동 검증에는 팀에서 승인한 인증 방법을 사용합니다.
+## 팀
 
-CLI 배포에서는 `vercel deploy --environment preview`로 환경을 명시하고, 완료 출력에서 `environment: preview`를 확인합니다.
+<!-- TODO: 팀명, 이름, 역할을 팀원 확인 후 입력 -->
 
-## Credits / Licenses
+[minseongkim275-dotcom](https://github.com/minseongkim275-dotcom) · [Jongeume](https://github.com/Jongeume) · [how-to-song](https://github.com/how-to-song) · [HeoJunekang](https://github.com/HeoJunekang)
 
-| 구분 | 이름 | 출처·라이선스 | 사용 위치 |
-|---|---|---|---|
-| 데이터 | 온통청년 청년정책 API | 한국고용정보원, 공공데이터포털 등록(이용허락범위 제한 없음) | `data/snapshot` |
-| 데이터 | 시군구 코드 이름 | 행정표준 시군구 코드 이름을 내부 작성(공식 대응표 대조 전) | `data/regions.json` |
-| 데이터 | 시연 정책 6건의 조건 | 각 기관 공식 안내 페이지(인천청년포털, 고용24, 정부24, aT 등), 2026-11-16 확인 | `data/verified` |
-| AI 모델 | Claude API (claude-opus-5-5) | Anthropic | 정책 검증 에이전트, 상담 에이전트 |
-| 오픈소스 | Next.js | MIT | 웹 앱 |
-| 오픈소스 | React | MIT | 화면 |
-| 오픈소스 | zod | MIT | 입력 검증 |
-| 오픈소스 | @anthropic-ai/sdk | MIT | Claude API 호출 |
-| 오픈소스 | Vitest, tsx | MIT | 테스트, 스크립트 실행 |
-| 개발 도구 | Claude Code | Anthropic | 조사, 설계, 코드 작성, 설계 평가 |
+<br />
+
+## 출처와 AI 활용 고지
+
+| 구분 | 이름 | 사용 위치 |
+|---|---|---|
+| 공공 데이터 | [온통청년 청년정책 API](https://www.youthcenter.go.kr/) (한국고용정보원) | 정책 스냅샷 |
+| 공식 자료 | 고용24, 정부24, 지자체 · 기관 공고 | 공고 대조와 근거 인용 |
+| 서비스 AI | OpenAI API, Gemini API | 상담 · 추천, 공고 검증, 중복수혜 분석 |
+| 개발 AI 도구 | Claude Code, Codex | 조사, 설계, 구현, 검증 보조 |
+| 오픈소스 | Next.js, React, Zod, Vitest, tsx (MIT) | 웹 앱, 입력 검증, 테스트 |
+
+저장된 공고 대조 기록 6건은 개발 도구가 탐색 경로를 정하고, 서비스의 검증 코드가 페이지 접근과 인용을 대조해 만든 기록입니다.
+
+<!-- TODO: 로봇 캐릭터 이미지의 제작 도구와 저작권, 저장소 LICENSE를 대회 규정 확인 후 기재 -->
