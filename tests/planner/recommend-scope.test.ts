@@ -20,6 +20,10 @@ test("여러 시점 · 분야를 함께 말할 수 있다", () => {
   expect(parseRecommendScope("지금이랑 수료 후에 주거랑 교육 쪽으로 추천해줘", stages)).toEqual({ stageIds: ["current", "ev-course"], categories: ["housing", "edu"] });
 });
 
+test("‘주거 관련정책 추천해줘’는 주거 분야 범위를 유지한다", () => {
+  expect(parseRecommendScope("주거 관련정책 추천해줘", stages)).toEqual({ categories: ["housing"] });
+});
+
 test("범위가 없는 ‘추천해줘’는 범위 없음", () => {
   expect(parseRecommendScope("나에게 맞는 경로 추천해줘", stages)).toEqual({});
 });

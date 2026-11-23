@@ -1,11 +1,12 @@
 "use client";
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { BenefitAnswer } from "@/lib/planner/answers";
-import type { AiRecommendation, BenefitQuestion, Card } from "@/lib/planner/types";
+import type { AiRecommendation, BenefitQuestion, Card, Stage } from "@/lib/planner/types";
 import { toKstDate } from "@/lib/date";
 import { AGENT_EXAMPLES } from "@/lib/planner/fixtures";
 import { pickQuestion, questionKey } from "@/lib/planner/questions";
 import { answerOptions, type CounselTarget } from "@/lib/planner/counsel-target";
+import { recommendationEntries, recommendationMessage } from "./counsel-view";
 
 /** 상담 에이전트가 고른 질문. 문장은 AI, 선택지 · 입력 칸은 target 에 맞춰 코드가 붙인다. */
 function AiQuestionCard({ text, target, onAnswer, onSkip, onLater, onShowRecommendation, busy, number }: { text: string; target: CounselTarget; onAnswer: (value: string) => void; onSkip: () => void; onLater?: () => void; onShowRecommendation?: () => void; busy: boolean; number?: number }) {
@@ -68,12 +69,12 @@ function QuestionCard({ question, onAnswer, busy, month, targetTitle }: { questi
   </fieldset>;
 }
 
-export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, recommendationAt, cards, planLoading, loadingAction = "recommend", today, aiQuestion, onAiAnswer, onAiSkip, onAiLater, onShowRecommendation, consentNeeded, onConsent, consentOn, onConsentOff, onRetry, onNewChat }: {
+export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, recommendation, recommendationAt, cards, stages, planLoading, loadingAction = "recommend", today, aiQuestion, onAiAnswer, onAiSkip, onAiLater, onShowRecommendation, consentNeeded, onConsent, consentOn, onConsentOff, onRetry, onNewChat }: {
   messages: Message[]; onSend: (text: string) => void; onClose: () => void; busy: boolean;
   aiQuestion?: { text?: string; target: CounselTarget; preparedAnswers?: ReadonlySet<string> } | null; onAiAnswer?: (value: string) => void; onAiSkip?: () => void; onAiLater?: () => void;
   onShowRecommendation?: () => void; onRetry?: () => void; onNewChat?: () => void;
   consentNeeded?: boolean; onConsent?: () => void; consentOn?: boolean; onConsentOff?: () => void;
-  recommendation?: AiRecommendation | null; recommendationAt?: number | null; cards?: Card[]; planLoading?: boolean; loadingAction?: "message" | "recommend" | "followup";
+  recommendation?: AiRecommendation | null; recommendationAt?: number | null; cards?: Card[]; stages?: Stage[]; planLoading?: boolean; loadingAction?: "message" | "recommend" | "followup";
   questions?: BenefitQuestion[]; onAnswer: AnswerHandler; today?: string;
 }) {
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
@@ -90,12 +91,14 @@ export function Agent({ messages, onSend, onClose, busy, questions, onAnswer, re
   function send(value: string) { if (!value.trim() || busy) return; onSend(value.trim()); setText(""); }
   // 추천 블록은 만들어진 메시지 바로 아래에 한 번만 둔다. 뒤에 오는 대화 아래로 따라 내려오지 않게.
   const inlineRecommendation = recommendationAt != null && messages.some(m => m.id === recommendationAt);
+  const recommendationItems = recommendationEntries(recommendation, cards ?? []);
   const recommendationBlock = recommendation && <div className={s.agentMessage}>
     <strong>{recommendation.source === "ai" ? "AI 추천 경로" : "조건 기준 추천 경로"}</strong>
-    {recommendation.summary && <p>{recommendation.summary}</p>}
-    {recommendation.notice && <p>{recommendation.notice}</p>}
-    {recommendation.picks.map(pick => <div key={pick.offeringId}>
-      <strong>{cards?.find(card => card.offeringId === pick.offeringId)?.title ?? pick.offeringId}</strong>
+    <p>추천 정책 {recommendationItems.length}개</p>
+    {recommendationMessage(recommendation) && <p>{recommendationMessage(recommendation)}</p>}
+    {recommendationItems.map(({ pick, card }) => <div key={`${pick.offeringId}|${pick.stageId}`}>
+      <strong>{card.title}</strong>
+      <p>{stages?.find(stage => stage.stageId === pick.stageId)?.label ?? "신청 시점"}</p>
       {pick.confirmation && <p>확인 필요 · {pick.confirmation}</p>}
       {pick.filled && <p>조건 기준으로 채움</p>}
       {pick.why.map((why, i) => <p key={i}>{why}</p>)}
