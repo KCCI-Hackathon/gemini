@@ -6,7 +6,6 @@ import { PERSONA_DEMO_EVENTS } from "@/lib/planner/fixtures";
 import { evaluateRequest } from "@/lib/planner/catalog";
 import { applyTarget } from "@/lib/planner/counsel-target";
 import type { PlannerInput } from "@/lib/planner/types";
-import { resetLimits } from "@/lib/limits";
 
 const now = new Date("2026-11-22T12:00:00+09:00");
 const env = { EXTERNAL_AI_ENABLED: "true", PLAN_AI_PROVIDER: "openai", OPENAI_API_KEY: "test", OPENAI_MODEL: "gpt-test" };
@@ -32,7 +31,7 @@ function scripted(turns: Turn[]) {
 }
 // 각 요청이 실데이터 평가를 돌려 느리다. 전체 테스트를 함께 돌릴 때 5초 기본 시간을 넘지 않게.
 vi.setConfig({ testTimeout: 30_000 });
-beforeEach(() => { resetCounselState(); resetLimits?.(); });
+beforeEach(() => { resetCounselState(); });
 
 test("G1: a positive AI suggestion cannot promote cards that are not classified eligible", async () => {
   const m = scripted([{ name: "get_evaluation", input: {} }, { name: "finish_plan", input: { summary: "시점별로 골랐어요", picks: open.filter(c => c.eligibility !== "eligible").slice(0, 2).map(c => ({ offering_id: c.offeringId, stage_id: c.stageId, why: "지금 열려 있어요" })) } }]);

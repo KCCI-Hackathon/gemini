@@ -34,7 +34,6 @@ export async function requestCounsel(args: {
 const FAILURE_TEXT: Record<Exclude<CounselFailure, "consent">, string> = {
   users_off: "지금은 운영 설정으로 실제 사용자 AI 상담이 꺼져 있어 AI 답을 받지 못했어요.",
   not_configured: "AI 제공자가 설정되지 않아 AI 답을 받지 못했어요.",
-  quota: "오늘의 AI 사용 한도에 도달해 AI 답을 받지 못했어요. 내일 다시 이용해 주세요.",
   timeout: "AI가 제한 시간 안에 답하지 못했어요.",
   provider: "AI 제공자가 오류를 돌려줘 답을 받지 못했어요.",
   bad_response: "AI 응답 형식이 올바르지 않아 답을 표시하지 못했어요.",
@@ -46,6 +45,6 @@ const FAILURE_TEXT: Record<Exclude<CounselFailure, "consent">, string> = {
 export function counselFailure(result: CounselResult): { failure: CounselFailure; text: string; retryable: boolean } | null {
   const failure = result.failure ?? (result.status >= 500 ? "bad_response" : result.status === 0 ? "network" : undefined);
   if (!failure || failure === "consent") return null;
-  const retryable = result.retryable ?? (failure !== "users_off" && failure !== "not_configured" && failure !== "quota");
+  const retryable = result.retryable ?? (failure !== "users_off" && failure !== "not_configured");
   return { failure, text: FAILURE_TEXT[failure] + (retryable ? " 잠시 뒤 ‘다시 시도’를 눌러 주세요." : ""), retryable };
 }

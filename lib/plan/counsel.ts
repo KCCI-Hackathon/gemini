@@ -16,7 +16,6 @@ import { toKstDate } from "@/lib/date";
 import { PERSONA_A } from "@/lib/judge/personas";
 import type { Profile } from "@/lib/judge/types";
 import { ageRange } from "@/lib/judge/personal";
-import { takeQuota } from "@/lib/limits";
 import { evaluateRequest } from "@/lib/planner/catalog";
 import { findNamedCards } from "@/lib/planner/commands";
 import { answeredLabels } from "@/lib/judge/conditions";
@@ -83,7 +82,7 @@ export type CounselBody = {
   error?: string;
 };
 // network · client_timeout 은 브라우저에서만 붙인다(연결 실패 · 화면이 기다리다 끊음)
-export type CounselFailure = "users_off" | "consent" | "not_configured" | "quota" | "timeout" | "provider" | "bad_response" | "network" | "client_timeout";
+export type CounselFailure = "users_off" | "consent" | "not_configured" | "timeout" | "provider" | "bad_response" | "network" | "client_timeout";
 type Out = { status: number; body: CounselBody };
 export type CounselCtx = { env: Record<string, string | undefined>; ip: string; now: Date; makeClient: (action: "recommend" | "message") => AnthropicLike; moderate?: Moderate };
 
@@ -213,7 +212,6 @@ export async function handleCounsel(raw: unknown, ctx: CounselCtx): Promise<Out>
   const aiAction = req.action === "recommend" ? "recommend" : "message";
   if (!planAiConfigured(ctx.env, aiAction)) return { status: 503, body: ruleFallback(evaluation, "AI가 꺼져 있어 조건 기준 경로를 표시해요", { failure: "not_configured", retryable: false }) };
 
-  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: ruleFallback(evaluation, "오늘의 AI 사용 한도에 도달해 조건 기준 경로를 표시해요", { failure: "quota", retryable: false }) };
   // 욕설 · 혐오 · 자해 검사. 검사 실패는 닫힌 쪽(보내지 않음).
   if (message && ctx.env.MODERATION_ENABLED === "true") {
     const m = ctx.moderate ? await ctx.moderate(message) : { error: true as const };

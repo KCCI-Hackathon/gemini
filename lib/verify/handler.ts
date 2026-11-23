@@ -6,7 +6,6 @@ import { loadSnapshot } from "@/lib/data/snapshot";
 import { loadVerified } from "@/lib/data/verified";
 import { loadDeadLinks } from "@/lib/data/dead-links";
 import { pickRound } from "@/lib/judge/rules";
-import { resetLimits, takeQuota } from "@/lib/limits";
 import { runVerification, policyHosts, type AnthropicLike, type VerifyResult } from "./run";
 import { lookupSaved, VERIFY_RECHECK } from "./saved";
 import { verificationKey, verificationVersion } from "./version";
@@ -18,7 +17,6 @@ const inflight = new Map<string, Promise<VerifyResult>>();
 export function resetVerifyState() {
   cache.clear();
   inflight.clear();
-  resetLimits();
 }
 
 type Ctx = {
@@ -86,9 +84,6 @@ export async function handleVerify(body: unknown, ctx: Ctx): Promise<Out> {
       return verificationFailure(error);
     }
   }
-
-  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 검증 한도에 도달했습니다." } };
-
   const configuredMs = Number(ctx.env.VERIFY_DEADLINE_MS);
   const p = runVerification(policyId, {
     client: ctx.makeClient(),

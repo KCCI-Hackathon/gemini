@@ -2,7 +2,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { handleAgent, resetAgentState } from "@/lib/agent/run";
 import { guardResponse } from "@/lib/agent/guard";
-import { dailyLimit, resetLimits } from "@/lib/limits";
 import { loadSnapshot } from "@/lib/data/snapshot";
 import { handleVerify, resetVerifyState } from "@/lib/verify/handler";
 import type { AnthropicLike } from "@/lib/verify/run";
@@ -19,7 +18,6 @@ function throwingClient(): AnthropicLike & { calls: number } {
 }
 
 beforeEach(() => {
-  resetLimits();
   resetVerifyState();
   resetAgentState();
 });
@@ -40,22 +38,25 @@ describe("C2: 상담 에이전트 실패 처리와 호출 제한", () => {
     expect(again.body.fallback).toBe(false);
   });
 
-  test("접속 주소당 하루 한도를 넘으면 AI를 부르지 않는다", async () => {
+  test("같은 IP에서 20회를 넘어도 앱 자체 제한으로 AI를 차단하지 않는다", async () => {
     const client = throwingClient();
     for (let i = 0; i < 25; i++) await handleAgent({ personaId: "demo-1" }, { env, ip: "1.1.1.1", now: NOW, makeClient: () => client });
-    expect(client.calls).toBe(20);
+    expect(client.calls).toBe(25);
+  });
+
+  test("서로 다른 IP의 요청이 하루 200회를 넘어도 앱 전체 제한으로 차단하지 않는다", async () => {
+    const client = throwingClient();
+    for (let i = 0; i < 205; i++) {
+      const r = await handleAgent({ personaId: "demo-1" }, { env, ip: `ip-${i}`, now: NOW, makeClient: () => client });
+      expect(r.status).toBe(200);
+    }
+    expect(client.calls).toBe(205);
   });
 });
 
-describe("I13: 한도 계산", () => {
-  test("일일 상한 설정값이 숫자가 아니면 기본값 200", () => {
-    expect(dailyLimit({ AGENT_DAILY_LIMIT: "200/day" })).toBe(200);
-    expect(dailyLimit({ AGENT_DAILY_LIMIT: "5" })).toBe(5);
-    expect(dailyLimit({})).toBe(200);
-  });
-
+describe("검증 요청에는 상담 요청 횟수 제한이 적용되지 않는다", () => {
   const notFound = [[{ name: "finish", input: { outcome: "notice_not_found", notice_url: null, findings: [], mismatches: [] } }]];
-  const vctx = (client: AnthropicLike) => ({ env: { ...env, AGENT_DAILY_LIMIT: "100" }, ip: "1.1.1.1", now: NOW, makeClient: () => client, saved: {} });
+  const vctx = (client: AnthropicLike, ip = "1.1.1.1") => ({ env, ip, now: NOW, makeClient: () => client, saved: {} });
 
   test("없는 정책 번호는 한도를 쓰지 않는다", async () => {
     const client = scriptedClient(notFound);
@@ -65,17 +66,29 @@ describe("I13: 한도 계산", () => {
 
   test("같은 정책을 동시에 요청하면 한 번만 실행한다", async () => {
     const client = scriptedClient(notFound);
-    const id = "20260928005400113623";
-    await Promise.all([handleVerify({ policyId: id }, vctx(client)), handleVerify({ policyId: id }, vctx(client))]);
-    expect(client.calls).toBe(1);
+    const id = "20261113005400214853";
+    const [a, b] = await Promise.all([handleVerify({ policyId: id }, vctx(client)), handleVerify({ policyId: id }, vctx(client))]);
+    expect(a).toMatchObject({ status: 200, body: { source: "live" } });
+    expect(b).toMatchObject({ status: 200, body: { source: "cache" } });
+    expect(client.calls).toBe(0); // 이 정책은 공고 URL이 없어 AI 모델을 호출하지 않는다.
   });
 
-  test("실제 정책 21건을 요청하면 21번째는 429", async () => {
+  test("상담 요청이 20회를 넘어도 검증 API는 앱 횟수 제한에 걸리지 않는다", async () => {
+    const client = throwingClient();
+    for (let i = 0; i < 21; i++) {
+      await handleAgent({ personaId: "demo-1" }, { env, ip: "shared-ip", now: NOW, makeClient: () => client });
+    }
+    const verifyClient = scriptedClient(notFound);
+    const result = await handleVerify({ policyId: "20261113005400214853" }, vctx(verifyClient, "shared-ip"));
+    expect(result.status).not.toBe(429);
+  });
+
+  test("서비스 전체에서 20건을 넘어도 실제 정책 검증은 계속 진행한다", async () => {
     const client = scriptedClient(notFound);
     const ids = loadSnapshot().policies.slice(0, 21).map((p) => p.id);
     let last = 0;
-    for (const id of ids) last = (await handleVerify({ policyId: id }, vctx(client))).status;
-    expect(last).toBe(429);
+    for (const [i, id] of ids.entries()) last = (await handleVerify({ policyId: id }, vctx(client, `ip-${i}`))).status;
+    expect(last).toBe(200);
   });
 });
 

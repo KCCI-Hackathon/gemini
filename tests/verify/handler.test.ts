@@ -15,7 +15,7 @@ function ctx(over: Partial<Parameters<typeof handleVerify>[1]> = {}) {
     client,
     made: () => made,
     c: {
-      env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k", AGENT_DAILY_LIMIT: "100" },
+      env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k" },
       ip: "1.1.1.1",
       now: new Date("2026-11-24T12:00:00+09:00"),
       makeClient: () => {
@@ -42,7 +42,7 @@ describe("handleVerify", () => {
     let signal: AbortSignal | null | undefined;
     let attempt = 0;
     const c = ctx({
-      env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k", AGENT_DAILY_LIMIT: "100", VERIFY_DEADLINE_MS: "40" },
+      env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "k", VERIFY_DEADLINE_MS: "40" },
       makeClient: () => attempt++ === 0 ? client : retryClient,
       fetchFn: async (input, init) => {
         if (String(input).endsWith("/robots.txt")) return new Response("User-agent: *\nAllow: /\n");
@@ -91,7 +91,7 @@ describe("handleVerify", () => {
 
   test("외부 AI 스위치가 꺼져 있으면 503이고 호출 0회", async () => {
     resetVerifyState();
-    const t = ctx({ env: { EXTERNAL_AI_ENABLED: "false", ANTHROPIC_API_KEY: "k", AGENT_DAILY_LIMIT: "100" } });
+    const t = ctx({ env: { EXTERNAL_AI_ENABLED: "false", ANTHROPIC_API_KEY: "k" } });
     const r = await handleVerify({ policyId: ID }, t.c);
     expect(r.status).toBe(503);
     expect(t.made()).toBe(0);

@@ -58,7 +58,7 @@ export async function signup(body: unknown, ctx: Ctx): Promise<Result> {
   return { status: 201, body: me(user), setCookie: startSession(ctx, user) };
 }
 
-// shortcut: 실패 횟수는 인스턴스 메모리에 센다(lib/limits.ts와 같은 한계). 운영 DB를 정하면 저장소로 옮긴다.
+// shortcut: 실패 횟수는 인스턴스 메모리에 센다. 운영 DB를 정하면 공유 저장소로 옮긴다.
 const failures = new Map<string, { n: number; until: number }>();
 const MAX_FAILURES = 10, LOCK_MS = 15 * 60_000;
 export function resetLoginLimits() { failures.clear(); }
