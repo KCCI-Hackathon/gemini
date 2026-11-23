@@ -20,7 +20,7 @@ const KEY = /^[A-Za-z0-9_-]{8,100}$/;
 const PAGE = 20;
 // 저장 하나가 전체 판정(약 0.5초)과 약 3MB를 쓴다. 한 사용자가 서버 디스크·CPU를 차지하지 못하게 막는다.
 export const MAX_PLANS = 50, MAX_BODY_CHARS = 200_000, SAVES_PER_MINUTE = 10;
-// shortcut: 분당 저장 횟수는 인스턴스 메모리에 센다(lib/limits.ts와 같은 한계). 운영 DB를 정하면 저장소로 옮긴다.
+// shortcut: 분당 저장 횟수는 인스턴스 메모리에 센다. 운영 DB를 정하면 공유 저장소로 옮긴다.
 const recentSaves = new Map<string, number[]>();
 export function resetSaveLimits() { recentSaves.clear(); }
 

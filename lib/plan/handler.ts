@@ -12,7 +12,6 @@ import { monthsBetween, toKstDate } from "@/lib/date";
 import { guardResponse } from "@/lib/agent/guard";
 import { handleJudge, JudgeRequestSchema } from "@/lib/judge/handler";
 import { findRegisteredPersona } from "@/lib/judge/personas";
-import { takeQuota } from "@/lib/limits";
 import { policyNotice, type Roadmap } from "@/lib/route/roadmap";
 import { loadVerified } from "@/lib/data/verified";
 import { stateOf, type CellState } from "@/lib/route/timeline";
@@ -215,7 +214,6 @@ export async function handlePlan(raw: unknown, ctx: Ctx): Promise<Out> {
   const fingerprint = createHash("sha256").update(JSON.stringify({ summary, route, questions, items: judged.body.items })).digest("hex");
   const key = `${toKstDate(ctx.now)}:${req.mode}:${judged.body.dataVersion}:${fingerprint}`;
   if (!otherText && cache.has(key)) return { status: 200, body: cache.get(key)! };
-  if (!takeQuota(ctx.env, ctx.ip, ctx.now)) return { status: 429, body: { error: "오늘의 AI 사용 한도에 도달했습니다." } };
 
   try {
     const out = await withDeadline(55_000, (deadline) => runPlan(req.mode, summary, route, roadmap, stationResults, questions, otherText, ctx, deadline), startedAt);

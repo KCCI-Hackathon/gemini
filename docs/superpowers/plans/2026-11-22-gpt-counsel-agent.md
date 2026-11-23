@@ -20,7 +20,7 @@
 - AI 를 부르는 조건 : `aiConfigured` 참 **그리고** (시연 세션 **또는** (`PLAN_AI_FOR_USERS === "true"` **그리고** `consent === true`))
 - 시연 세션 = `demoId === "pathfinder-demo-2026"` 이고 프로필의 `birthYm` · `sigungu` · `school` · `source` 가 `PERSONA_A` 와 같음. 상태 · 일정 · 수혜는 달라도 된다.
 - 실사용자에게 보내는 정보 : 만 나이 범위, 시군구 이름, 학력, 상태, 일정 · 개인 기한은 "오늘부터 N일 뒤", 공고 공식 날짜는 그대로, 수혜 정책 이름 · 상태. 자유 입력 · 이력은 `scrubPII` 를 거친다.
-- 요청 한도 : 대화 이력 최대 6턴, 사용자 메시지 500자, 도구 턴 최대 6, 시간 55초, 하루 횟수는 기존 `takeQuota`. 자유 질문 · 이력이 있는 요청은 캐시하지 않는다.
+- 요청 한도 : 대화 이력 최대 6턴, 사용자 메시지 500자, 도구 턴 최대 6, 시간 55초. 앱 자체 일일 호출 횟수 제한은 두지 않는다. 자유 질문 · 이력이 있는 요청은 캐시하지 않는다.
 - 화면 자동 재호출 : AI 가 질문하고 사용자가 답한 경우에만 1회, 연속 최대 3회.
 - 테스트 명령 : `npx vitest run <파일> --testTimeout=60000`, 전체 `npx vitest run --maxWorkers=4 --testTimeout=60000`, `npx tsc --noEmit`, `npm run lint`
 - 실제 네트워크 호출 테스트 금지. 모델은 가짜 클라이언트 · 가짜 fetch 로.
@@ -161,7 +161,7 @@ test("answer without citations is rejected", () => { expect(checkAnswer("받을 
 - Test: `tests/plan/counsel.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1~3 전부, `evaluateRequest` (`lib/planner/catalog.ts`), `takeQuota`, `withDeadline`
+- Consumes: Task 1~3 전부, `evaluateRequest` (`lib/planner/catalog.ts`), `withDeadline`
 - Produces:
   - 요청 `CounselRequestSchema` : `{ version: 2; action: "message" | "recommend" | "continue"; demoId?: "pathfinder-demo-2026"; consent?: boolean; profile: ProfileSnapshot; input: PlannerInput; benefits?: Benefit[]; message?: string (≤500); history: { role: "user" | "assistant"; text: string }[] (≤6) }`
   - 응답 `CounselBody` : `{ kind: "question"; text: string; target: AskTarget; questionId: string }` | `{ kind: "answer"; text: string; citations: string[] }` | `{ kind: "plan"; summary: string; picks: { offeringId: string; stageId: string; why: string }[]; dropped: number }` | `{ kind: "none" }` | `{ fallback: true; reason: "timeout" | "error" | "empty" }` | `{ disabled: true; error: string }`

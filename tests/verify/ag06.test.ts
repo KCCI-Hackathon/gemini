@@ -110,7 +110,7 @@ test("같은 정책과 수정일이라도 달라진 회차의 캐시는 재사�
   const next = { ...first, id: "extra", notice: { ...first.notice, round: "추가 모집" } };
   const client = scriptedClient([[{ name: "finish", input: { outcome: "notice_not_found", notice_url: null, findings: [], mismatches: [] } }]]);
   const ctx = {
-    env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "test", AGENT_DAILY_LIMIT: "100" },
+    env: { EXTERNAL_AI_ENABLED: "true", ANTHROPIC_API_KEY: "test" },
     ip: "test", now: NOW, makeClient: () => client, saved: {},
   };
   try {

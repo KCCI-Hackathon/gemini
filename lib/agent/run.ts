@@ -4,7 +4,6 @@ import { aiConfigured } from "@/lib/ai/client";
 import { toKstDate } from "@/lib/date";
 import { loadVerified } from "@/lib/data/verified";
 import { BASIS_LABEL, pickRound } from "@/lib/judge/rules";
-import { takeQuota } from "@/lib/limits";
 import { judgeAll } from "@/lib/judge";
 import { PERSONAS, type PersonaId } from "@/lib/judge/personas";
 import type { AnthropicLike } from "@/lib/verify/run";
@@ -73,9 +72,6 @@ export async function handleAgent(body: unknown, ctx: { env: Record<string, stri
   const key = `${pid}:${toKstDate(ctx.now)}`;
   const hit = agentCache.get(key);
   if (hit) return hit;
-  if (!takeQuota(ctx.env, ctx.ip ?? "unknown", ctx.now)) {
-    return { status: 200, body: { fallback: true, cards: fallbackCards(pid, ctx.now), log: [], error: "오늘의 AI 상담 한도에 도달해 코드가 정리한 카드를 보여 드립니다." } };
-  }
   try {
     const out = await runAgent(pid, ctx);
     if (!out.body.fallback) agentCache.set(key, out);

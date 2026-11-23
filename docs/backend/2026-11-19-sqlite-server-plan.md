@@ -253,14 +253,14 @@ Codex에 먼저 확인할 것: 산출 위치·형식이 이와 다르면 맞출�
 | 순서  | 작업                                                                                                                                    | 완료 기준                                                         |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 1   | Vercel 프로젝트 연결(GitHub 저장소, Production 브랜치 `main`), 함수 리전을 서울(`icn1`)로 지정                                                              | 프리뷰 배포 URL에서 첫 화면이 열림                                         |
-| 2   | 환경변수: `ANTHROPIC_API_KEY`, `EXTERNAL_AI_ENABLED`, `AGENT_DAILY_LIMIT`, `PLAN_AI_FOR_USERS`. **`YOUTH_POLICY_API_KEY`는 넣지 않는다**(수집 전용) | `.env.example`과 키 목록 일치, 저장소에 키 없음(`git grep "sk-ant"` 결과 없음) |
+| 2   | 환경변수: `ANTHROPIC_API_KEY`, `EXTERNAL_AI_ENABLED`, `PLAN_AI_FOR_USERS`. **`YOUTH_POLICY_API_KEY`는 넣지 않는다**(수집 전용) | `.env.example`과 키 목록 일치, 저장소에 키 없음(`git grep "sk-ant"` 결과 없음) |
 | 3   | 요금제 한도 확인: `/api/verify`·`/api/agent`의 `maxDuration = 120`이 허용되는지, 번들 크기(스냅샷 5MB 포함)                                                  | 허용 안 되면 60으로 낮추고 검증 에이전트 마감시간(`DEFAULT_DEADLINE_MS`)도 맞춤      |
 | 4   | 배포 전 게이트: `npm run db:build && npm run db:export && npm test && npm run build`. manifest 변경은 커밋에 포함                                   | 로컬에서 4개 모두 통과                                                 |
 | 5   | 배포 후 스모크: 시연 3지역 가상 인물로 `/api/judge` 호출, 응답의 `dataVersion`이 manifest와 같은지, 교차 검토표 4건의 적용/비적용 입력 결과                                    | 8개 입력 모두 기대값, 로그아웃·휴대폰에서 접속                                   |
 | 6   | 되돌리기: 데이터 문제는 이전 커밋의 `approved.json`·manifest로 재배포, 앱 문제는 Vercel 이전 배포로 즉시 롤백                                                         | 11/22 연습 때 한 번 실행해 봄                                          |
 | 7   | 제출: `submission-2026-11-23` 태그 + `pathfinder.sqlite` 백업 파일과 sha256 보관                                                                 | 백업에서 `db:verify` 통과                                           |
 
-**알려진 한계(제출 범위 안에서 수용):** 호출 한도(`lib/limits.ts`)는 인스턴스 메모리라 서버리스 인스턴스마다 따로 센다. 전체 하루 한도를 엄격히 지켜야 하면 Vercel KV 같은 공유 저장소가 필요하다. 지금은 `AGENT_DAILY_LIMIT`를 보수적으로 잡고 `EXTERNAL_AI_ENABLED`로 차단 가능한 것으로 둔다.
+**AI 호출량:** 앱 자체 IP별·전체 일일 횟수 제한은 두지 않는다. 실제 과금·사용량·속도 제한은 AI 제공자 설정과 콘솔에서 관리하고, 전체 AI 호출은 `EXTERNAL_AI_ENABLED`로 차단할 수 있다.
 
 ---
 
