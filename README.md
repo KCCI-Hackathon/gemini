@@ -190,49 +190,6 @@ PathFinder는 여기에 **시간**을 더해 **"내 일정이 바뀌면 무엇�
 
 <br />
 
-## 직접 실행하기
-
-Node.js 22.16 이상이 필요합니다. **AI 키 없이도** 규칙 판정과 플래너를 실행할 수 있습니다.
-
-```bash
-git clone https://github.com/KCCI-Hackathon/pathfinder.git
-cd pathfinder
-npm ci
-npm run dev
-```
-
-`http://localhost:3000/app` 에서 **예시로 둘러보기**를 누르면 시연 인물로 바로 시작합니다.
-
-<details>
-<summary><b>AI 기능 켜기 · 테스트 실행</b></summary>
-
-`.env.example` 을 `.env.local` 로 복사한 뒤 값을 채웁니다.
-
-```bash
-EXTERNAL_AI_ENABLED=true
-PLAN_AI_PROVIDER=openai
-OPENAI_API_KEY=발급받은_키
-OPENAI_MODEL=사용할_모델
-```
-
-```bash
-npm test -- --maxWorkers=2 --testTimeout=60000
-npm run lint
-npm run build
-```
-
-</details>
-
-<br />
-
-## 팀
-
-<!-- TODO: 팀명, 이름, 역할을 팀원 확인 후 입력 -->
-
-[minseongkim275-dotcom](https://github.com/minseongkim275-dotcom) · [Jongeume](https://github.com/Jongeume) · [how-to-song](https://github.com/how-to-song) · [HeoJunekang](https://github.com/HeoJunekang)
-
-<br />
-
 ## 출처와 AI 활용 고지
 
 | 구분 | 이름 | 사용 위치 |
